@@ -8,6 +8,10 @@
 
 // Define the types for observation, action and reward.
 
+#if !defined(RLRDP) && !defined(CARTPOLE) && !defined(ORCA)
+#define CARTPOLE
+#endif
+
 #ifdef RLRDP
 typedef std::tuple<float, float, float, float, float, 
                    float, float, float, float, float, 

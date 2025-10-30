@@ -7,16 +7,13 @@ from pathlib import Path
 import numpy as np
 from scipy import stats
 
-#plt.style.use('science')
+plt.style.use('science')
 
 if __name__ == "__main__":
-    #data = pd.read_csv('output.csv', index_col=[0])
-    data = pd.read_csv('/home/cjuknowles/ray_results/DQN_CartPole-v1_2025-10-29_15-12-36djp56tqc/progress.csv')
+    data = pd.read_csv('output.csv', index_col=[0])
 
     WORKERS = [1,2,4,8,16]
     ENVS = ['CartPole-v1', 'SimulationRunnerEnv']
-
-    print(data)
 
     ramWorkersDf = pd.DataFrame({"env": [], "workers": [], "cpu_usage_mean": [], "cpu_usage_std": []})
     for n in WORKERS:

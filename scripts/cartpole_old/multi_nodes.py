@@ -1,32 +1,3 @@
-
-"""
-This is example cartpole script from a very old raynet commit. It could be a good example/starting place, with some caveats:
-- It is very outdated, and likely not formatted the way it should be
-- It makes use of ns3? Which raynet doesn't seem to support anymore
-- Uses some deprecated features, like DQNConfig.rollouts
-
-I'm going to try to to alter it until it at least *somewhat* works, if that's possible.
-At the very least I can get it close then use it as a base.
-
-Notable changes I made:
-- Replace DQNConfig with AlgorithmConfig
-- add ../raynet/build to the PATH for access to omnetbind
-- Removed all references to ns3
-- 
-"""
-
-import sys, os
-
-# Probably overkill - add every raynet folder to the PATH
-# omnetbind is the only raynet module exposed as a python package, so this is not necessary
-# repo_path = "/home/cjuknowles/raynet"
-# for root, dirs, files in os.walk(repo_path):
-#     if "__pycache__" not in root:
-#         sys.path.append(root)
-
-# Add ~/raynet/build to the PATH, for access to omnetbind
-sys.path.append("/home/cjuknowles/raynet/build")
-
 #import the simulation model with cart-pole
 from build.omnetbind import OmnetGymApi
 import gymnasium as gym
@@ -37,33 +8,31 @@ from ray.tune.registry import register_env
 import ray
 from ray import tune
 import random
-
+import sys
+import os
 import math
 from ray.rllib.algorithms.dqn.dqn import DQNConfig
-from ray.rllib.algorithms.dqn.dqn import AlgorithmConfig
 # from ns3gym import ns3env
 import time
 
 
-
-
-
 class OmnetGymApiEnv(gym.Env):
     def __init__(self,env_config):
+        
         self.action_space = spaces.Discrete(2)
         self.runner = OmnetGymApi()
         self.env_config = env_config
         self.max_episode_len = 500
 
-        high = np.ones(50,dtype=np.float32)* np.finfo(np.float32).max
-        # high = np.array(
-        #     [
-        #         2.4 * 2,
-        #         np.finfo(np.float32).max,
-        #         (12 * 2 * math.pi / 360) * 2,
-        #         np.finfo(np.float32).max,],
-        #     dtype=np.float32,)
-        self.observation_space = spaces.Box(-high, high, dtype=np.float32)
+        
+        high = np.array(
+            [
+                2.4 * 2,
+                np.finfo(np.float32).max,
+                (12 * 2 * math.pi / 360) * 2,
+                np.finfo(np.float32).max,],
+            dtype=np.float64,)
+        self.observation_space = spaces.Box(-high, high, dtype=np.float64)
 
        
     def reset(self, *, seed=None, options=None):
@@ -104,12 +73,6 @@ class OmnetGymApiEnv(gym.Env):
     
         return  obs, reward, terminateds['cartpole'], False,{}
 
-from ray.rllib.algorithms.dqn.dqn import DQNConfig
-import os
-
-omnet_path = "/home/cjuknowles/raynet/build"
-
-# Called by the spawned ray process - test prints won't work here!
 def omnetgymapienv_creator(env_config):
     return OmnetGymApiEnv(env_config)  # return an env instance
 
@@ -130,45 +93,33 @@ register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
 
-    env = sys.argv[1]               #CartPole-v1, OmnetGymApiEnv
-    num_workers = int(sys.argv[2])  # 1
-    seed = int(sys.argv[3])         # 99
+    env = 'CartPole-v1'
+    nodes = 2
+    seed = 10
+
+
     random.seed(seed)
     np.random.seed(seed)
 
-    ray.init(num_cpus=64)
-
-    #env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/cartpole/cartpole.ini"}
+    ray.init(address='auto')
+    # env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/cartpole/cartpole.ini"}
     env_config={}
-
     algo = (
-        DQNConfig()
-        .env_runners(num_env_runners=num_workers)
-        .resources(num_gpus=0)
-        .environment(env, env_config=env_config) # "OmnetGymApiEnv
-        .build_algo()
-    # Deprecated DQNConfig for reference
-        # DQNConfig()
-        # .rollouts(num_rollout_workers=num_workers)
-        # .resources(num_gpus=0)
-        # .environment(env, env_config=env_config) # "ns3-v0"
-        # .build()
+    DQNConfig()
+    .rollouts(num_rollout_workers=nodes*8-1)
+    .resources(num_gpus=0)
+    .environment(env, env_config=env_config)
+    .build()
 )
 
     t_start = time.time()
     now = time.time()
     while True:
-        print(f"Total elapsed: {(now - t_start)}")
+        print(f"Total elpsed: {(now - t_start)}")
         result = algo.train()
-        # for i in range(0, 20):
-        #     print("Result object:")
-        # for i in result:
-        #     print(i, result[i])
-        #     print()
-        print(result['num_env_steps_sampled_lifetime'])
-        if result['num_env_steps_sampled_lifetime'] >= 5000:
+        print(result['num_env_steps_sampled'])
+        if result['num_env_steps_sampled'] >= 500000:
             break
         now = time.time()
 
     ray.shutdown()
-    print("Finished!")

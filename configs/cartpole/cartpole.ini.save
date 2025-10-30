@@ -1,5 +1,5 @@
 ned-path=HOME/raynet/simlibs/cartpole/src:HOME/raynet/simlibs/RLComponents/src
-// ned-path=/home/cjuknowles/raynet/simlibs/cartpole/src
+//ned-path=/home/cjuknowles3/raynet/simlibs/cartpole/src
 check-signals = false
 record-eventlog=false
 
