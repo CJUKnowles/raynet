@@ -12,9 +12,9 @@ sorted_dirs = sorted(dir_names)
 
 # create another list containing the new names of each directory. Note that the list should be the same length.
 
-SEEDS =  [1,10,100]
-ENVS = ['ns3-v0']
-WORKERS = [2,4,8,16,32,63]
+SEEDS =  [42]
+ENVS = ["OmnetGymApiEnv", "CartPole-v1"]
+WORKERS = [1, 2,4,8,16]
     
 new_names = []
 for params in itertools.product(ENVS, WORKERS, SEEDS):

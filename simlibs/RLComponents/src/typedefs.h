@@ -7,6 +7,7 @@
 
 
 // Define the types for observation, action and reward.
+// Observations for RLRDP models may contain more parameters than observations for cartpole models
 
 #if !defined(RLRDP) && !defined(CARTPOLE) && !defined(ORCA)
 #define CARTPOLE

@@ -15,7 +15,7 @@ from ray.rllib.algorithms.dqn.dqn import DQNConfig
 #from ns3gym import ns3env
 import time
 
-
+# OmnetGymAPI object. Defines how to step and more.
 class OmnetGymApiEnv(gym.Env):
     def __init__(self,env_config):
         
@@ -88,6 +88,7 @@ def omnetgymapienv_creator(env_config):
     startSim = 1
     return ns3env.Ns3Env(port=port, stepTime=stepTime, startSim=startSim, simSeed=seed, simArgs=simArgs, debug=debug)  # return an env instance
 
+# Define the environment?
 #register_env("ns3-v0", ns3gymapienv_creator)
 register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
@@ -104,14 +105,17 @@ if __name__ == '__main__':
     ray.init(num_cpus=64)
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/cartpole/cartpole.ini"}
 #    env_config={}
+
+    # Define the training algorithm
     algo = (
     DQNConfig()
     .rollouts(num_rollout_workers=num_workers)
     .resources(num_gpus=0)
     .environment(env, env_config=env_config) # "ns3-v0"
     .build()
-)
+    )
 
+# Log progress
     t_start = time.time()
     now = time.time()
     while True:

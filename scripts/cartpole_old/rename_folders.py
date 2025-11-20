@@ -13,7 +13,7 @@ sorted_dirs = sorted(dir_names)
 # create another list containing the new names of each directory. Note that the list should be the same length.
 
 SEEDS =  [1,10,100]
-ENVS = ["ns3-v0","OmnetGymApiEnv", "CartPole-v1"]
+ENVS = ["CartPole-v1"]
 WORKERS = [2,4,8,16,32,63]
     
 new_names = []
