@@ -22,3 +22,11 @@ make clean
 # Build Cartpole debug
 cd $RAYNET_HOME/simlibs/cartpole && \
 make clean
+
+# Build dumbbell debug
+cd $RAYNET_HOME/simlibs/dumbbell && \
+make clean
+
+# Build JamesLib debug
+cd $RAYNET_HOME/simlibs/JamesLib && \
+make clean

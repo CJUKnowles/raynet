@@ -1,13 +1,14 @@
 cmake_policy(SET CMP0048 NEW)
+cmake_minimum_required(VERSION 3.4...3.18)
 project(rlomnetbind VERSION 1.0.0 LANGUAGES CXX)
 
-cmake_minimum_required(VERSION 3.4...3.18)
+
 set(CMAKE_CXX_STANDARD 20)
 
 set(CMAKE_DEBUG_POSTFIX _dbg)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON) 
 
-set(INET_MODEL_PATH $ENV{HOME}/inet4.5/src)
+set(INET_MODEL_PATH $ENV{HOME}/inet4.4/src)
 set(TCPPACED_PATH ${PROJECT_SOURCE_DIR}/simlibs/TcpPaced/src)
 set(RLCOMPONENTS_PATH ${PROJECT_SOURCE_DIR}/simlibs/RLComponents/src)
 set(CARTPOLE_PATH ${PROJECT_SOURCE_DIR}/simlibs/cartpole/src)
@@ -16,7 +17,7 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
 # Declare Release and Debug libraries
 set(MY_LIB_LINK_LIBRARIES_RELEASE optimized oppsim optimized oppcommon optimized oppcmdenv optimized Cmdrlenv optimized oppnedxml optimized oppenvir optimized -Wl,--no-as-needed INET optimized -Wl,--no-as-needed TcpPaced optimized -Wl,--no-as-needed RLComponents optimized -Wl,--no-as-needed cartpole optimized -Wl,--no-as-needed JamesLib)
-set(MY_LIB_LINK_LIBRARIES_DEBUG debug oppsim_dbg debug oppcommon_dbg debug oppcmdenv_dbg debug Cmdrlenv debug oppnedxml_dbg debug oppenvir_dbg debug -Wl,--no-as-needed INET_dbg debug -Wl,--no-as-needed TcpPaced_dbg debug -Wl,--no-as-needed TcpPaced_dbg debug -Wl,--no-as-needed RLComponents_dbg debug -Wl,--no-as-needed cartpole_dbg debug -Wl,--no-as-needed cartpole_dbg JamesLib)
+set(MY_LIB_LINK_LIBRARIES_DEBUG debug oppsim_dbg debug oppcommon_dbg debug oppcmdenv_dbg debug Cmdrlenv debug oppnedxml_dbg debug oppenvir_dbg debug -Wl,--no-as-needed INET_dbg debug -Wl,--no-as-needed TcpPaced_dbg debug -Wl,--no-as-needed TcpPaced_dbg debug -Wl,--no-as-needed RLComponents_dbg debug -Wl,--no-as-needed cartpole_dbg debug -Wl,--no-as-needed JamesLib_dbg)
 
 
 find_package(OmnetPP 6.0.1 REQUIRED)
@@ -48,9 +49,9 @@ if(CMAKE_BUILD_TYPE STREQUAL Release)
 
 
 elseif(CMAKE_BUILD_TYPE STREQUAL Debug)
-    set_target_properties(Cmdrlenv PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
     target_link_libraries(Cmdrlenv oppcmdenv_dbg)
-  
+    set_target_properties(Cmdrlenv PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
+
     target_link_libraries(rlomnet PRIVATE ${MY_LIB_LINK_LIBRARIES_DEBUG})
 
     add_executable(testcpp ${PROJECT_SOURCE_DIR}/src/gymApiTest.cc)

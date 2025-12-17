@@ -1,7 +1,0 @@
-package cartpole;
-
-
-simple CartpoleComponent
-{
-   
-}

@@ -31,7 +31,7 @@ void GymApi::initialise(std::string _iniPath){
     
     // char s1[] = "";
     std::vector<char*> cstrings; // final arguments for Omnet++
-
+    
     // set up an environment for the simulation
     env = new Cmdrlenv();
     

@@ -18,12 +18,12 @@
       "-I/home/cjuknowles/inet4.5/src",
       "-I/home/cjuknowles/omnetpp-6.2.0/include",
       "-o",
-      "out/clang-release//Broker.o",
+      "../out/clang-release/src/Broker.o",
       "Broker.cc"
     ],
     "directory": "/home/cjuknowles/raynet/simlibs/RLComponents/src",
     "file": "/home/cjuknowles/raynet/simlibs/RLComponents/src/Broker.cc",
-    "output": "/home/cjuknowles/raynet/simlibs/RLComponents/src/out/clang-release/Broker.o"
+    "output": "/home/cjuknowles/raynet/simlibs/RLComponents/out/clang-release/src/Broker.o"
   },
   {
     "arguments": [
@@ -44,12 +44,12 @@
       "-I/home/cjuknowles/inet4.5/src",
       "-I/home/cjuknowles/omnetpp-6.2.0/include",
       "-o",
-      "out/clang-release//BrokerData.o",
+      "../out/clang-release/src/BrokerData.o",
       "BrokerData.cc"
     ],
     "directory": "/home/cjuknowles/raynet/simlibs/RLComponents/src",
     "file": "/home/cjuknowles/raynet/simlibs/RLComponents/src/BrokerData.cc",
-    "output": "/home/cjuknowles/raynet/simlibs/RLComponents/src/out/clang-release/BrokerData.o"
+    "output": "/home/cjuknowles/raynet/simlibs/RLComponents/out/clang-release/src/BrokerData.o"
   },
   {
     "arguments": [
@@ -70,12 +70,12 @@
       "-I/home/cjuknowles/inet4.5/src",
       "-I/home/cjuknowles/omnetpp-6.2.0/include",
       "-o",
-      "out/clang-release//MonitorInterval.o",
+      "../out/clang-release/src/MonitorInterval.o",
       "MonitorInterval.cc"
     ],
     "directory": "/home/cjuknowles/raynet/simlibs/RLComponents/src",
     "file": "/home/cjuknowles/raynet/simlibs/RLComponents/src/MonitorInterval.cc",
-    "output": "/home/cjuknowles/raynet/simlibs/RLComponents/src/out/clang-release/MonitorInterval.o"
+    "output": "/home/cjuknowles/raynet/simlibs/RLComponents/out/clang-release/src/MonitorInterval.o"
   },
   {
     "arguments": [
@@ -96,12 +96,12 @@
       "-I/home/cjuknowles/inet4.5/src",
       "-I/home/cjuknowles/omnetpp-6.2.0/include",
       "-o",
-      "out/clang-release//RLInterface.o",
+      "../out/clang-release/src/RLInterface.o",
       "RLInterface.cc"
     ],
     "directory": "/home/cjuknowles/raynet/simlibs/RLComponents/src",
     "file": "/home/cjuknowles/raynet/simlibs/RLComponents/src/RLInterface.cc",
-    "output": "/home/cjuknowles/raynet/simlibs/RLComponents/src/out/clang-release/RLInterface.o"
+    "output": "/home/cjuknowles/raynet/simlibs/RLComponents/out/clang-release/src/RLInterface.o"
   },
   {
     "arguments": [
@@ -122,12 +122,12 @@
       "-I/home/cjuknowles/inet4.5/src",
       "-I/home/cjuknowles/omnetpp-6.2.0/include",
       "-o",
-      "out/clang-release//rlUtil.o",
+      "../out/clang-release/src/rlUtil.o",
       "rlUtil.cc"
     ],
     "directory": "/home/cjuknowles/raynet/simlibs/RLComponents/src",
     "file": "/home/cjuknowles/raynet/simlibs/RLComponents/src/rlUtil.cc",
-    "output": "/home/cjuknowles/raynet/simlibs/RLComponents/src/out/clang-release/rlUtil.o"
+    "output": "/home/cjuknowles/raynet/simlibs/RLComponents/out/clang-release/src/rlUtil.o"
   },
   {
     "arguments": [
@@ -148,11 +148,11 @@
       "-I/home/cjuknowles/inet4.5/src",
       "-I/home/cjuknowles/omnetpp-6.2.0/include",
       "-o",
-      "out/clang-release//Stepper.o",
+      "../out/clang-release/src/Stepper.o",
       "Stepper.cc"
     ],
     "directory": "/home/cjuknowles/raynet/simlibs/RLComponents/src",
     "file": "/home/cjuknowles/raynet/simlibs/RLComponents/src/Stepper.cc",
-    "output": "/home/cjuknowles/raynet/simlibs/RLComponents/src/out/clang-release/Stepper.o"
+    "output": "/home/cjuknowles/raynet/simlibs/RLComponents/out/clang-release/src/Stepper.o"
   }
 ]

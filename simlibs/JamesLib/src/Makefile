@@ -2,31 +2,33 @@
 # OMNeT++/OMNEST Makefile for $(LIB_PREFIX)JamesLib
 #
 # This file was generated with the command:
-#  opp_makemake -o JamesLib --make-so -f --deep --mode release -DCARTPOLE -I/home/cjuknowles/raynet/simlibs/RLComponents/src -L/home/cjuknowles/raynet/simlibs/RLComponents/src -lRLComponents
+#  opp_makemake -o JamesLib --make-so -f --deep --mode release -DCARTPOLE -I/home/cjuknowles/raynet/simlibs/RLComponents/src -L/home/cjuknowles/raynet/simlibs/RLComponents/src -lRLComponents -I/home/cjuknowles/inet4.4/src -L/home/cjuknowles/inet4.4/src -lINET
 #
 
 # Name of target to be created (-o option)
 TARGET_DIR = .
 TARGET_NAME = $(LIB_PREFIX)JamesLib$(D)
 TARGET = $(TARGET_NAME)$(SHARED_LIB_SUFFIX)
+TARGET_IMPLIB = $(TARGET_NAME)$(IMPLIB_SUFFIX)
+TARGET_IMPDEF = $(TARGET_NAME)$(IMPDEF_SUFFIX)
 TARGET_FILES = $(TARGET_DIR)/$(TARGET)
 
 # C++ include paths (with -I)
-INCLUDE_PATH = -I/home/cjuknowles/raynet/simlibs/RLComponents/src
+INCLUDE_PATH = -I/home/cjuknowles/raynet/simlibs/RLComponents/src -I/home/cjuknowles/inet4.4/src
 
 # Additional object and library files to link with
 EXTRA_OBJS =
 
 # Additional libraries (-L, -l options)
-LIBS = $(LDFLAG_LIBPATH)/home/cjuknowles/raynet/simlibs/RLComponents/src  -lRLComponents
+LIBS = $(LDFLAG_LIBPATH)/home/cjuknowles/raynet/simlibs/RLComponents/src $(LDFLAG_LIBPATH)/home/cjuknowles/inet4.4/src  -lRLComponents -lINET
 
 # Output directory
-PROJECT_OUTPUT_DIR = out
-PROJECTRELATIVE_PATH =
+PROJECT_OUTPUT_DIR = ../out
+PROJECTRELATIVE_PATH = src
 O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
 
 # Object files for local .cc, .msg and .sm files
-OBJS = $O/JamesAgent.o
+OBJS = $O/JamesCC.o $O/JamesNet.o $O/RLTcp.o $O/RLTcpNewReno.o $O/Txc.o
 
 # Message files
 MSGFILES =
@@ -58,7 +60,7 @@ include $(CONFIGFILE)
 # Simulation kernel and user interface libraries
 OMNETPP_LIBS = -loppenvir$D $(KERNEL_LIBS) $(SYS_LIBS)
 ifneq ($(PLATFORM),win32)
-LIBS += -Wl,-rpath,$(abspath /home/cjuknowles/raynet/simlibs/RLComponents/src)
+LIBS += -Wl,-rpath,$(abspath /home/cjuknowles/raynet/simlibs/RLComponents/src) -Wl,-rpath,$(abspath /home/cjuknowles/inet4.4/src)
 endif
 
 COPTS = $(CFLAGS) $(IMPORT_DEFINES) -DCARTPOLE $(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)
@@ -76,11 +78,8 @@ endif
 
 # On Windows, the target has additional file(s). An import lib and an optional debug symbol file is created too.
 ifeq ($(PLATFORM),win32)
-  TARGET_IMPLIB = $(TARGET_NAME)$(IMPLIB_SUFFIX)
-  TARGET_IMPDEF = $(TARGET_NAME)$(IMPDEF_SUFFIX)
   TARGET_FILES+= $(TARGET_DIR)/$(TARGET_IMPLIB)
   LDFLAGS+= $(LDFLAG_IMPLIB)$O/$(TARGET_IMPLIB)
-  OUT_TARGET_EXTRA_FILES = $O/$(TARGET_IMPLIB)
   ifeq ($(TOOLCHAIN_NAME),clang-msabi)
     ifeq ($(MODE),debug)
       TARGET_FILES+=$(TARGET_DIR)/$(TARGET_NAME).pdb
@@ -88,7 +87,6 @@ ifeq ($(PLATFORM),win32)
   else
     TARGET_FILES+= $(TARGET_DIR)/$(TARGET_IMPDEF)
     LDFLAGS+= $(LDFLAG_IMPDEF)$O/$(TARGET_IMPDEF)
-    OUT_TARGET_EXTRA_FILES+= $O/$(TARGET_IMPDEF)
   endif
 endif
 
@@ -108,7 +106,7 @@ ifeq ($(TOOLCHAIN_NAME),clang-msabi)
 $O/$(TARGET_NAME).pdb: $O/$(TARGET)
 endif
 
-$O/$(TARGET) $(OUT_TARGET_EXTRA_FILES) &: $(OBJS)  $(wildcard $(EXTRA_OBJS)) Makefile $(CONFIGFILE)
+$O/$(TARGET) $O/$(TARGET_IMPDEF) $O/$(TARGET_IMPLIB) &: $(OBJS)  $(wildcard $(EXTRA_OBJS)) Makefile $(CONFIGFILE)
 	@$(MKPATH) $O
 	@echo Creating shared library: $@
 	$(Q)$(SHLIB_LD) -o $O/$(TARGET) $(OBJS) $(EXTRA_OBJS) $(AS_NEEDED_OFF) $(WHOLE_ARCHIVE_ON) $(LIBS) $(WHOLE_ARCHIVE_OFF) $(OMNETPP_LIBS) $(LDFLAGS)
@@ -121,7 +119,6 @@ endif
 
 # disabling all implicit rules
 .SUFFIXES :
-.PRECIOUS : %_m.h %_m.cc
 
 $O/%.o: %.cc $(COPTS_FILE) | msgheaders smheaders
 	@$(MKPATH) $(dir $@)

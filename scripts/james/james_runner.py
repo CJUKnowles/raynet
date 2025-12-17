@@ -6,7 +6,7 @@ if __name__ == "__main__":
     #ENVS = ["OmnetGymApiEnv"]
     ENVS = ["OmnetGymApiEnv"]
     WORKERS = [1] # 16 is stable. 32+ has issues, 64+ crashes my laptop lol
-    SEEDS =  [61420]
+    SEEDS =  [61420] 
     
     # For each parameter combo, change to the training script directory and run the script in a new process from there.
     for params in itertools.product(ENVS, WORKERS, SEEDS):

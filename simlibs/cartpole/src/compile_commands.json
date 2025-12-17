@@ -18,11 +18,11 @@
       "-I/home/cjuknowles/raynet/simlibs/RLComponents/src",
       "-I/home/cjuknowles/omnetpp-6.2.0/include",
       "-o",
-      "out/clang-release//CartpoleComponent.o",
+      "../out/clang-release/src/CartpoleComponent.o",
       "CartpoleComponent.cc"
     ],
     "directory": "/home/cjuknowles/raynet/simlibs/cartpole/src",
     "file": "/home/cjuknowles/raynet/simlibs/cartpole/src/CartpoleComponent.cc",
-    "output": "/home/cjuknowles/raynet/simlibs/cartpole/src/out/clang-release/CartpoleComponent.o"
+    "output": "/home/cjuknowles/raynet/simlibs/cartpole/out/clang-release/src/CartpoleComponent.o"
   }
 ]

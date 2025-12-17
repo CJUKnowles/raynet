@@ -14,7 +14,8 @@ inline bool elapsed(long millis, int64_t& since)
 }
 
 void  Cmdrlenv::initialiseEnvironment(int argc, char *argv[],cConfiguration *configobject){
-    opt = createOptions();
+    opt = static_cast<CmdenvOptions*>(createOptions());
+
     args = new ArgList();
     args->parse(argc, argv, ARGSPEC);  // TODO share spec with startup.cc!
     opt->useStderr = !args->optionGiven('m');

@@ -135,9 +135,10 @@ void CartpoleComponent::cleanup(){}
 void  CartpoleComponent::decisionMade(ActionType action){
     if(this->isReset){
         //Reset state for next iterations
-        steps_beyond_done = -10;
-        state = random();
-        std::cout << "Environment reset!" << std::endl;
+        // steps_beyond_done = -10;
+        // state = random();
+        // std::cout << "Environment reset!" << std::endl;
+        step(action);
     }else{
         step(action);
     }
@@ -152,6 +153,7 @@ ObsType CartpoleComponent::getRLState(){
 // Return a reward for every timestep the pole has not fallen
 RewardType CartpoleComponent::getReward(){
     RewardType reward;
+    return 1.0;
     if (done == false)
     {
         reward = 1.0;

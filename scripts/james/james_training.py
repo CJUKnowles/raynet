@@ -1,28 +1,13 @@
 
-"""
-This is example cartpole script from a very old raynet commit. It could be a good example/starting place, with some caveats:
-- It is very outdated. Changes will need to be made.
-- It was designed to compare RayNet to ns3 gym, and as such it has some weird NS3 dependencies
-
-I'm going to try to to alter it until it at least *somewhat* works, if that's possible.
-At the very least I can get it close then use it as a base.
-From there, I'll develop my own training script.
-
-Notable changes I made:
-- Replace DQNConfig with AlgorithmConfig (DQN is still being used, the class structure has just changed)
-- add ../raynet/build to the PATH for access to omnetbind
-- Removed all references to ns3
-- 
-"""
-
 import sys, os
+from ray.runtime_env import RuntimeEnv
 
 # Probably overkill - add every raynet folder to the PATH
 # omnetbind is the only raynet module exposed as a python package, so this is not necessary
 # repo_path = "/home/cjuknowles/raynet"
 # for root, dirs, files in os.walk(repo_path):
 #     if "__pycache__" not in root:
-#         sys.path.append(root)
+#         sys.path.end(root)
 
 # Add ~/raynet/build to the PATH, for access to omnetbind
 sys.path.append("/home/cjuknowles/raynet/build")
@@ -48,6 +33,7 @@ class OmnetGymApiEnv(gym.Env):
     def __init__(self,env_config):
         self.action_space = spaces.Discrete(2)
         self.runner = OmnetGymApi()
+        
         self.env_config = env_config
         self.max_episode_len = 500
 
@@ -77,28 +63,28 @@ class OmnetGymApiEnv(gym.Env):
         self.runner.initialise(original_ini_file + f".worker{os.getpid()}")
         obs = self.runner.reset()
         print(obs)
-        obs = np.asarray(list(obs['JamesAgent']),dtype=np.float32)
+        obs = np.asarray(list(obs['JamesCC']),dtype=np.float32)
         return  obs, {}
 
     def step(self, action):
-        actions = {'JamesAgent': action}
+        actions = {'JamesCC': action}
         theta_threshold_radians = 12 * 2 * math.pi / 360
         x_threshold = 2.4
         obs, rewards, terminateds, info_ = self.runner.step(actions)
-        reward = round(rewards['JamesAgent'],4)
-        obs = obs['JamesAgent']
+        reward = round(rewards['JamesCC'],4)
+        obs = obs['JamesCC']
 
         if (obs[0] < x_threshold * -1) or (obs[0] > x_threshold) or (obs[2] < theta_threshold_radians * -1) or (obs[2] > theta_threshold_radians):
-            terminateds['JamesAgent'] = True
+            terminateds['JamesCC'] = True
             reward = 0
 
-        if terminateds['JamesAgent']:
+        if terminateds['JamesCC']:
              self.runner.shutdown()
              self.runner.cleanup()
        
         obs = np.asarray(list(obs),dtype=np.float32)
     
-        return  obs, reward, terminateds['JamesAgent'], False,{}
+        return  obs, reward, terminateds['JamesCC'], False,{}
         return
 
 from ray.rllib.algorithms.dqn.dqn import DQNConfig
@@ -136,13 +122,15 @@ if __name__ == '__main__':
     ray.init(num_cpus=64)
 
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/james/james.ini"}
+    # env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/james/james_simple.ini"}
+    # env_config = {"iniPath": os.getenv('HOME') + "/omnetpp-6.2.0/samples/james_testbed/JamesDumbbell.ini"}
+    
     #env_config={}
-
     # This should supposedly be replaced with AlgorithmConfig, but doesn't work
     algo = (
         DQNConfig()
         .env_runners(num_env_runners=num_workers)
-        .resources(num_gpus=1)
+        .resources(num_gpus=0)
         .environment(env, env_config=env_config) # "OmnetGymApiEnv
         .build_algo()
     # Deprecated DQNConfig for reference
@@ -152,7 +140,7 @@ if __name__ == '__main__':
         # .environment(env, env_config=env_config) # "ns3-v0"
         # .build()
 )
-
+    
     # Run experiments and log progress
     t_start = time.time()
     now = time.time()
@@ -170,3 +158,9 @@ if __name__ == '__main__':
         now = time.time()
     ray.shutdown()
     print("Finished!")
+
+
+@ray.remote
+def f(x):
+    breakpoint()
+    return x * x

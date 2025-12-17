@@ -9,6 +9,8 @@
 TARGET_DIR = .
 TARGET_NAME = $(LIB_PREFIX)cartpole$(D)
 TARGET = $(TARGET_NAME)$(SHARED_LIB_SUFFIX)
+TARGET_IMPLIB = $(TARGET_NAME)$(IMPLIB_SUFFIX)
+TARGET_IMPDEF = $(TARGET_NAME)$(IMPDEF_SUFFIX)
 TARGET_FILES = $(TARGET_DIR)/$(TARGET)
 
 # C++ include paths (with -I)
@@ -76,11 +78,8 @@ endif
 
 # On Windows, the target has additional file(s). An import lib and an optional debug symbol file is created too.
 ifeq ($(PLATFORM),win32)
-  TARGET_IMPLIB = $(TARGET_NAME)$(IMPLIB_SUFFIX)
-  TARGET_IMPDEF = $(TARGET_NAME)$(IMPDEF_SUFFIX)
   TARGET_FILES+= $(TARGET_DIR)/$(TARGET_IMPLIB)
   LDFLAGS+= $(LDFLAG_IMPLIB)$O/$(TARGET_IMPLIB)
-  OUT_TARGET_EXTRA_FILES = $O/$(TARGET_IMPLIB)
   ifeq ($(TOOLCHAIN_NAME),clang-msabi)
     ifeq ($(MODE),debug)
       TARGET_FILES+=$(TARGET_DIR)/$(TARGET_NAME).pdb
@@ -88,7 +87,6 @@ ifeq ($(PLATFORM),win32)
   else
     TARGET_FILES+= $(TARGET_DIR)/$(TARGET_IMPDEF)
     LDFLAGS+= $(LDFLAG_IMPDEF)$O/$(TARGET_IMPDEF)
-    OUT_TARGET_EXTRA_FILES+= $O/$(TARGET_IMPDEF)
   endif
 endif
 
@@ -108,7 +106,7 @@ ifeq ($(TOOLCHAIN_NAME),clang-msabi)
 $O/$(TARGET_NAME).pdb: $O/$(TARGET)
 endif
 
-$O/$(TARGET) $(OUT_TARGET_EXTRA_FILES) &: $(OBJS)  $(wildcard $(EXTRA_OBJS)) Makefile $(CONFIGFILE)
+$O/$(TARGET) $O/$(TARGET_IMPDEF) $O/$(TARGET_IMPLIB) &: $(OBJS)  $(wildcard $(EXTRA_OBJS)) Makefile $(CONFIGFILE)
 	@$(MKPATH) $O
 	@echo Creating shared library: $@
 	$(Q)$(SHLIB_LD) -o $O/$(TARGET) $(OBJS) $(EXTRA_OBJS) $(AS_NEEDED_OFF) $(WHOLE_ARCHIVE_ON) $(LIBS) $(WHOLE_ARCHIVE_OFF) $(OMNETPP_LIBS) $(LDFLAGS)
@@ -121,7 +119,6 @@ endif
 
 # disabling all implicit rules
 .SUFFIXES :
-.PRECIOUS : %_m.h %_m.cc
 
 $O/%.o: %.cc $(COPTS_FILE) | msgheaders smheaders
 	@$(MKPATH) $(dir $@)

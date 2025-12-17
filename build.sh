@@ -17,7 +17,6 @@ echo {"Usage: ${0##*/} [-h] [-m BUILDMODE] [-f FEATURE]...
 }
    
    # Initialize our own variables:
-   mode="release"
    feature="CARTPOLE"
    
    OPTIND=1
@@ -62,7 +61,7 @@ export RAYNET_FEATURE=$feature
 
 if [ "$mode" = "debug" ]
 then
-	cd $HOME/inet4.5
+	cd $HOME/inet4.4
 	make -j32 MODE=debug
 
 
@@ -82,12 +81,17 @@ then
 	cd $RAYNET_HOME/simlibs/cartpole && \
 	make makefilesdebug && \
 	make -j32 MODE=debug
+
+	# Build JamesLib debug
+	cd $RAYNET_HOME/simlibs/JamesLib && \
+	make makefilesdebug && \
+	make -j32 MODE=debug
 fi
 
 
 if [ "$mode" = "release" ]
 then
-	cd $HOME/inet4.5
+	cd $HOME/inet4.4
 	make -j32 MODE=release
 
 	echo "Building release libraries..." && \

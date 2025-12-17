@@ -1,7 +1,0 @@
-package JamesLib;
-
-
-simple JamesAgent
-{
-   
-}
