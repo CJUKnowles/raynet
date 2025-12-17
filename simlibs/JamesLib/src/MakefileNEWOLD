@@ -2,7 +2,7 @@
 # OMNeT++/OMNEST Makefile for $(LIB_PREFIX)JamesLib
 #
 # This file was generated with the command:
-#  opp_makemake -o JamesLib --make-so -f --deep --mode release -DCARTPOLE -I/home/cjuknowles/raynet/simlibs/RLComponents/src -L/home/cjuknowles/raynet/simlibs/RLComponents/src -lRLComponents -I/home/cjuknowles/inet4.5/src -L/home/cjuknowles/inet4.5/src -lINET
+#  opp_makemake -o JamesLib --make-so -f --deep --mode release -DCARTPOLE -I/home/cjuknowles/raynet/simlibs/RLComponents/src -L/home/cjuknowles/raynet/simlibs/RLComponents/src -lRLComponents -I/home/cjuknowles/inet4.4/src -L/home/cjuknowles/inet4.4/src -lINET
 #
 
 # Name of target to be created (-o option)
@@ -12,13 +12,13 @@ TARGET = $(TARGET_NAME)$(SHARED_LIB_SUFFIX)
 TARGET_FILES = $(TARGET_DIR)/$(TARGET)
 
 # C++ include paths (with -I)
-INCLUDE_PATH = -I/home/cjuknowles/raynet/simlibs/RLComponents/src -I/home/cjuknowles/inet4.5/src
+INCLUDE_PATH = -I/home/cjuknowles/raynet/simlibs/RLComponents/src -I/home/cjuknowles/inet4.4/src
 
 # Additional object and library files to link with
 EXTRA_OBJS =
 
 # Additional libraries (-L, -l options)
-LIBS = $(LDFLAG_LIBPATH)/home/cjuknowles/raynet/simlibs/RLComponents/src $(LDFLAG_LIBPATH)/home/cjuknowles/inet4.5/src  -lRLComponents -lINET
+LIBS = $(LDFLAG_LIBPATH)/home/cjuknowles/raynet/simlibs/RLComponents/src $(LDFLAG_LIBPATH)/home/cjuknowles/inet4.4/src  -lRLComponents -lINET
 
 # Output directory
 PROJECT_OUTPUT_DIR = ../out
@@ -58,7 +58,7 @@ include $(CONFIGFILE)
 # Simulation kernel and user interface libraries
 OMNETPP_LIBS = -loppenvir$D $(KERNEL_LIBS) $(SYS_LIBS)
 ifneq ($(PLATFORM),win32)
-LIBS += -Wl,-rpath,$(abspath /home/cjuknowles/raynet/simlibs/RLComponents/src) -Wl,-rpath,$(abspath /home/cjuknowles/inet4.5/src)
+LIBS += -Wl,-rpath,$(abspath /home/cjuknowles/raynet/simlibs/RLComponents/src) -Wl,-rpath,$(abspath /home/cjuknowles/inet4.4/src)
 endif
 
 COPTS = $(CFLAGS) $(IMPORT_DEFINES) -DCARTPOLE $(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)
