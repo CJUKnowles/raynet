@@ -9,6 +9,8 @@ echo {"Usage: ${0##*/} [-h] [-m BUILDMODE] [-f FEATURE]...
 	Build (compile and link) Raynet with feature FEATURE in BUILDMODE mode. 
 
        -h            display this help and exit
+	   -b			 make with 'bear -- make' to generate compile commands (requires bear)
+	   -c			 clean simulation libarries before building
        -m BUILDMODE  chose between release and debug modes. Defaults to release.
        -f FEATURE    chose the feature to build. Currently available:
                           RLRDP (default) Builds Raynet to support RDP Agents
@@ -17,22 +19,32 @@ echo {"Usage: ${0##*/} [-h] [-m BUILDMODE] [-f FEATURE]...
 }
    
    # Initialize our own variables:
+   mode="release"
    feature="CARTPOLE"
-   
+   make_prefix=""
+   clean=""
+
    OPTIND=1
    # Resetting OPTIND is necessary if getopts was used previously in the script.
    # It is a good idea to make OPTIND local if you process options in a function.
    
-   while getopts hm:f: opt; do
+   while getopts hbcm:f: opt; do
        case $opt in
            h)
                show_help
                exit 0
                ;;
+           b)  
+		   	   make_prefix="bear -- "
+			   ;;
+           c)
+		       clean='true'
+			   ;;
            m)  mode=$OPTARG
                ;;
            f)  feature=$OPTARG
                ;;
+			   
            *)
                show_help >&2
                exit 1
@@ -56,80 +68,87 @@ then
 	echo "Build failed."	
 	exit 1  
 	fi
-
 export RAYNET_FEATURE=$feature
 
-if [ "$mode" = "debug" ]
-then
-	cd $HOME/inet4.4
-	make -j32 MODE=debug
+# --------------------------------------------------------------------------------------------
 
+projects=(
+        "$RAYNET_HOME/simlibs/RLComponents"
+        "$RAYNET_HOME/simlibs/TcpPaced"
+        "$RAYNET_HOME/simlibs/cartpole"
+        "$RAYNET_HOME/simlibs/JamesLib"
+    )
 
-	echo "Building debug libraries..." && \
+# (Optional) Clean simulation libraries
+if [ "$clean" = "true" ]; then
+    echo "Cleaning simulation libararies..."
+    echo ""
 
-	# Build RLComponents debug
-	cd $RAYNET_HOME/simlibs/RLComponents && \
-	make makefilesdebug && \
-	make -j32 MODE=debug
-
-	# Build TcpPaced debug
-	cd $RAYNET_HOME/simlibs/TcpPaced && \
-	make makefilesdebug && \
-	make -j32 MODE=debug
-
-	# Build Cartpole debug
-	cd $RAYNET_HOME/simlibs/cartpole && \
-	make makefilesdebug && \
-	make -j32 MODE=debug
-
-	# Build JamesLib debug
-	cd $RAYNET_HOME/simlibs/JamesLib && \
-	make makefilesdebug && \
-	make -j32 MODE=debug
+    for proj in "${projects[@]}"; do
+        echo "Cleaning $proj..."
+        echo "---------------------------------"
+        cd "$proj" || exit 1
+        ${make_prefix}make cleanall
+        echo "---------------------------------"
+        echo ""
+    done
 fi
 
+# Build simulation libraries
+if [ "$mode" = "release" ]; then
+    
+    echo "Building INET release..."
+    echo "---------------------------------"
+    cd "$HOME/inet4.4" && make -j32 MODE=release
+    echo "---------------------------------"
+    echo ""
 
-if [ "$mode" = "release" ]
-then
-	cd $HOME/inet4.4
-	make -j32 MODE=release
-
-	echo "Building release libraries..." && \
-	
-	# Build RLComponents release
-	cd $RAYNET_HOME/simlibs/RLComponents && \
-	make makefilesrelease && \
-	make -j32 MODE=release
-
-	# Build TcpPaced release
-	cd $RAYNET_HOME/simlibs/TcpPaced && \
-	make makefilesrelease && \
-	make -j32 MODE=release
-
-	# Build Cartpole release
-	cd $RAYNET_HOME/simlibs/cartpole && \
-	make makefilesrelease && \
-	make -j32 MODE=release
-
-	# Build JamesLib release
-	cd $RAYNET_HOME/simlibs/JamesLib && \
-	make makefilesrelease && \
-	make -j32 MODE=release
+    for proj in "${projects[@]}"; do
+        echo "Building release libraries in $proj..."
+        echo "---------------------------------"
+        cd "$proj" || exit 1
+        ${make_prefix}make makefilesrelease
+        ${make_prefix}make -j32 MODE=release
+        echo "---------------------------------"
+        echo ""
+    done
 fi
 
+if [ "$mode" = "debug" ]; then
+    echo "Building INET debug..."
+    echo "---------------------------------"
+    cd "$HOME/inet4.4" && make -j32 MODE=debug
+    echo "---------------------------------"
+    echo ""
+
+    for proj in "${projects[@]}"; do
+        echo ""
+        echo "Building debug libraries in $proj..."
+        cd "$proj" || exit 1
+        ${make_prefix}make makefilesdebug
+        ${make_prefix}make -j32 MODE=debug
+    done
+fi
+
+# Build raynet
 cd $RAYNET_HOME
 mkdir build 
 cd build
+
+echo "Building RayNet..."
+echo "---------------------------------"
+if [ "$mode" = "release" ]
+then
+	cmake -DCMAKE_BUILD_TYPE=Release ../ && \
+	make -j32
+fi
+
 
 if [ "$mode" = "debug" ]
 then
 	cmake -DCMAKE_BUILD_TYPE=Debug ../ && \
 	make -j32
 fi
+echo "---------------------------------"
 
-if [ "$mode" = "release" ]
-then
-	cmake -DCMAKE_BUILD_TYPE=Release ../ && \
-	make -j32
-fi
 

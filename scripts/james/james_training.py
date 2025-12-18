@@ -158,9 +158,3 @@ if __name__ == '__main__':
         now = time.time()
     ray.shutdown()
     print("Finished!")
-
-
-@ray.remote
-def f(x):
-    breakpoint()
-    return x * x
