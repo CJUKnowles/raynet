@@ -24,19 +24,21 @@ void JamesTcpConn::initialize() {
     
     // Set initial state?
     state = ObsType({0.0, 0.0, 0.0, 0.0});
-    // something
     isRegistered = false;
 
-    // initMsg = new cMessage("JamesTcpConn-INIT");
-    // scheduleAt(simTime() + stepInterval, initMsg);
+    monitorInterval = new cMessage("MONITORINTERVAL");
+    scheduleAt(simTime() + stepInterval, monitorInterval);
+    // Query qry(stringId, rlState);
+    // this->emit(querySignal, &qry);
 }
 
 // Receive self messaged created via scheduleAfter() or scheduleAt(). Used to perpetually schedule future RL events.
 void JamesTcpConn::handleMessage(cMessage *msg) {
     
-    if(msg->isSelfMessage() && msg == initMsg) {
-        cout << "\tJamesTcpConn: handleMessage() (new step from initMsg)" << endl;
-        scheduleAt(simTime() + stepInterval, initMsg);
+    if(msg->isSelfMessage() && msg == monitorInterval) {
+        cout << "\tJamesTcpConn: handleMessage() (new step from monitorInterval)" << endl;
+        monitorInterval = new cMessage("MONITORINTERVAL");
+        scheduleAt(simTime() + stepInterval, monitorInterval); // triggers unrecognized timer error. maybe needs to be caught by processTimer()?
         if (!isRegistered) {
             isRegistered = true;
             
@@ -46,7 +48,7 @@ void JamesTcpConn::handleMessage(cMessage *msg) {
             int _maxObsCount = par("maxObsCount");
             RLInterface::initialize(_stateSize, _maxObsCount);
 
-            // Generate ID for this agent
+            // Generate IJamesPlainCCD for this agent
             std::string s("JamesTcpConn"); // TODO: make unique for multiagent?
             this->setStringId(s);
             return;

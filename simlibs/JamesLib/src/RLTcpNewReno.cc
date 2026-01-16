@@ -623,6 +623,7 @@ void RLTcpNewReno::computeObservation(std::vector<double> &obs) {
 
 }
 
+// Make an observation based on the current state, then potentially request an action b
 void RLTcpNewReno::act() {
     if (isActive) {
         // instantiate empty vector that will be filled with the features of the observation

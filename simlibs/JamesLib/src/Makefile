@@ -30,6 +30,7 @@ O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
 # Object files for local .cc, .msg and .sm files
 OBJS = \
     $O/JamesCC.o \
+    $O/JamesPlainCC.o \
     $O/JamesTcp.o \
     $O/JamesTcpConn.o \
     $O/RLTcp.o \

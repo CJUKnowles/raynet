@@ -29,14 +29,19 @@ public:
     virtual RewardType computeReward()override;
     
 
+
     // Mine!
     ObsType state; // array declared
     cMessage* initMsg; // Msg used to notify end of step
     bool isRegistered;
     int stepInterval; // how many seconds to wait between steps
 
+    cMessage *monitorInterval;
     // omnet overrides
     virtual void handleMessage(cMessage *msg) override;
+   // virtual void processTimer(cMessage *timer, TcpEventCode &event) override; // Doesnt exist for TcpConnection. Going to try extending TcpNewReno
+
+    
 };
 
 #endif /* TRANSPORTLAYER_RLTCP_H_ */

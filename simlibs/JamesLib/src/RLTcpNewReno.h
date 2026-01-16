@@ -22,6 +22,7 @@
 #include <inet/transportlayer/tcp/TcpSendQueue.h>
 #include "MonitorInterval.h"
 #include "RLInterface.h"
+#include "typedefs.h"
 
 using namespace inet::tcp;
 using namespace inet;
@@ -118,10 +119,10 @@ public:
 
     virtual void resetStepVariables()override{} ;
 
-    virtual ObsType computeObservation()override{};
+    virtual ObsType computeObservation() override{return ObsType({0.0,0.0,0.0,0.0});};
 
 
-    virtual RewardType computeReward()override{};
+    virtual RewardType computeReward() override{return RewardType(4);};
 
 };
 #endif /* TRANSPORTLAYER_RL_RLTCPNEWRENO_H_ */

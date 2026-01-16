@@ -108,10 +108,7 @@ The second signal is from RLInterface with the state for the step. Triggered by 
 */
 void Stepper::receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *obj)
 {
-
     const char *signalName = getSignalName(signalID);
-
-    
     // if signal is from the broker, it contains whether the MI is a reset or step(action). Pass it to RLInterface.
     if (strcmp(signalName, "brokerToStepper") == 0)
     {
@@ -123,9 +120,9 @@ void Stepper::receiveSignal(cComponent *source, simsignal_t signalID, cObject *v
     {
         //Get id
         cString *c_id = (cString *) obj;
-        std::string id = c_id->str;
-
+        std::string id = c_id->str; // segfault if signal did not include sender ID in the details.
         BrokerData *data = (BrokerData *)value;
+        
         EV_TRACE << "Received signal senderToStepper from "<< id << std::endl;
 
         if (!data->getDone()){
@@ -137,8 +134,8 @@ void Stepper::receiveSignal(cComponent *source, simsignal_t signalID, cObject *v
         if(data->isValid()){
             emit(stepperToBroker, data, obj);
         }else{
+            
         }
-
     }
     
     else
@@ -150,10 +147,11 @@ void Stepper::receiveSignal(cComponent *source, simsignal_t signalID, cObject *v
 
 void Stepper::receiveSignal(cComponent *src, simsignal_t signalID, double value, cObject *obj){
     Enter_Method("change value of step size");
-
+    cout << "\tSTEPPER: Receieved modifyStepSize()" << endl;
     const char *signalName = getSignalName(signalID);
 
      if (strcmp(signalName, "modifyStepSize") == 0){
+        cout << "\tSTEPPER: Recognized modifyStepSize()" << endl;
         //Get id
         cString *c_id = (cString *) obj;
         std::string id = c_id->str;

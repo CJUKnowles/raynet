@@ -55,14 +55,14 @@ void GymApi::initialise(std::string _iniPath){
  std::unordered_map<std::string, ObsType > GymApi::reset(){
     // Reset the environment
     bool isReset = true;
-
+    cout << "\tGYMAPI: 1" << endl;
     std::unordered_map<std::string, ObsType > resetObs;
-    
+    cout << "\tGYMAPI: 1" << endl;
 
     // run the simulation
 
     std::string id = env->step(0, isReset);
-
+    cout << "\tGYMAPI: 1" << endl;
 
 
     if(id != "SIMULATION_END"){

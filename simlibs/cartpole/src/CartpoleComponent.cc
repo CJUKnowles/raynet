@@ -46,23 +46,24 @@ void CartpoleComponent::initialize()
     initMsg = new cMessage("CARTPOLE-INIT"); 
     scheduleAt(simTime() + 1, initMsg);
 }
+
 void CartpoleComponent::handleMessage(cMessage *msg)
 {
     if(msg->isSelfMessage()){
-    scheduleAt(simTime() + 1, initMsg);
+        scheduleAt(simTime() + 1, initMsg);
     
-    if(!isRegistered){
-        isRegistered = true;
-        cObject* simtime = new cSimTime(1);
-        this->setOwner(this);
-        RLInterface::initialise();
+        if(!isRegistered){
+            isRegistered = true;
+            cObject* simtime = new cSimTime(1);
+            this->setOwner(this);
+            RLInterface::initialise();
 
-        // Generate ID for this agent
-        std::string s("cartpole");
-        this->setStringId(s);
+            // Generate ID for this agent
+            std::string s("cartpole");
+            this->setStringId(s);
 
-        emit(this->registerSig, stringId.c_str(), simtime);
-    }
+            emit(this->registerSig, stringId.c_str(), simtime); // could be missing this?
+        }
     }
     else{
         EV_DEBUG << "Stepper should only receive self messages!" << std::endl;
@@ -151,7 +152,6 @@ ObsType CartpoleComponent::getRLState(){
 // Return a reward for every timestep the pole has not fallen
 RewardType CartpoleComponent::getReward(){
     RewardType reward;
-    return 1.0;
     if (done == false)
     {
         reward = 1.0;

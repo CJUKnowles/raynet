@@ -50,6 +50,8 @@ float RLInterface::computeReward(float delta, float delay, float throughput)
 }
 
 
+
+
 RLInterface::~RLInterface()
 {}
 
@@ -119,12 +121,14 @@ void RLInterface::receiveSignal(cComponent *source, simsignal_t id, cObject *val
     
     if (strcmp(signalName, "actionResponse") == 0)
     {
+        //cout << "\tRLInterface: Received actionResponse signal! Calling decisionMade() and resetStepVariables()" << endl;
         cString * c_id = dynamic_cast< cString *>(details);
         std::string id = c_id->str;
         std::string cartpolestr("cartpole");
         std::string resetstr("RESET");
 
-         if (strcmp(stringId.c_str(), cartpolestr.c_str()) == 0 && strcmp(id.c_str(), resetstr.c_str()) == 0){
+        // If not a cartpole agent or a RESET event
+        if (strcmp(stringId.c_str(), cartpolestr.c_str()) == 0 && strcmp(id.c_str(), resetstr.c_str()) == 0){
             BrokerData *data = dynamic_cast< BrokerData *>(value);
             isReset = true;
             ActionType decision = data->getAction();
@@ -147,15 +151,10 @@ void RLInterface::receiveSignal(cComponent *source, simsignal_t id, cObject *val
             }
 
         }
-
-       
-
     }
     else {
         EV_ERROR << "Unknown signal " << signalName << std::endl;
     }
-
-
 }
 
 // signal handler method for pull Observations request from Stepper. 
@@ -168,6 +167,7 @@ void RLInterface::receiveSignal(cComponent *source, simsignal_t id, const char *
 
     if (strcmp(signalName, "pullObservations") == 0)
     {
+        //cout << "\tRLInterface: Received pullObservations signal! Sending self signal senderToStepper" << endl;
         if (strcmp(value, stringId.c_str()) == 0){
             BrokerData *return_data = new BrokerData();
 

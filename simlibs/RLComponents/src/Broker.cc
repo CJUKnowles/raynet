@@ -116,11 +116,9 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, cObject *va
 {
     Enter_Method("schedule a step event(self message)"); //need this for direct messaging. Allows us to call scheduleMessage from the sender(ownership).
     const char *signalName = getSignalName(signalID);
-
     
     if (strcmp(signalName, "stepperToBroker") == 0){
         BrokerData *data = (BrokerData *)value;
-
         //Get id
         cString *c_id = (cString *) obj;
         std::string id = c_id->str;
@@ -131,27 +129,21 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, cObject *va
             activeAgents[id].reward = data->getReward();
             activeAgents[id].done = data->getDone();
         }
-
-        
-        if(activeAgents[id].endOfStep->isScheduled())
+        bool test = activeAgents[id].endOfStep->isScheduled(); // segfault
+        if(test) { 
             cancelEvent(activeAgents[id].endOfStep);
-
+        }
         // Schedule an EOS message for the specific agent.
         scheduleAt(simTime(), activeAgents[id].endOfStep);
 
 
-
-
         EV_TRACE <<  simTime() <<" Scheduled end of step for " << id << "..." << std::endl;
-
         //Clean up
         delete obj;
         delete value;
-    }
-    else{
+    } else {
         EV_TRACE << "Signal received by Broker not recognised" << std::endl;
     }
-
 }
 
 

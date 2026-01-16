@@ -14,6 +14,7 @@ from ray.rllib.algorithms.dqn.dqn import AlgorithmConfig
 from ray.rllib.algorithms.dqn.dqn import DQNConfig
 import os
 import time
+from random import randint
 
 class OmnetGymApiEnv(gym.Env):
     def __init__(self,env_config):
@@ -51,31 +52,24 @@ class OmnetGymApiEnv(gym.Env):
         obs = self.runner.reset()
         print("\tRESET BEING CALLED 4")
         print(obs)
-        obs = np.asarray(list(obs['JamesTcpConn']),dtype=np.float32)
-        
+        obs = np.asarray(list(obs['JamesCC']),dtype=np.float32)
         print(obs)
         return  obs, {}
 
     def step(self, action):
         print("\tSTEP BEING CALLED")
-        actions = {'JamesTcpConn': action}
-        theta_threshold_radians = 12 * 2 * math.pi / 360
-        x_threshold = 2.4
+        actions = {'JamesCC': action}
+
         obs, rewards, terminateds, info_ = self.runner.step(actions)
-        reward = round(rewards['JamesTcpConn'],4)
-        obs = obs['JamesTcpConn']
-
-        if (obs[0] < x_threshold * -1) or (obs[0] > x_threshold) or (obs[2] < theta_threshold_radians * -1) or (obs[2] > theta_threshold_radians):
-            terminateds['JamesTcpConn'] = True
-            reward = 0
-
-        if terminateds['JamesTcpConn']:
+        if terminateds['JamesCC']:
              self.runner.shutdown()
              self.runner.cleanup()
-       
+             
+        obs = obs['JamesCC']
         obs = np.asarray(list(obs),dtype=np.float32)
-    
-        return  obs, reward, terminateds['JamesTcpConn'], False,{}
+        reward = randint(0,1) # Reward value, random for now to see if the value actually reaches the agent
+        # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
+        return  obs, reward, terminateds['JamesCC'], False,{"test": "this is a test! Can the JamesCC see this info?"}
 
 
 # Generates the OmnetGymApiEnv for the calling ray worker
@@ -104,8 +98,8 @@ if __name__ == '__main__':
 
     algo = (
             DQNConfig()
-            .resources(num_gpus=1)
-            .env_runners(num_env_runners=num_workers, num_gpus_per_env_runner=1)
+            .resources(num_gpus=0)
+            .env_runners(num_env_runners=num_workers, num_gpus_per_env_runner=0)
             .environment(env, env_config=env_config) # "OmnetGymApiEnv
             .build_algo()
             )
