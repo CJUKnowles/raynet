@@ -10,9 +10,11 @@ simlibs/RLCC/src/RLCC
 simlibs/RLCC/src/Makefile
 
 */src/out/*
+**/compile_commands.json
+**/.cache
 
-
-
+.cache
+*.venv
 *.csv
 Release
 cart.exe

@@ -11,6 +11,7 @@ echo {"Usage: ${0##*/} [-h] [-m BUILDMODE] [-f FEATURE]...
        -h            display this help and exit
 	   -b			 make with 'bear -- make' to generate compile commands (requires bear)
 	   -c			 clean simulation libarries before building
+       -r            rebuild (deletes the current build directory before proceeding)
        -m BUILDMODE  chose between release and debug modes. Defaults to release.
        -f FEATURE    chose the feature to build. Currently available:
                           RLRDP (default) Builds Raynet to support RDP Agents
@@ -23,13 +24,14 @@ echo {"Usage: ${0##*/} [-h] [-m BUILDMODE] [-f FEATURE]...
    mode="release"
    feature="CARTPOLE"
    make_prefix=""
-   clean=""
+   clean="false"
+   rebuild="false"
 
    OPTIND=1
    # Resetting OPTIND is necessary if getopts was used previously in the script.
    # It is a good idea to make OPTIND local if you process options in a function.
    
-   while getopts hbcm:f: opt; do
+   while getopts hbcrm:f: opt; do
        case $opt in
            h)
                show_help
@@ -41,6 +43,9 @@ echo {"Usage: ${0##*/} [-h] [-m BUILDMODE] [-f FEATURE]...
            c)
 		       clean='true'
 			   ;;
+           r)
+               rebuild='true'
+               ;;
            m)  mode=$OPTARG
                ;;
            f)  feature=$OPTARG
@@ -55,14 +60,14 @@ echo {"Usage: ${0##*/} [-h] [-m BUILDMODE] [-f FEATURE]...
    shift "$((OPTIND-1))"   # Discard the options and sentinel --
 
 # Check for invalid build mode
-if [ "$mode" != "debug" ] && [ "$mode" != "release" ]
+if [ "$mode" != "release" ] && [ "$mode" != "debug" ] 
 then
 	echo "-m option value not recognised. Select between release and debug"
 	echo "Build failed."	
 	exit 1 
 	fi
 
-# Check for invalid feature
+# Check for invalid feature #todo: remove this? New users should not need to modify the build script to get their feature built
 if [ "$feature" != "CARTPOLE" ] && [ "$feature" != "ORCA" ] && [ "$feature" != "JAMESCC" ]
 then
 	echo "-f option value not recognised. Select among CARTPOLE or ORCA"
@@ -73,19 +78,51 @@ export RAYNET_FEATURE=$feature
 
 # --------------------------------------------------------------------------------------------
 
-projects=(
-        "$RAYNET_HOME/simlibs/RLComponents"
-        "$RAYNET_HOME/simlibs/TcpPaced"
-        "$RAYNET_HOME/simlibs/cartpole"
-        "$RAYNET_HOME/simlibs/JamesLib"
-    )
+simlibs=("$RAYNET_HOME/simlibs/RLComponents"
+         "$RAYNET_HOME/simlibs/TcpPaced")
+
+# list directories in the form "/tmp/dirname/"
+for dir in $RAYNET_HOME/simlibs/*/     
+do
+    dir=${dir%*/}      # remove the trailing "/"
+    exists=0
+    for simlib in "${simlibs[@]}" 
+    do
+        if [ "${simlib}" = "${dir}" ] 
+        then
+            exists=1
+        fi
+    done
+    if [ ${exists} = 0 ] 
+    then
+        echo "${dir##*/}"    # print everything after the final "/"
+        simlibs=("${simlibs[@]}" ${dir})
+    fi
+done
+
+echo "simlibs"
+echo ${simlibs[@]}
+# TODO: Loop through all simlibs and append their paths to this list automatically
+# projects=(
+#         "$RAYNET_HOME/simlibs/RLComponents"
+#         "$RAYNET_HOME/simlibs/TcpPaced"
+#         "$RAYNET_HOME/simlibs/cartpole"
+#         "$RAYNET_HOME/simlibs/JamesLib"
+#     )
+# echo "projects"
+# echo ${projects[@]}
+
+for simlib in "${simlibs[@]}"; do
+    echo ${simlib}
+done
+
 
 # (Optional) Clean simulation libraries
 if [ "$clean" = "true" ]; then
     echo "Cleaning simulation libararies..."
     echo ""
 
-    for proj in "${projects[@]}"; do
+    for proj in "${simlibs[@]}"; do
         echo "Cleaning $proj..."
         echo "---------------------------------"
         cd "$proj" || exit 1
@@ -93,6 +130,8 @@ if [ "$clean" = "true" ]; then
         echo "---------------------------------"
         echo ""
     done
+    echo "Cleaning complete!"
+    echo ""
 fi
 
 # Build simulation libraries
@@ -104,12 +143,12 @@ if [ "$mode" = "release" ]; then
     echo "---------------------------------"
     echo ""
 
-    for proj in "${projects[@]}"; do
+    for proj in "${simlibs[@]}"; do
         echo "Building release libraries in $proj..."
         echo "---------------------------------"
         cd "$proj" || exit 1
-        ${make_prefix}make makefilesrelease
-        ${make_prefix}make -j32 MODE=release
+        ${make_prefix}make makefilesrelease     # Generate makefile in the simlib src directory using opp_makemake
+        ${make_prefix}make -j32 MODE=release    # Bulid simlib with the generated makefile
         echo "---------------------------------"
         echo ""
     done
@@ -122,7 +161,7 @@ if [ "$mode" = "debug" ]; then
     echo "---------------------------------"
     echo ""
 
-    for proj in "${projects[@]}"; do
+    for proj in "${simlibs[@]}"; do
         echo ""
         echo "Building debug libraries in $proj..."
         cd "$proj" || exit 1
@@ -133,23 +172,14 @@ fi
 
 # Build raynet
 cd $RAYNET_HOME
+if [ "$rebuild" = "true" ]; then
+    rm -r build
+fi
 mkdir build 
 cd build
 
 echo "Building RayNet..."
 echo "---------------------------------"
-if [ "$mode" = "release" ]
-then
-	cmake -DCMAKE_BUILD_TYPE=Release ../ && \
-	make -j32
-fi
-
-
-if [ "$mode" = "debug" ]
-then
-	cmake -DCMAKE_BUILD_TYPE=Debug ../ && \
-	make -j32
-fi
+cmake -DCMAKE_BUILD_TYPE=$mode -DCLEAN_ALL=$clean ../ && \
+make -j32
 echo "---------------------------------"
-
-

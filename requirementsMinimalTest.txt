@@ -1,0 +1,9 @@
+ray
+gymnasium
+ray[tune]
+dm_tree
+scipy
+torch
+lz4
+matplotlib
+pypdf
