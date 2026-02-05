@@ -2,7 +2,7 @@
 # OMNeT++/OMNEST Makefile for $(LIB_PREFIX)cartpole
 #
 # This file was generated with the command:
-#  opp_makemake -o cartpole --make-so -f --deep --mode release -DJAMESCC -I/home/cjuknowles/raynet/simlibs/RLComponents/src -L/home/cjuknowles/raynet/simlibs/RLComponents/src -lRLComponents
+#  opp_makemake -o cartpole --make-so -f --deep --mode release -DJAMESCC -I/home/james/raynet/simlibs/RLComponents/src -L/home/james/raynet/simlibs/RLComponents/src -lRLComponents
 #
 
 # Name of target to be created (-o option)
@@ -14,13 +14,13 @@ TARGET_IMPDEF = $(TARGET_NAME)$(IMPDEF_SUFFIX)
 TARGET_FILES = $(TARGET_DIR)/$(TARGET)
 
 # C++ include paths (with -I)
-INCLUDE_PATH = -I/home/cjuknowles/raynet/simlibs/RLComponents/src
+INCLUDE_PATH = -I/home/james/raynet/simlibs/RLComponents/src
 
 # Additional object and library files to link with
 EXTRA_OBJS =
 
 # Additional libraries (-L, -l options)
-LIBS = $(LDFLAG_LIBPATH)/home/cjuknowles/raynet/simlibs/RLComponents/src  -lRLComponents
+LIBS = $(LDFLAG_LIBPATH)/home/james/raynet/simlibs/RLComponents/src  -lRLComponents
 
 # Output directory
 PROJECT_OUTPUT_DIR = ../out
@@ -60,7 +60,7 @@ include $(CONFIGFILE)
 # Simulation kernel and user interface libraries
 OMNETPP_LIBS = -loppenvir$D $(KERNEL_LIBS) $(SYS_LIBS)
 ifneq ($(PLATFORM),win32)
-LIBS += -Wl,-rpath,$(abspath /home/cjuknowles/raynet/simlibs/RLComponents/src)
+LIBS += -Wl,-rpath,$(abspath /home/james/raynet/simlibs/RLComponents/src)
 endif
 
 COPTS = $(CFLAGS) $(IMPORT_DEFINES) -DJAMESCC $(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)

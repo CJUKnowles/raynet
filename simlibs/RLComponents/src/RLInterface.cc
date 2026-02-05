@@ -127,12 +127,12 @@ void RLInterface::receiveSignal(cComponent *source, simsignal_t id, cObject *val
         std::string cartpolestr("cartpole");
         std::string resetstr("RESET");
 
-        // If not a cartpole agent or a RESET event
+        // If a cartpole agent and a RESET event
         if (strcmp(stringId.c_str(), cartpolestr.c_str()) == 0 && strcmp(id.c_str(), resetstr.c_str()) == 0){
             BrokerData *data = dynamic_cast< BrokerData *>(value);
             isReset = true;
             ActionType decision = data->getAction();
-
+            
             decisionMade(decision);
         }
         // If this signal refers to this agent, then take the action.

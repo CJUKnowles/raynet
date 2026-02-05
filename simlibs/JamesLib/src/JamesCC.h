@@ -68,6 +68,13 @@ public: // General use
     void getObservationVec(std::vector<double> &obs); 
     int RLStepsTaken = 0; // How many RLSteps have been completed so far.
     bool debug = false; // Prints debug messages if true
+    int maxRLSteps = 10000; // How many training steps should be taken before this agent reports itself as done.
+    double lastStepCwnd=0.0; // What the CWND was at the end of the last step 
+    double lastStepDelay=0.0;  // What the delay was at the end of the last stp
+    double lastStepSent=0.0;    // How many packets were sent during the last step
+    double lastStepSSThresh=0.0; // What was SSthresh last step
+
+    double slowstartMultiplier=1; // The RL action: changes how quickly slow start increases CWND
 
   };
 #endif

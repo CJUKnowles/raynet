@@ -47,8 +47,7 @@ void JamesCC::recalculateSlowStartThreshold()
     //if (debug) cout << "\tJamesCC recalculateSlowStartThreshold()" << endl;
     uint32_t flight_size = std::min(state->snd_cwnd, state->snd_wnd); 
 //    uint32_t flight_size = state->snd_max - state->snd_una;
-    state->ssthresh = std::max(flight_size / 2, 2 * state->snd_mss);
-
+    state->ssthresh = std::max((uint32_t) (flight_size / 2.0), 2 * state->snd_mss);
     //conn->emit(ssthreshSignal, state->ssthresh);
 }
 
@@ -165,7 +164,7 @@ void JamesCC::receivedDataAck(uint32_t firstSeqAcked)
 
             // perform Slow Start. RFC 2581: "During slow start, a TCP increments cwnd
             // by at most SMSS bytes for each ACK received that acknowledges new data."
-            state->snd_cwnd += state->snd_mss; // James TODO: vary the amount snd_cwnd increases based on the policy
+            state->snd_cwnd += (uint32_t) (this->slowstartMultiplier * (double) state->snd_mss); // Raynet; multiply the slow start increase by the trained value slowstartMultiplier
 
             // Note: we could increase cwnd based on the number of bytes being
             // acknowledged by each arriving ACK, rather than by the number of ACKs
@@ -317,8 +316,9 @@ void JamesCC::initialize() {
     if (debug) cout << "\tJamesCC initialize()" << endl;
     int _stateSize = this->conn->getTcpMain()->par("stateSize");;
     int _maxObsCount = this->conn->getTcpMain()->par("maxObsCount");
+    this->maxRLSteps = this->conn->getTcpMain()->par("maxRLSteps");
     debug = this->conn->getTcpMain()->par("printDebugMessages");
-    
+
     // provide the RLInterface with a cComponent API (to use signaling functionality)
     setOwner((cComponent*) conn->getTcpMain());
 
@@ -402,12 +402,28 @@ void JamesCC::decisionMade(ActionType action) {
             if (debug) cout << "\t\tJamesCC currently resetting, will not take action" << endl;
         } else {
             if (debug) cout << "\t\tJamesCC not resetting! Action being taken." << endl;
-            state->snd_cwnd = static_cast<uint32_t>(max((double) state->snd_mss, ceil(action * (double) state->snd_mss)));
+            // cout << "Old cwnd: " << state->snd_cwnd << endl;
+            // state->snd_cwnd = static_cast<uint32_t>(max((double) state->snd_mss, ceil(action * (double) state->snd_mss)));
+            this->slowstartMultiplier = action;
+            this->lastStepCwnd = state->snd_cwnd;
+            // Maybe call recalculateSlowStart() here? or let it happen organically
+
+            //state->snd_cwnd = static_cast<uint32_t> ((double) state->snd_cwnd * (double) action);
+            // uint32_t testCwnd = static_cast<uint32_t>(max((double) state->snd_mss, ceil(action *  (double) state->snd_cwnd)));
+            // cout << "new cwnd: " << state->snd_cwnd << endl;
+            
+            // state->snd_cwnd = static_cast<uint32_t>(max((double) state->snd_mss, ceil(action *  (double) state->snd_cwnd)));
+            // cout << "set cwnd: " << testCwnd << endl<<endl;
+            // Update lastStep values
+            // this->lastStepCwnd = (double) state->snd_cwnd;        // What the CWND was at the end of the last step 
+            // this->lastStepDelay = state->rttvar.dbl();            // What the delay was at the end of the last stp
+            // this->lastStepSSThresh = (double) state->ssthresh;    // What was SSthresh last step
+            // this->lastStepSent = (double) state->snd_una;         // What was sent last step
         }
 
         RLStepsTaken++;
         if (debug) cout << "\t\tRLSteps taken: " << RLStepsTaken << endl;
-        if (RLStepsTaken >= 1000) {
+        if (RLStepsTaken >= this->maxRLSteps) {
             if (debug) cout << "\t\tWE ARE DONE! " << RLStepsTaken << " STEPS TAKEN!" << endl;
             done = true; // Don't set done yourself. Unsure of the correct way to handle this, but this isn't it.
         }
@@ -420,19 +436,32 @@ void JamesCC::decisionMade(ActionType action) {
 
 ObsType JamesCC::getRLState(){
     if (debug) cout << "\tJamesCC: getRLState()" << endl;
+    // Current values
     double cwnd = (double) state->snd_cwnd;
     double delay = state->rttvar.dbl();
     double ssthresh = (double) state->ssthresh;
     double sent = (double) state->snd_una;
-    return {cwnd, delay, ssthresh, sent};
+
+    // // How values changed
+    double cwndChange = cwnd - this->lastStepCwnd;
+    // double delayChange = delay - this->lastStepDelay;
+    // double ssthreshChange = ssthresh - this->lastStepSSThresh;
+    return {cwnd, delay, ssthresh, cwndChange};
 }
 
 RewardType JamesCC::getReward(){
     if (debug) cout << "\tJamesCC: getReward()" << endl;
-    RewardType reward = RewardType(state->snd_cwnd/state->rttvar.dbl());
+    double sent = (double) state->snd_una;
+    double sentThisStep = sent - this->lastStepSent;
+    
+    // RewardType reward = RewardType(sentThisStep);
+    // this->lastStepSent = sent;
+    // RewardType reward = RewardType(state->snd_cwnd/state->rttvar.dbl());
+    RewardType reward = RewardType(state->snd_cwnd);
     return reward;
 }
-bool JamesCC::getDone(){
+
+bool JamesCC::getDone() {
     cout << "\tJamesCC: getDone()" << endl;
     cout << "\tJamesCC: getDone()" << endl;
     cout << "\tJamesCC: getDone()" << endl;
