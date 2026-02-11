@@ -1,10 +1,10 @@
-package JamesLib;
+package Orca;
 
-import JamesLib.JamesNet;
-import JamesLib.JamesCC;
-import JamesLib.JamesTcp;
-import JamesLib.JamesTcpConn;
-import JamesLib.RLTcp;
+import Orca.JamesNet;
+import Orca.JamesCC;
+import Orca.JamesTcp;
+import Orca.JamesTcpConn;
+import Orca.RLTcp;
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import inet.networks.base.NetworkBase;
 import inet.node.inet.StandardHost;
@@ -17,7 +17,7 @@ import inet.node.ethernet.Eth10M;
 import RLComponents.Broker;
 import RLComponents.Stepper;
 
-network JamesNet
+network OrcaNet
 {
     parameters:
         // @statistic[packetDropped] (source = packetDropped; record = count);
@@ -27,7 +27,7 @@ network JamesNet
     types:
         channel standardLine extends DatarateChannel
         {
-            delay = 0ms;
+            delay = 4.75ms;
             datarate = 10Gbps;
         }
 

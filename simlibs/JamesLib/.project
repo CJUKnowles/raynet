@@ -3,7 +3,7 @@
 	<name>JamesLib</name>
 	<comment></comment>
 	<projects>
-		<project>inet4.4</project>
+		<project>inet4.5</project>
 		<project>RLComponents</project>
 	</projects>
 	<buildSpec>

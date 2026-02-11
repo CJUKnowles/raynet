@@ -1,34 +1,41 @@
 #
-# OMNeT++/OMNEST Makefile for $(LIB_PREFIX)cartpole
+# OMNeT++/OMNEST Makefile for $(LIB_PREFIX)Orca
 #
 # This file was generated with the command:
-#  opp_makemake -o cartpole --make-so -f --deep --mode release -DORCA -I/home/james/raynet/simlibs/RLComponents/src -L/home/james/raynet/simlibs/RLComponents/src -lRLComponents
+#  opp_makemake -o Orca --make-so -f --deep --mode release -DORCA -I/home/james/raynet/simlibs/RLComponents/src -L/home/james/raynet/simlibs/RLComponents/src -lRLComponents -I/home/james/inet4.5/src -L/home/james/inet4.5/src -lINET
 #
 
 # Name of target to be created (-o option)
 TARGET_DIR = .
-TARGET_NAME = $(LIB_PREFIX)cartpole$(D)
+TARGET_NAME = $(LIB_PREFIX)Orca$(D)
 TARGET = $(TARGET_NAME)$(SHARED_LIB_SUFFIX)
 TARGET_IMPLIB = $(TARGET_NAME)$(IMPLIB_SUFFIX)
 TARGET_IMPDEF = $(TARGET_NAME)$(IMPDEF_SUFFIX)
 TARGET_FILES = $(TARGET_DIR)/$(TARGET)
 
 # C++ include paths (with -I)
-INCLUDE_PATH = -I/home/james/raynet/simlibs/RLComponents/src
+INCLUDE_PATH = -I../../RLComponents/src -I/home/james/inet4.5/src
 
 # Additional object and library files to link with
 EXTRA_OBJS =
 
 # Additional libraries (-L, -l options)
-LIBS = $(LDFLAG_LIBPATH)/home/james/raynet/simlibs/RLComponents/src  -lRLComponents
+LIBS = $(LDFLAG_LIBPATH)../../RLComponents/src $(LDFLAG_LIBPATH)/home/james/inet4.5/src  -lRLComponents -lINET
 
 # Output directory
-PROJECT_OUTPUT_DIR = ../out
-PROJECTRELATIVE_PATH = src
+PROJECT_OUTPUT_DIR = ../../../out
+PROJECTRELATIVE_PATH = simlibs/Orca/src
 O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
 
 # Object files for local .cc, .msg and .sm files
-OBJS = $O/CartpoleComponent.o
+OBJS = \
+    $O/JamesCC.o \
+    $O/JamesPlainCC.o \
+    $O/JamesTcp.o \
+    $O/JamesTcpConn.o \
+    $O/RLTcp.o \
+    $O/RLTcpNewReno.o \
+    $O/Txc.o
 
 # Message files
 MSGFILES =
@@ -60,7 +67,7 @@ include $(CONFIGFILE)
 # Simulation kernel and user interface libraries
 OMNETPP_LIBS = -loppenvir$D $(KERNEL_LIBS) $(SYS_LIBS)
 ifneq ($(PLATFORM),win32)
-LIBS += -Wl,-rpath,$(abspath /home/james/raynet/simlibs/RLComponents/src)
+LIBS += -Wl,-rpath,$(abspath ../../RLComponents/src) -Wl,-rpath,$(abspath /home/james/inet4.5/src)
 endif
 
 COPTS = $(CFLAGS) $(IMPORT_DEFINES) -DORCA $(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)

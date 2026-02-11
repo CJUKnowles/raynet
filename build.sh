@@ -139,7 +139,7 @@ if [ "$mode" = "release" ]; then
     
     echo "Building INET release..."
     echo "---------------------------------"
-    cd "$HOME/inet4.4" && make -j32 MODE=release
+    cd "$HOME/inet4.5" && make -j32 MODE=release
     echo "---------------------------------"
     echo ""
 
@@ -157,7 +157,7 @@ fi
 if [ "$mode" = "debug" ]; then
     echo "Building INET debug..."
     echo "---------------------------------"
-    cd "$HOME/inet4.4" && make -j32 MODE=debug
+    cd "$HOME/inet4.5" && make -j32 MODE=debug
     echo "---------------------------------"
     echo ""
 

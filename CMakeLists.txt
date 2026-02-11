@@ -27,7 +27,7 @@ foreach(lib ${SIMLIB_DIRS})
 endforeach()
 
 # Non-simlib libraries (no looping here, these are required to make the project work)
-set(INET_MODEL_PATH $ENV{HOME}/inet4.4/src)
+set(INET_MODEL_PATH $ENV{HOME}/inet4.5/src)
 
 # Declare Release and Debug libraries
 set(MY_LIB_LINK_LIBRARIES_RELEASE optimized oppsim optimized oppcommon optimized oppcmdenv optimized Cmdrlenv optimized oppnedxml optimized oppenvir optimized -Wl,--no-as-needed INET) # Simlibs are automated now! But for reference: optimized -Wl,--no-as-needed TcpPaced optimized -Wl,--no-as-needed RLComponents optimized -Wl,--no-as-needed cartpole optimized -Wl,--no-as-needed JamesLib
