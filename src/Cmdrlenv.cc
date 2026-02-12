@@ -90,7 +90,7 @@ void  Cmdrlenv::initialiseEnvironment(int argc, char *argv[],cConfiguration *con
                 // set up network
                 if (opt->verbose)
                     out << "Setting up network \"" << opt->networkName.c_str() << "\"..." << endl;
-
+                
                 setupNetwork(network);
                 networkSetupDone = true;
 

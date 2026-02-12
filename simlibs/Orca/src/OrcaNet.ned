@@ -1,9 +1,7 @@
 package Orca;
 
-import Orca.JamesNet;
-import Orca.JamesCC;
-import Orca.JamesTcp;
-import Orca.JamesTcpConn;
+import Orca.OrcaNet;
+import Orca.Orca;
 import Orca.RLTcp;
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import inet.networks.base.NetworkBase;
@@ -22,7 +20,7 @@ network OrcaNet
     parameters:
         // @statistic[packetDropped] (source = packetDropped; record = count);
         @display("bgb=800,395");
-        int numberOfFlows = default(1);
+        int numberOfFlows = default(5);
         
     types:
         channel standardLine extends DatarateChannel

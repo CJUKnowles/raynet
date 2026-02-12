@@ -48,7 +48,6 @@ void GymApi::initialise(std::string _iniPath){
     cSimulation::setActiveSimulation(simulationPtr);
     
     env->initialiseEnvironment(cstrings.size(), &cstrings[0],bootconfigptr);
-
 }
 
 

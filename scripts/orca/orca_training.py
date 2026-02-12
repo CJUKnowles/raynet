@@ -12,8 +12,8 @@ from ray.tune import Tuner
 from ray.air import CheckpointConfig
 import random
 import math
-from ray.rllib.algorithms.sac.sac import AlgorithmConfig
-from ray.rllib.algorithms.sac.sac import SACConfig
+from ray.rllib.algorithms.ppo.ppo import AlgorithmConfig
+from ray.rllib.algorithms.ppo.ppo import PPOConfig
 import os
 import time
 from random import randint
@@ -30,16 +30,37 @@ class OmnetGymApiEnv(gym.Env):
         """
         self.runner = OmnetGymApi()
         self.env_config = env_config
-
+        self.step_count = 0 # just for debugging
         # Define the action space (possible values for actions)
-        self.action_space = spaces.Box(low=-2.0, high=2.0, shape=(1,), dtype=np.float64) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
+        self.action_space = spaces.Box(low=-2.0, high=2.0, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
 
         # Define the observation space (expected values/types for each observation feature)
-        low_bounds = [0, 0, 0, -np.finfo(np.float64).max,]
-        high_bounds= [np.finfo(np.float64).max, 10, np.finfo(np.float64).max,  np.finfo(np.float64).max,]
-        low_bounds = np.array(low_bounds, dtype=np.float64)
-        high_bounds = np.array(high_bounds, dtype=np.float64)
-        self.observation_space = spaces.Box(low=low_bounds, high=high_bounds, dtype=np.float64) # A 4-dimensional array, each feature is a float value with its own bounds
+        low_bounds = [0,                            # Throughput
+                      0,                            # Lossrate
+                      0,                            # avg delay
+                      0,                            # number of acks
+                      0,                            # Interval duration
+                      0,                            # srtt
+                      0,                            # cwnd
+                      0,                            # max throughput
+                      0                             # min delay
+                      ]
+        high_bounds = [1,                           # Throughput    (should be normalized, range from 0 to max measured throughput so far)
+                      1,                            # Lossrate
+                      1, #?                        # avg delay          (TODO: Normalize based on base_rtt)
+                      np.finfo(np.float32).max,       # number of acks    (TODO: Normalize - unsure how atm)
+                      1, #?                        # Interval duration
+                      1, #?                        # srtt               (TODO: Normalize based on base_rtt)
+                      np.finfo(np.float32).max,      # cwnd              (TODO: Normalize based on MSS and BDP)
+                      np.finfo(np.float32).max,      # max throughput    (TODO: Normalize based on link capacity)
+                      1  #?                        # min delay          (TODO: Normalize based on base_rtt)
+                      ]
+        low_bounds = np.array(low_bounds, dtype=np.float32)
+        high_bounds = np.array(high_bounds, dtype=np.float32)
+        self.observation_space = spaces.Box(
+            low=low_bounds.astype(np.float32), 
+            high=high_bounds.astype(np.float32), 
+            dtype=np.float32) # A 4-dimensional array, each feature is a float value with its own bounds
        
     def reset(self, *, seed=None, options=None):
         #print("\tRESET BEING CALLED")
@@ -73,7 +94,7 @@ class OmnetGymApiEnv(gym.Env):
         # Start a new simulation runner on the modified ini file
         self.runner.initialise(original_ini_file + f".worker{os.getpid()}")
         obs = self.runner.reset()
-        obs = np.asarray(list(obs['JamesCC']),dtype=np.float64)
+        obs = np.asarray(list(obs['Orca']),dtype=np.float32)
         #TODO: return history of observations, not just this observation. Compile a self.obs_history and return that instead.
         return  obs, {}
 
@@ -84,14 +105,14 @@ class OmnetGymApiEnv(gym.Env):
         - Actions/observations exist in a dictionary to support multi-agent environments.
         - This experiment only support single-agent environments, so observations/rewards are immediately extracted from the dictionary
         """
-        # Forward the action (provided by RLlib) to OMNeT++ (and eventually our RLAgent JamesCC), and retrieve the RLAgent's reported result
+        # Forward the action (provided by RLlib) to OMNeT++ (and eventually our RLAgent Orca), and retrieve the RLAgent's reported result
         actions = actions.item() # TODO: Make sure this is right. Your types and shapes are a bit sketchy atm
-        action = {'JamesCC': actions}               
+        action = {'Orca': actions}               
         obs, rewards, terminateds, info_ = self.runner.step(action)
         # Extra the relevant obs/rewards from the environment info (only the info relevent to our single-agent)
-        obs = np.asarray(list(obs['JamesCC']), dtype=np.float64)    # also formats the RLAgent's obs so RLlib can understand it
+        obs = np.asarray(list(obs['Orca']), dtype=np.float32)    # also formats the RLAgent's obs so RLlib can understand it
         #TODO: Append this to self.obs_history and return that instead. 
-        reward = round(rewards['JamesCC'], 4)                                 # Get the reward our RLAgent is reporting
+        reward = round(rewards['Orca'], 4)                                 # Get the reward our RLAgent is reporting
         sim_truncated = False
   
         # Debug stuff
@@ -103,14 +124,18 @@ class OmnetGymApiEnv(gym.Env):
         if math.isnan(reward):
             print("Warning: NaN reward returned!")
         # Check if this training episode is complete
-        if terminateds['JamesCC']:      # TERMINATED - The RLAgent has reported itself as done (within the context of the MDP.) End the simulation.
+        if terminateds['Orca']:      # TERMINATED - The RLAgent has reported itself as done (within the context of the MDP.) End the simulation.
             self.runner.shutdown()
             self.runner.cleanup()
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
             sim_truncated = True
-        sim_truncated=False
+        
+        if self.step_count % 1000 == 0:
+            print(obs)
+        self.step_count += 1
+        
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
-        return  obs, reward, terminateds['JamesCC'], sim_truncated, {"test": "this is a test! Can the JamesCC see this info?"}
+        return  obs, reward, terminateds['Orca'], sim_truncated, {"test": "this is a test! Can the Orca see this info?"}
 
 
 # Generates the OmnetGymApiEnv for the calling ray worker
@@ -122,7 +147,7 @@ register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 if __name__ == '__main__':
     #raise Exception("This script expects arguments ENV, NUM_WORKERS, SEED. Please provide arguments or use a runner.py")
     env = "OmnetGymApiEnv"
-    num_workers = 10
+    num_workers = 16
     seed = 987141
     bottleneck_bandwidth_range = (6, 192)      # Orca: 6Mbps-192Mbps
     minimum_rtt_range = (4, 400)               # Orca: 4ms-400ms
@@ -141,7 +166,7 @@ if __name__ == '__main__':
     print("GPUs Available:", gpus)
     ray.init(num_cpus=64, num_gpus=len(gpus))
     config = (
-            SACConfig()
+            PPOConfig()
             .resources(num_gpus=1)
             .env_runners(num_env_runners=num_workers)
             .learners(num_gpus_per_learner=len(gpus))
@@ -151,7 +176,7 @@ if __name__ == '__main__':
             )
     
     exp:ExperimentAnalysis = ray.tune.run(
-        "SAC",
+        "PPO",
         name="orca_training",
         stop={"num_env_steps_sampled_lifetime": steps_to_train},
         config=config

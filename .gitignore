@@ -26,7 +26,7 @@ model/Makefile
 *.exe
 *.a
 *.o
-inet4.5
+inet4.4
 *.vec
 *.sca
 *.vci

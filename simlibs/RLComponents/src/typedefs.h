@@ -33,8 +33,14 @@ typedef float RewardType;
 typedef float ActionType;
 #endif
 
+// #ifdef ORCA
+// typedef std::array<double, 4> ObsType;
+// typedef float RewardType;
+// typedef float ActionType;
+// #endif
+
 #ifdef ORCA
-typedef std::array<double, 4> ObsType;
+typedef std::tuple<double, double, double, double, double, double, double, double, double> ObsType;
 typedef float RewardType;
 typedef float ActionType;
 #endif

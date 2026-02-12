@@ -1,5 +1,5 @@
 #ifdef ORCA
-#include "JamesCC.h"
+#include "Orca.h"
 #include "typedefs.h"
 
 
@@ -7,14 +7,14 @@ using namespace inet::tcp;
 using namespace inet;
 using namespace learning;
 
-Register_Class(JamesCC); // Lets omnet see and use this class
+Register_Class(Orca); // Lets omnet see and use this class
 
-JamesCC::JamesCC():
+Orca::Orca():
     TcpNewReno(), RLInterface() {
-    if (debug) cout << "\tJamesCC: Constructor called!";
+    if (debug) cout << "\tOrca: Constructor called!";
 }
-JamesCC::~JamesCC() {
-    if (debug) cout << "\tJamesCC: Destructor method called. Goodbye.";
+Orca::~Orca() {
+    if (debug) cout << "\tOrca: Destructor method called. Goodbye.";
     // if (RLStep) {
     //     delete cancelEvent(RLStep);
     // }
@@ -42,9 +42,9 @@ JamesCC::~JamesCC() {
 // CWND is reset to 1, and 
 
 // (Generally) cuts ssthresh in half, making the slower, linear increase begin sooner
-void JamesCC::recalculateSlowStartThreshold()
+void Orca::recalculateSlowStartThreshold()
 {
-    //if (debug) cout << "\tJamesCC recalculateSlowStartThreshold()" << endl;
+    //if (debug) cout << "\tOrca recalculateSlowStartThreshold()" << endl;
     uint32_t flight_size = std::min(state->snd_cwnd, state->snd_wnd); 
 //    uint32_t flight_size = state->snd_max - state->snd_una;
     state->ssthresh = std::max((uint32_t) (flight_size / 2.0), 2 * state->snd_mss);
@@ -52,7 +52,7 @@ void JamesCC::recalculateSlowStartThreshold()
 }
 
 // Timeout - Reset cwnd, reduce ssthresh, enter slow start
-void JamesCC::processRexmitTimer(TcpEventCode& event)
+void Orca::processRexmitTimer(TcpEventCode& event)
 {
     TcpTahoeRenoFamily::processRexmitTimer(event);
     if (event == TCP_E_ABORT)
@@ -76,8 +76,9 @@ void JamesCC::processRexmitTimer(TcpEventCode& event)
 }
 
 // ACK received - increase cwnd and ssthresh
-void JamesCC::receivedDataAck(uint32_t firstSeqAcked)
+void Orca::receivedDataAck(uint32_t firstSeqAcked)
 {
+    this->orcaACKTotal += 1.0;
     TcpTahoeRenoFamily::receivedDataAck(firstSeqAcked);
 
     // RFC 3782, page 5:
@@ -164,7 +165,8 @@ void JamesCC::receivedDataAck(uint32_t firstSeqAcked)
 
             // perform Slow Start. RFC 2581: "During slow start, a TCP increments cwnd
             // by at most SMSS bytes for each ACK received that acknowledges new data."
-            state->snd_cwnd += (uint32_t) (this->slowstartMultiplier * (double) state->snd_mss); // Raynet; multiply the slow start increase by the trained value slowstartMultiplier
+            state->snd_cwnd += state->snd_mss;
+            // state->snd_cwnd += (uint32_t) (this->slowstartMultiplier * (double) state->snd_mss); // Raynet; multiply the slow start increase by the trained value slowstartMultiplier
 
             // Note: we could increase cwnd based on the number of bytes being
             // acknowledged by each arriving ACK, rather than by the number of ACKs
@@ -219,7 +221,7 @@ void JamesCC::receivedDataAck(uint32_t firstSeqAcked)
 }
 
 // Duplicate ACK received - attempt a fast restransmit
-void JamesCC::receivedDuplicateAck()
+void Orca::receivedDuplicateAck()
 {
     TcpTahoeRenoFamily::receivedDuplicateAck();
 
@@ -310,10 +312,21 @@ void JamesCC::receivedDuplicateAck()
 
 }
 
+// bool Orca::sendData(bool sendCommandInvoked) {
+//     bool b;
+//     uint32_t oldSndMax, newSndMax;
+
+//     oldSndMax = state->snd_max;
+//     b = TcpBaseAlg::sendData(sendCommandInvoked);
+//     newSndMax = state->snd_max;
+//     this->bytesSentTotal = newSndMax - oldSndMax;
+//     EV_INFO << "Sent " << newSndMax - oldSndMax << " bytes" << std::endl;
+//     return b;
+// }
 
 // // RayNet: Called to initalize the agent
-void JamesCC::initialize() {
-    if (debug) cout << "\tJamesCC initialize()" << endl;
+void Orca::initialize() {
+    if (debug) cout << "\tOrca initialize()" << endl;
     int _stateSize = this->conn->getTcpMain()->par("stateSize");;
     int _maxObsCount = this->conn->getTcpMain()->par("maxObsCount");
     this->maxRLSteps = this->conn->getTcpMain()->par("maxRLSteps");
@@ -328,7 +341,7 @@ void JamesCC::initialize() {
     TcpNewReno::initialize();
 
     // Set the RL ID of this component (for use by the training script). Ensure this is unique for multi-agent environments (perhaps use the IP of the host?)
-    std::string s("JamesCC");
+    std::string s("Orca");
     setStringId(s);
     
     // Register this agent with RayNet
@@ -341,9 +354,9 @@ void JamesCC::initialize() {
 }
 
 // OMNeT method that catches timers set by scheduleAt() and similar. Necessary for self-scheduling events.
-// void JamesCC::processTimer(cMessage *timer, TcpEventCode &event) {
+// void Orca::processTimer(cMessage *timer, TcpEventCode &event) {
 //     if (timer == RLStep) {
-//         if (debug) cout << "\tJamesCC: Performing an RLStep!" << endl;
+//         if (debug) cout << "\tOrca: Performing an RLStep!" << endl;
 //         owner->emit(senderToStepper, this, new cString(stringId)); // Request the action! Maybe pass self?
 
 //         // Schedule another RL step and increment the RLStep counter
@@ -358,40 +371,23 @@ void JamesCC::initialize() {
 //     }
 // }
 
-// // Compute an observation and populate the input vector with that data
-// void JamesCC::getObservationVec(std::vector<double> &vec) {
-//     //placeholder: Just throw in some random values. We are modifiyng an object passed by reference - no need to return anything
-//     vec.push_back(1.0);
-//     vec.push_back(2.0);
-//     vec.push_back(3.0);
-//     vec.push_back(4.0);
-// }
-
 
 // OMNet Method? Called after component initialization is complete?
-void JamesCC::established(bool active) {
-    if (debug) cout << "\tJamesCC: established()" << endl;
+void Orca::established(bool active) {
+    if (debug) cout << "\tOrca: established()" << endl;
     TcpNewReno::established(active);
 
     if (active) {
-        std::string s("JamesCC");
+        std::string s("Orca");
         setStringId(s);
-        //setStringId(conn->getLocalAddress().str());
         this->isActive = active;
-        //conn->emit(cwndSignal, state->snd_cwnd);
-        //conn->emit(dupAcksSignal, dupAcks);
     }
 }
 
-// RayNet method: Called after simulation completion? Unsure how this differs from reset()
-void JamesCC::cleanup()
-{
-    if (debug) cout << "\tJamesCC: cleanUp()" << endl;
-}
-
 // RayNet method: Make a decision based on the policy (alter snd_cwnd)
-void JamesCC::decisionMade(ActionType action) {
-    if (debug) cout << "\tJamesCC: decisionMade()" << endl;
+void Orca::decisionMade(ActionType action) {
+    if (debug) cout << "\tOrca: decisionMade()" << endl;
+    //cout << "Action recieved!: " << action << endl;
     if (!isnan(action) && isActive) {
 
         if (debug) cout << "\t\tAction received: " << action << endl;
@@ -399,11 +395,18 @@ void JamesCC::decisionMade(ActionType action) {
         // conn->emit(actionSignal, action);
         // conn->emit(cwndSignal, state->snd_cwnd);
         if (isReset) {
-            if (debug) cout << "\t\tJamesCC currently resetting, will not take action" << endl;
+            if (debug) cout << "\t\tOrca currently resetting, will not take action" << endl;
         } else {
-            if (debug) cout << "\t\tJamesCC not resetting! Action being taken." << endl;
+            if (debug) cout << "\t\tOrca not resetting! Action being taken." << endl;
             // cout << "Old cwnd: " << state->snd_cwnd << endl;
             // state->snd_cwnd = static_cast<uint32_t>(max((double) state->snd_mss, ceil(action * (double) state->snd_mss)));
+
+            // Change the current cwnd based on the action. Do not let it drop below the maximum segment size.
+            //cout << "Performing action: " << action << endl;
+            //cout << "Old cwnd: " << state->snd_cwnd << endl;
+            state->snd_cwnd = max(state->snd_mss, static_cast<uint32_t>(std::pow(2.0, action) * (double) state->snd_cwnd));
+            //cout << "Action performed: " << action << endl << endl;
+            //cout << "New cwnd: " << state->snd_cwnd << endl;
             this->slowstartMultiplier = action;
             this->lastStepCwnd = state->snd_cwnd;
             // Maybe call recalculateSlowStart() here? or let it happen organically
@@ -434,8 +437,21 @@ void JamesCC::decisionMade(ActionType action) {
 }
 
 
-ObsType JamesCC::getRLState(){
-    if (debug) cout << "\tJamesCC: getRLState()" << endl;
+
+
+// Perform and observation and store the result into the provided vector (or append to it, if you're keeping history)
+ObsType Orca::computeObservation(){
+    if (debug) cout << "\tOrca: computeObservation()" << endl; 
+    // throughput
+    // loss rate
+    // delay
+    // acks
+    // intervalDuration
+    // srtt
+    // cwnd
+    // throughput_max
+    // delay_min
+
     // Current values
     double cwnd = (double) state->snd_cwnd;
     double delay = state->rttvar.dbl();
@@ -446,172 +462,82 @@ ObsType JamesCC::getRLState(){
     double cwndChange = cwnd - this->lastStepCwnd;
     // double delayChange = delay - this->lastStepDelay;
     // double ssthreshChange = ssthresh - this->lastStepSSThresh;
-    return {cwnd, delay, ssthresh, cwndChange};
-}
 
-RewardType JamesCC::getReward(){
-    if (debug) cout << "\tJamesCC: getReward()" << endl;
+     // Orca observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
+    
+
+    double bytesSentThisInterval = state->snd_max - this->lastIntervalSentBytes;
+    // The plan - remove the comments as you complete them
+    this->orcaIntervalDuration = (simTime() - this->lastIntervalTime).dbl();
+    this->orcaThroughput = bytesSentThisInterval / this->orcaIntervalDuration;
+    this->orcaLossRate=0.0;             // Track total sent and total lost. Perform final division here.
+    this->orcaDelay=0.0;                // Track rolling average over time (requires tracking both the avg itself, and num packet sent)
+    // this->orcaACKTotal=this->orcaACKTotal; // nothing needed here. This variable is updated over time.
+    this->orcaSRTT = state->srtt.dbl();
+    this->orcaCwnd = (double) state->snd_cwnd;
+    this->orcaMaxThroughput = std::max(this->orcaMaxThroughput, this->orcaThroughput);
+    this->orcaMinDelay = std::min(this->orcaMinDelay, this->orcaDelay);
+
+    // Should I update these in resetStepVariables? How much later is that called?
+    this->lastIntervalSentBytes = state->snd_max;
+    this->lastIntervalTime = simTime();
+    return {this->orcaThroughput / this->orcaMaxThroughput, // Normalized throughput, 0.0 to 1.0
+            this->orcaLossRate, 
+            this->orcaDelay,
+            this->orcaACKTotal, 
+            this->orcaIntervalDuration, 
+            this->orcaSRTT, 
+            this->orcaCwnd,
+            this->orcaMaxThroughput, 
+            this->orcaMinDelay
+        };
+}
+RewardType Orca::computeReward(){
+    if (debug) cout << "\tOrca: computeReward()" << endl;
     double sent = (double) state->snd_una;
     double sentThisStep = sent - this->lastStepSent;
     
     // RewardType reward = RewardType(sentThisStep);
     // this->lastStepSent = sent;
     // RewardType reward = RewardType(state->snd_cwnd/state->rttvar.dbl());
-    RewardType reward = RewardType(state->snd_cwnd);
+    double power = (this->orcaThroughput/1000000000) / state->srtt.dbl();
+    RewardType reward = RewardType(power);
     return reward;
 }
 
-bool JamesCC::getDone() {
-    cout << "\tJamesCC: getDone()" << endl;
-    cout << "\tJamesCC: getDone()" << endl;
-    cout << "\tJamesCC: getDone()" << endl;
-    cout << "\tJamesCC: getDone()" << endl;
-    cout << "\tJamesCC: getDone()" << endl;
-    cout << "\tJamesCC: getDone()" << endl;
-    cout << "\tJamesCC: getDone()" << endl;
-    cout << "Why on earth is this not getting called ever??";
+void Orca::resetStepVariables()
+{
+    if (debug) cout << "\tOrca: resetStepVariables()" << endl;
+    this->orcaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
+    this->orcaLossRate=0.0;      // The average loss rate of packets over the last interval
+    this->orcaDelay=0.0;         // The average delay of packets over the last interval
+    this->orcaACKTotal=0.0;      // The number of valid acknowledgements over the last interval
+    this->orcaIntervalDuration=0.0;  // The simtime elapsed over the last interval
+}
+
+// Returns true if the agent is reporting this episode as complete. (Pretty sure this is never called. Just set done to true directly during an RLStep.)
+bool Orca::getDone() {
+    cout << "Orca getDone(): If you're seeing this, getDone() probably isn't deprecated.";
     bool done = RLStepsTaken > 1000;
-    if (debug) cout << "\tJamesCC: " << RLStepsTaken << " steps completed. Returning " << done << endl;
+    if (debug) cout << "\tOrca: " << RLStepsTaken << " steps completed. Returning " << done << endl;
     return done;
 }
-void JamesCC::resetStepVariables()
+
+// RayNet method: Called after simulation completion? Unsure how this differs from reset()
+void Orca::cleanup()
 {
-    if (debug) cout << "\tJamesCC: resetStepVariables()" << endl;
+    if (debug) cout << "\tOrca: cleanUp()" << endl;
 }
 
-// Perform and observation and store the result into the provided vector (or append to it, if you're keeping history)
-ObsType JamesCC::computeObservation(){
-    if (debug) cout << "\tJamesCC: computeObservation()" << endl; 
-    return getRLState();
+ObsType Orca::getRLState(){
+    if (debug) cout << "\tOrca: getRLState()" << endl;
+    // Deprecated, remove this later
 }
-RewardType JamesCC::computeReward(){
-    if (debug) cout << "\tJamesCC: computeReward()" << endl;
-    return getReward();
+
+RewardType Orca::getReward(){
+    if (debug) cout << "\tOrca: getReward()" << endl;
+    // Deprecated, remove this later
 }
+
 
 #endif
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// // // RayNet: Called to initalize the agent
-// void JamesCC::initialize() {
-//     if (debug) cout << "\tJamesCC initialize()" << endl;
-//     int _stateSize = this->conn->getTcpMain()->par("stateSize");;
-//     int _maxObsCount = this->conn->getTcpMain()->par("maxObsCount");
-
-//     // Monitor intervals - allows our class to be monitored alongside other simulation components
-//     miHandler = MonitorIntervalsHandler();
-//     miHandler.currentMi = nullptr;
-//     monitorInterval = new cMessage("MONITORINTERVAL");
-    
-//     // provide the RLInterface with a cComponent API (to use signaling functionality)
-//     setOwner((cComponent*) conn->getTcpMain());
-
-//     RLInterface::initialize(_stateSize, _maxObsCount);
-//     TcpNewReno::initialize();
-
-//     // dupAcks = 0;
-//     // lastMIReward = -1;
-//     // lastMIavgRTT = -1;
-//     lastMiAction = 0;
-
-//     throughputSignal = conn->registerSignal("throughput");
-//     actionSignal = conn->registerSignal("action");
-//     dupAcksSignal = conn->registerSignal("dupAcks");
-//     rttGradientSignal = conn->registerSignal("rttGradient");
-//     tickSignal = conn->registerSignal("tick");
-//     miQueueSizeSignal = conn->registerSignal("MIQueueSize");
-
-//     std::string s("JamesCC");
-//     setStringId(s);
-
-//     initMsg = new cMessage("CARTPOLE-INIT"); 
-//     scheduleAt(simTime() + 1, initMsg);
-// }
-
-// void JamesCC::established(bool active) {
-//     if (debug) cout << "\tJamesCC established()" << endl;
-//     TcpNewReno::established(active);
-
-//     if (active) {
-//         std::string s("JamesCC");
-//         setStringId(s);
-//         //setStringId(conn->getLocalAddress().str());
-//         this->isActive = active;
-//         conn->emit(cwndSignal, state->snd_cwnd);
-//         conn->emit(dupAcksSignal, dupAcks);
-//     }
-// }
-
-// // void JamesCC::step(ActionType action)
-// // {
-// // }
-
-// void JamesCC::cleanup()
-// {
-//     if (debug) cout << "\tJamesCC cleanUp()" << endl;
-// }
-
-// // Make a decision based on the policy (alter snd_cwnd)
-// void JamesCC::decisionMade(ActionType action) {
-//     if (debug) cout << "\tJamesCC decisionMade()" << endl;
-//     if (!isnan(action)) {
-//         //state->snd_cwnd = static_cast<uint32_t>(max((double) state->snd_mss, ceil(action * maxLearnWindow * (double) state->snd_mss)));
-//         conn->emit(actionSignal, action);
-//         conn->emit(cwndSignal, state->snd_cwnd);
-//     }
-//     else {
-//         EV_ERROR << action << " value in decisionMade() function" << std::endl;
-//     }
-// }
-
-// ObsType JamesCC::getRLState(){
-//     if (debug) cout << "\tJamesCC getRLState()" << endl;
-//     return {0.0, 0.0, 0.0, 0.0};
-//     //return state;
-// }
-
-// RewardType JamesCC::getReward(){
-//     if (debug) cout << "\tJamesCC getReward()" << endl;
-//     RewardType reward;
-//     reward = 1.0;
-//     return reward;
-// }
-// bool JamesCC::getDone(){
-//     if (debug) cout << "\tJamesCC getDone()" << endl;
-//     bool done = false;
-
-//     if (false) // some condition to check if the simulation is done
-//     {
-//         done = true;
-//     }
-
-//     return done;
-
-// }
-// void JamesCC::resetStepVariables()
-// {
-//     if (debug) cout << "\tJamesCC resetStepVariables()" << endl;
-// }
-
-// ObsType JamesCC::computeObservation(){
-//     if (debug) cout << "\tJamesCC computeObservation()" << endl; 
-//     return getRLState();
-
-// }
-// RewardType JamesCC::computeReward(){
-//     if (debug) cout << "\tJamesCC computeReward()" << endl;
-//     return getReward();
-// }

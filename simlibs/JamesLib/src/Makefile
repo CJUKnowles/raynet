@@ -2,7 +2,7 @@
 # OMNeT++/OMNEST Makefile for $(LIB_PREFIX)JamesLib
 #
 # This file was generated with the command:
-#  opp_makemake -o JamesLib --make-so -f --deep --mode release -DORCA -I/home/james/raynet/simlibs/RLComponents/src -L/home/james/raynet/simlibs/RLComponents/src -lRLComponents -I/home/james/inet4.5/src -L/home/james/inet4.5/src -lINET
+#  opp_makemake -o JamesLib --make-so -f --deep --mode release -DORCA -I/home/james/raynet/simlibs/RLComponents/src -L/home/james/raynet/simlibs/RLComponents/src -lRLComponents -I/home/james/inet4.4/src -L/home/james/inet4.4/src -lINET
 #
 
 # Name of target to be created (-o option)
@@ -14,13 +14,13 @@ TARGET_IMPDEF = $(TARGET_NAME)$(IMPDEF_SUFFIX)
 TARGET_FILES = $(TARGET_DIR)/$(TARGET)
 
 # C++ include paths (with -I)
-INCLUDE_PATH = -I/home/james/raynet/simlibs/RLComponents/src -I/home/james/inet4.5/src
+INCLUDE_PATH = -I/home/james/raynet/simlibs/RLComponents/src -I/home/james/inet4.4/src
 
 # Additional object and library files to link with
 EXTRA_OBJS =
 
 # Additional libraries (-L, -l options)
-LIBS = $(LDFLAG_LIBPATH)/home/james/raynet/simlibs/RLComponents/src $(LDFLAG_LIBPATH)/home/james/inet4.5/src  -lRLComponents -lINET
+LIBS = $(LDFLAG_LIBPATH)/home/james/raynet/simlibs/RLComponents/src $(LDFLAG_LIBPATH)/home/james/inet4.4/src  -lRLComponents -lINET
 
 # Output directory
 PROJECT_OUTPUT_DIR = ../out
@@ -67,7 +67,7 @@ include $(CONFIGFILE)
 # Simulation kernel and user interface libraries
 OMNETPP_LIBS = -loppenvir$D $(KERNEL_LIBS) $(SYS_LIBS)
 ifneq ($(PLATFORM),win32)
-LIBS += -Wl,-rpath,$(abspath /home/james/raynet/simlibs/RLComponents/src) -Wl,-rpath,$(abspath /home/james/inet4.5/src)
+LIBS += -Wl,-rpath,$(abspath /home/james/raynet/simlibs/RLComponents/src) -Wl,-rpath,$(abspath /home/james/inet4.4/src)
 endif
 
 COPTS = $(CFLAGS) $(IMPORT_DEFINES) -DORCA $(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)
