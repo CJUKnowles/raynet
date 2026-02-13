@@ -8,6 +8,7 @@ simlibs/TcpPaced/src/Makefile
 simlibs/RLCC/src/RLCC_dbg
 simlibs/RLCC/src/RLCC
 simlibs/RLCC/src/Makefile
+simlibs/*/src/Makefile
 
 */src/out/*
 **/compile_commands.json

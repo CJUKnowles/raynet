@@ -31,8 +31,15 @@ class OmnetGymApiEnv(gym.Env):
         self.runner = OmnetGymApi()
         self.env_config = env_config
         self.step_count = 0 # just for debugging
+
+        # Initialize env parameters to some reasonable defaults (these will be quickly overwritten in reset())
+        self.bw = self.env_config["bottleneck_bw_range"][0]
+        self.base_rtt = self.env_config["minimum_rtt_range"][1]
+        self.buffer_size = self.env_config["bottleneck_buffer_range"][0]
+
         # Define the action space (possible values for actions)
         self.action_space = spaces.Box(low=-2.0, high=2.0, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
+
 
         # Define the observation space (expected values/types for each observation feature)
         low_bounds = [0,                            # Throughput
@@ -55,6 +62,7 @@ class OmnetGymApiEnv(gym.Env):
                       np.finfo(np.float32).max,      # max throughput    (TODO: Normalize based on link capacity)
                       1  #?                        # min delay          (TODO: Normalize based on base_rtt)
                       ]
+                      
         low_bounds = np.array(low_bounds, dtype=np.float32)
         high_bounds = np.array(high_bounds, dtype=np.float32)
         self.observation_space = spaces.Box(
@@ -70,23 +78,19 @@ class OmnetGymApiEnv(gym.Env):
         base_rtt_range = self.env_config["minimum_rtt_range"]
         bottleneck_buffer_range = self.env_config["bottleneck_buffer_range"]
         
-        # Randomly generate environment parameters according to their range (Orca)
-        bw = f'{ round(np.random.uniform(low=bottleneck_bw_range[0], high=bottleneck_bw_range[1])) }Mbps'
-        rtt = f'{ round(np.random.uniform(low=base_rtt_range[0], high=base_rtt_range[1]),2) }ms'
-        buffer = f'{ round(np.random.uniform(low=bottleneck_buffer_range[0], high=bottleneck_buffer_range[1])) }b'
-        
-        print(f"bw: {bw}")
-        print(f"rtt: {rtt}")
-        print(f"buffer: {buffer}")
+        # Randomize environment parameters. Save them for obs normalization later.
+        self.bw = round(np.random.uniform(low=bottleneck_bw_range[0], high=bottleneck_bw_range[1]))
+        self.base_rtt = round(np.random.uniform(low=base_rtt_range[0], high=base_rtt_range[1]),2)
+        self.buffer_size = round(np.random.uniform(low=bottleneck_buffer_range[0], high=bottleneck_buffer_range[1]))
         
         # Modify the base config .ini with a proper home directory and the random environment parameters
         original_ini_file = self.env_config["iniPath"]
         with open(original_ini_file, 'r') as fin:
             ini_string = fin.read()
         ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
-        ini_string = ini_string.replace("ORCA_BOTTLENECK_BW", bw)
-        ini_string = ini_string.replace("ORCA_BASE_RTT", rtt)
-        ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", buffer)
+        ini_string = ini_string.replace("ORCA_BOTTLENECK_BW", f"{self.bw}Mbps")
+        ini_string = ini_string.replace("ORCA_BASE_RTT", f"{self.base_rtt}ms")
+        ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")
         # TODO: Include these strings in the .ini somewhere that actually makes them alter the experiment
         with open(original_ini_file + f".worker{os.getpid()}", 'w') as fout:
             fout.write(ini_string)
