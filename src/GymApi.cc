@@ -53,26 +53,6 @@ void GymApi::initialise(std::string _iniPath){
     simulationPtr = new cSimulation("simulation", env);
     cSimulation::setActiveSimulation(simulationPtr);
 
-    std::string varNames;
-    for (const char* s : bootconfigptr->getIterationVariableNames()) {
-        varNames += s;
-        varNames += " ";
-    }
-
-    std::string predefVarNames;
-    for (const char* s : bootconfigptr->getPredefinedVariableNames()) {
-        predefVarNames += s;
-        predefVarNames += " ";
-    }
-    cout << "VarNames:" << endl;
-    cout << varNames << endl;
-
-    cout << "predefVarNames:" << endl;
-    cout << predefVarNames << endl;
-
-    cout << "fileName:" << endl;
-    cout << bootconfigptr->getFileName() << endl;
-    cout << "GymAPI is done, about to initialize environment: " << endl;
     env->initialiseEnvironment(cstrings.size(), &cstrings[0],bootconfigptr);
 }
 

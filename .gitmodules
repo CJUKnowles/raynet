@@ -1,3 +1,4 @@
+# Required
 [submodule "cmake"]
 	path = cmake
 	url = https://github.com/omnetpp/cmake.git

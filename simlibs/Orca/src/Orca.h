@@ -17,13 +17,14 @@
 #include "inet/transportlayer/tcp/flavours/TcpNewReno.h"
 #include <inet/transportlayer/tcp/Tcp.h>
 #include <inet/transportlayer/tcp/TcpConnection.h>
+#include <transportlayer/tcp/flavours/TcpCubic.h>
 
 using namespace omnetpp;
 using namespace inet::tcp;
 using namespace inet;
 using namespace learning;
 
-class Orca : public TcpNewReno, public RLInterface
+class Orca : public TcpCubic, public RLInterface
 {
 protected:
     // am I running on active open (client) or passive open connection (server)
@@ -45,14 +46,11 @@ public: // General use
     Orca();
     virtual ~Orca();
 
-    // TcpNewReno Overrides (Congestion control functions we want to alter the behaviour of, or grab statistics with)
+    // TcpCubic Overrides (Congestion control functions we want to alter the behaviour of, or grab statistics with)
     virtual void receivedDataAck(uint32_t firstSeqAcked) override;
     virtual void receivedDuplicateAck() override;
-    virtual void recalculateSlowStartThreshold() override;
-    virtual void processRexmitTimer(TcpEventCode &event) override;
-    virtual void established(bool active) override;
+    virtual void established(bool active) override; // Called when the TCP CONNECTION is established (some time AFTER startup!)
     virtual void rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) override;  // Overridden so we can track 
-    // virtual void processTimer(cMessage *timer, TcpEventCode &event) override; // Used to intercept self-scheduled events, like the RL step
 
     // RLInterface Overrides (virtual functions that must be overridden)
     virtual void initialize() override; // This also overrides the TcpNewReno initialize(). Be sure to super() both of them.
@@ -70,6 +68,9 @@ public: // General use
     int RLStepsTaken = 0; // How many RLSteps have been completed so far.
     int maxRLSteps = 10000; // How many training steps should be taken before this agent reports itself as done.
     bool debug = false; // Prints debug messages if true
+
+    // Orca parameters
+    double delayWeight = 1; // Beta term from Orca paper. Delay only degrades reward if RTT > baseRTT*delayWeight. Larger values emphasize throughput in reward calculation.
 
     // Orca observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
     double orcaThroughput=0.0;    // The average delivery rate (throughput) over the last interval

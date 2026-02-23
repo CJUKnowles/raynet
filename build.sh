@@ -76,10 +76,15 @@ then
 	fi
 export RAYNET_FEATURE=$feature
 
-# --------------------------------------------------------------------------------------------
 
+
+# Command/flags have been validated. Begin building here.
+# ----------------------------------------------------------------------------------------------------------------------------------
+
+# List of simlibs. Any simlib that needs to be compiled FIRST (eg. is a dependency) should be added here, rather than the loop.
 simlibs=("$RAYNET_HOME/simlibs/RLComponents"
-         "$RAYNET_HOME/simlibs/TcpPaced")
+         "$RAYNET_HOME/simlibs/tcpPaced"
+         "$RAYNET_HOME/simlibs/cubic")
 
 # list directories in the form "/tmp/dirname/"
 for dir in $RAYNET_HOME/simlibs/*/     
@@ -93,31 +98,20 @@ do
             exists=1
         fi
     done
-    if [ ${exists} = 0 ] 
+    if [ ${exists} = 0 ] # Only append the simlib to the list if it was not previously included
     then
-        echo "${dir##*/}"    # print everything after the final "/"
-        simlibs=("${simlibs[@]}" ${dir})
+        simlibs=("${simlibs[@]}" ${dir})    # Append the simulation library to the simlibs list
     fi
 done
 
-echo "simlibs"
+# Debug print:
+echo "Simulation libraries detected:"
 echo ${simlibs[@]}
-# TODO: Loop through all simlibs and append their paths to this list automatically
-# projects=(
-#         "$RAYNET_HOME/simlibs/RLComponents"
-#         "$RAYNET_HOME/simlibs/TcpPaced"
-#         "$RAYNET_HOME/simlibs/cartpole"
-#         "$RAYNET_HOME/simlibs/JamesLib"
-#     )
-# echo "projects"
-# echo ${projects[@]}
-
 for simlib in "${simlibs[@]}"; do
     echo ${simlib}
 done
 
-
-# (Optional) Clean simulation libraries
+# -c flag: Clean simulation libraries
 if [ "$clean" = "true" ]; then
     echo "Cleaning simulation libararies..."
     echo ""
@@ -134,50 +128,35 @@ if [ "$clean" = "true" ]; then
     echo ""
 fi
 
-# Build simulation libraries
-if [ "$mode" = "release" ]; then
-    
-    echo "Building INET release..."
-    echo "---------------------------------"
-    cd "$HOME/inet4.5" && make -j32 MODE=release
-    echo "---------------------------------"
-    echo ""
+# Build INET (release or debug)
+echo "Building INET $mode..."
+echo "---------------------------------"
+cd "$HOME/inet4.5" && make -j32 MODE=$mode
+echo "---------------------------------"
+echo ""
 
-    for proj in "${simlibs[@]}"; do
-        echo "Building release libraries in $proj..."
-        echo "---------------------------------"
-        cd "$proj" || exit 1
-        ${make_prefix}make makefilesrelease     # Generate makefile in the simlib src directory using opp_makemake
-        ${make_prefix}make -j32 MODE=release    # Bulid simlib with the generated makefile
-        echo "---------------------------------"
-        echo ""
-    done
-fi
-
-if [ "$mode" = "debug" ]; then
-    echo "Building INET debug..."
+# Build simulation libraries (release or debug)
+for proj in "${simlibs[@]}"; do
+    echo "Building $mode libraries in $proj..."
     echo "---------------------------------"
-    cd "$HOME/inet4.5" && make -j32 MODE=debug
+    cd "$proj" || exit 1
+    # ${make_prefix}make makefiles$mode       # Generate makefile in the simlib src directory using opp_makemake
+    ${make_prefix}make makefiles MODE=$mode   # Just in case the simlib only has a make makefiles option, and no make makefilesrelease or make makefilesdebug (cubic does this)
+    ${make_prefix}make -j32 MODE=$mode      # Build simlib with the generated makefile
     echo "---------------------------------"
     echo ""
+done
 
-    for proj in "${simlibs[@]}"; do
-        echo ""
-        echo "Building debug libraries in $proj..."
-        cd "$proj" || exit 1
-        ${make_prefix}make makefilesdebug
-        ${make_prefix}make -j32 MODE=debug
-    done
+# -r flag: Remove any existing build directory before building
+if [ "$rebuild" = "true" ]; then  
+    cd $RAYNET_HOME
+    rm -r build 
 fi
 
-# Build raynet
+# Build raynet (release or debug)
 cd $RAYNET_HOME
-if [ "$rebuild" = "true" ]; then
-    rm -r build
-fi
 mkdir build 
 cd build
-
 echo "Building RayNet..."
 echo "---------------------------------"
 cmake -DCMAKE_BUILD_TYPE=$mode -DCLEAN_ALL=$clean ../ && \

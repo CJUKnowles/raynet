@@ -82,6 +82,10 @@ class OmnetGymApiEnv(gym.Env):
         self.bw = round(np.random.uniform(low=bottleneck_bw_range[0], high=bottleneck_bw_range[1]))
         self.base_rtt = round(np.random.uniform(low=base_rtt_range[0], high=base_rtt_range[1]),2)
         self.buffer_size = round(np.random.uniform(low=bottleneck_buffer_range[0], high=bottleneck_buffer_range[1]))
+
+        print("ORCA_BOTTLENECK_BW: ", f"{self.bw}Mbps")
+        print("ORCA_BASE_RTT: ", f"{self.base_rtt}ms")
+        print("ORCA_BOTTLENECK_BUFFER_SIZE: ", f"{self.buffer_size}b")
         
         # Modify the base config .ini with a proper home directory and the random environment parameters
         original_ini_file = self.env_config["iniPath"]
@@ -134,19 +138,19 @@ class OmnetGymApiEnv(gym.Env):
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
             sim_truncated = True
         
-        printFreq = 1
+        printFreq = 10
         if self.step_count % printFreq == 0:
-            print(f"\n{printFreq} step(s) completed:")
+            print(f"\n{printFreq} step(s) completed (Agent total: {self.step_count}):")
             print("\tObservations:")
-            print(f"\t\tThroughput: {obs[0]:.2f}              \t\t(Normalized, per interval)")
+            print(f"\t\tThroughput: {obs[0]:.2f}x             \t\t(Normalized, per interval)")
             print(f"\t\tLoss Rate: {obs[1]:.2f}               \t\t(PLACEHOLDER)")
-            print(f"\t\tAverage Delay: {obs[2]:.2f}           \t\t(Normalized, per interval)")
-            print(f"\t\tACK Count: {obs[3]:.2f}               \t\t(Normalized, per interval)")
-            print(f"\t\tInterval Duration: {obs[4]:.2f}       \t\t(Raw, per interval)")
-            print(f"\t\tSRTT: {obs[5]:.2f}                    \t\t(Normalized, current)")
-            print(f"\t\tcwnd: {obs[6]:.2f}                    \t\t(Normalized, current)")
-            print(f"\t\tMax Throughput: {obs[7]:.2f} bytes    \t(Raw, overall)")
-            print(f"\t\tMin Delay: {obs[8]:.2f} simsecs       \t\t(Raw, overall)")
+            print(f"\t\tAverage Delay: {obs[2]:.2f}x          \t\t(Normalized, per interval)")
+            print(f"\t\tACK Count: {obs[3]:.2f}x              \t\t(Normalized, per interval)")
+            print(f"\t\tInterval Duration: {obs[4]:.2f}s      \t\t(Raw, per interval)")
+            print(f"\t\tSRTT: {obs[5]:.2f}x                   \t\t(Normalized, current)")
+            print(f"\t\tcwnd: {obs[6]:.2f}x                   \t\t(Normalized, current)")
+            print(f"\t\tMax Throughput: {obs[7]:.2f}b         \t\t(Raw, overall)")
+            print(f"\t\tMin Delay: {obs[8]:.2f}s              \t\t(Raw, overall)")
             
             print(f"\tRewards:")
             print(f"\t\tREWARD: {reward:.5f}                  \t(Raw, per interval)")
@@ -181,7 +185,7 @@ if __name__ == '__main__':
 
     gpus = GPUtil.getGPUs()
     print("GPUs Available:", gpus)
-    ray.init(num_cpus=1, num_gpus=len(gpus))
+    ray.init(num_cpus=16, num_gpus=len(gpus))
     config = (
             SACConfig()
             .resources(num_gpus=len(gpus))

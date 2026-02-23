@@ -1,3 +1,10 @@
+MODE ?= release
+ifeq ($(MODE),debug)
+    LIB_SUFFIX = _dbg # Append _dbg to certain libraries if building in debug mode.
+else
+    LIB_SUFFIX = 
+endif
+
 all: checkmakefiles
 	cd src && $(MAKE)
 
@@ -9,11 +16,10 @@ cleanall: checkmakefiles
 	cd src && $(MAKE) MODE=debug clean
 	rm -f src/Makefile
 
-makefilesrelease:
-	cd src && opp_makemake -o RLComponents --make-so -f --deep --mode release -D${RAYNET_FEATURE} -I${HOME}/inet4.5/src -L${HOME}/inet4.5/src -lINET
+makefiles:
+	cd src && opp_makemake -o RLComponents --make-so -f --deep --mode ${MODE} -D${RAYNET_FEATURE} -I${HOME}/inet4.5/src -L${HOME}/inet4.5/src -lINET${LIB_SUFFIX}
 
-makefilesdebug:
-	cd src && opp_makemake -o RLComponents --make-so -f --deep --mode debug -D${RAYNET_FEATURE} -I${HOME}/inet4.5/src -L${HOME}/inet4.5/src -lINET_dbg
+
 checkmakefiles:
 	@if [ ! -f src/Makefile ]; then \
 	echo; \

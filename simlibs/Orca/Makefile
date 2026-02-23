@@ -1,3 +1,10 @@
+MODE ?= release
+ifeq ($(MODE),debug)
+    LIB_SUFFIX = _dbg # Append _dbg to certain libraries if building in debug mode.
+else
+    LIB_SUFFIX = 
+endif
+
 all: checkmakefiles
 	cd src && $(MAKE)
 
@@ -9,11 +16,8 @@ cleanall: checkmakefiles
 	cd src && $(MAKE) MODE=debug clean
 	rm -f src/Makefile
 
-makefilesrelease:
-	cd src && opp_makemake -o Orca --make-so -f --deep --mode release -D${RAYNET_FEATURE} -I${RAYNET_HOME}/simlibs/RLComponents/src -L${RAYNET_HOME}/simlibs/RLComponents/src -lRLComponents -I${HOME}/inet4.5/src -L${HOME}/inet4.5/src -lINET 
-
-makefilesdebug:
-	cd src && opp_makemake -o Orca --make-so -f --deep --mode debug -D${RAYNET_FEATURE}  -I${RAYNET_HOME}/simlibs/RLComponents/src -L${RAYNET_HOME}/simlibs/RLComponents/src  -lRLComponents_dbg -I${HOME}/inet4.5/src -L${HOME}/inet4.5/src -lINET_dbg
+makefiles:
+	cd src && opp_makemake -o Orca --make-so -f --deep --mode ${MODE} -D${RAYNET_FEATURE} -I${RAYNET_HOME}/simlibs/RLComponents/src -L${RAYNET_HOME}/simlibs/RLComponents/src -lRLComponents${LIB_SUFFIX} -I${HOME}/inet4.5/src -L${HOME}/inet4.5/src -lINET${LIB_SUFFIX} -I${HOME}/raynet/simlibs/tcpPaced/src -L${HOME}/raynet/simlibs/tcpPaced/src -ltcpPaced${LIB_SUFFIX}  -I${HOME}/raynet/simlibs/cubic/src -L${HOME}/raynet/simlibs/cubic/src -lcubic${LIB_SUFFIX}  
 
 checkmakefiles:
 	@if [ ! -f src/Makefile ]; then \

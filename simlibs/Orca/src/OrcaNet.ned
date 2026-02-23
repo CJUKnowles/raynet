@@ -2,17 +2,13 @@ package Orca;
 
 
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
-import inet.networks.base.NetworkBase;
 import inet.node.inet.StandardHost;
 import inet.node.inet.Router;
-import inet.node.ethernet.Eth10M;
-import ned.IdealChannel;
 import ned.DatarateChannel;
-import ned.IBidirectionalChannel;
 import Orca.OrcaNet;
 import Orca.Orca;
-import Orca.RLTcp;
-
+import Orca.OrcaTcp;
+        
 import RLComponents.Broker;
 import RLComponents.Stepper;
 
@@ -27,7 +23,7 @@ network OrcaNet
         channel standardLine extends DatarateChannel
         {
             delay = 4.75ms;
-            datarate = 10Gbps;
+            datarate = 10Mbps;
         }
 
         channel bottleneckLine extends DatarateChannel
@@ -36,6 +32,7 @@ network OrcaNet
             datarate = 10Mbps;
         }
     submodules:
+    
         configurator: Ipv4NetworkConfigurator {
             @display("p=0,0;is=s");
         }

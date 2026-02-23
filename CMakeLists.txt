@@ -29,7 +29,7 @@ endforeach()
 # Non-simlib libraries (no looping here, these are required to make the project work)
 set(INET_MODEL_PATH $ENV{HOME}/inet4.5/src)
 
-# Declare Release and Debug libraries
+# Declare Release libraries
 set(MY_LIB_LINK_LIBRARIES_RELEASE optimized oppsim optimized oppcommon optimized oppcmdenv optimized Cmdrlenv optimized oppnedxml optimized oppenvir optimized -Wl,--no-as-needed INET) # Simlibs are automated now! But for reference: optimized -Wl,--no-as-needed TcpPaced optimized -Wl,--no-as-needed RLComponents optimized -Wl,--no-as-needed cartpole optimized -Wl,--no-as-needed JamesLib
 message(MY_LIB_LINK_LIBRARIES_RELEASE IS ${MY_LIB_LINK_LIBRARIES_RELEASE})
 foreach(lib_name ${LIB_NAMES})
@@ -39,8 +39,15 @@ foreach(lib_name ${LIB_NAMES})
 endforeach()
 message(MY_LIB_LINK_LIBRARIES_RELEASE IS ${MY_LIB_LINK_LIBRARIES_RELEASE})
 
-# TODO: Repeat release link libarary looping logic for debug libaries
-set(MY_LIB_LINK_LIBRARIES_DEBUG debug oppsim_dbg debug oppcommon_dbg debug oppcmdenv_dbg debug Cmdrlenv debug oppnedxml_dbg debug oppenvir_dbg debug -Wl,--no-as-needed INET_dbg debug -Wl,--no-as-needed TcpPaced_dbg debug -Wl,--no-as-needed TcpPaced_dbg debug -Wl,--no-as-needed RLComponents_dbg debug -Wl,--no-as-needed cartpole_dbg debug -Wl,--no-as-needed JamesLib_dbg)
+# Declare debug libraries
+set(MY_LIB_LINK_LIBRARIES_DEBUG debug oppsim_dbg debug oppcommon_dbg debug oppcmdenv_dbg debug Cmdrlenv_dbg debug oppnedxml_dbg debug oppenvir_dbg debug -Wl,--no-as-needed INET_dbg) # Simlibs are automated now! But for reference: optimized -Wl,--no-as-needed TcpPaced optimized -Wl,--no-as-needed RLComponents optimized -Wl,--no-as-needed cartpole optimized -Wl,--no-as-needed JamesLib
+message(MY_LIB_LINK_LIBRARIES_DEBUG IS ${MY_LIB_LINK_LIBRARIES_DEBUG})
+foreach(lib_name ${LIB_NAMES})
+    list(APPEND MY_LIB_LINK_LIBRARIES_DEBUG "debug")
+    list(APPEND MY_LIB_LINK_LIBRARIES_DEBUG "-Wl,--no-as-needed")
+    list(APPEND MY_LIB_LINK_LIBRARIES_DEBUG "${lib_name}_dbg")
+endforeach()
+message(MY_LIB_LINK_LIBRARIES_DEBUG IS ${MY_LIB_LINK_LIBRARIES_DEBUG})
 
 # Link omnet
 find_package(OmnetPP 6.0.1 REQUIRED)
