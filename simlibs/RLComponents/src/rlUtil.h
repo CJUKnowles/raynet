@@ -116,7 +116,7 @@ struct Query : public cObject, noncopyable
 };
 
 /*
- * cObject carried by the actionResponse signal. It carries the action output by the policy for the input query with ID queryId
+ * cObject carried by the performAction signal. It carries the action output by the policy for the input query with ID queryId
  */
 struct Response : public cObject, noncopyable
 {

@@ -63,12 +63,12 @@ void RLInterface::setStringId(std::string _id)
 void RLInterface::initialize(int stateSize, int maxObsSize)
 {
     std::cerr << "Registering Interface" << std::endl;
-    senderToStepper = owner -> registerSignal("senderToStepper"); 
+    obsResponse = owner -> registerSignal("obsResponse"); 
     registerSig = owner->registerSignal("registerAgent");
     unregisterSig  = owner->registerSignal("unregisterAgent");
     modifyStepSizeSig = owner->registerSignal("modifyStepSize");
     
-    getSimulation()->getSystemModule()->subscribe("actionResponse", (cListener*) this);
+    getSimulation()->getSystemModule()->subscribe("performAction", (cListener*) this);
 
     done = false;
     isReset = false;
@@ -79,13 +79,13 @@ void RLInterface::initialize(int stateSize, int maxObsSize)
 
 void RLInterface::initialise()
 {
-    senderToStepper = owner->registerSignal("senderToStepper"); 
+    obsResponse = owner->registerSignal("obsResponse"); 
     registerSig = owner->registerSignal("registerAgent");
     unregisterSig  = owner->registerSignal("unregisterAgent");
     modifyStepSizeSig = owner->registerSignal("modifyStepSize");
 
-    getSimulation()->getSystemModule()->subscribe("actionResponse", (cListener*) this);
-    getSimulation()->getSystemModule()->subscribe("pullObservations", (cListener*) this);
+    getSimulation()->getSystemModule()->subscribe("performAction", (cListener*) this);
+    getSimulation()->getSystemModule()->subscribe("obsRequest", (cListener*) this);
     
 
     done = false;
@@ -98,8 +98,8 @@ void RLInterface::initialise()
 void RLInterface::terminate(){
     if(rlInitialised){
     owner->emit(unregisterSig, stringId.c_str());
-    getSimulation()->getSystemModule()->unsubscribe("actionResponse", (cListener*) this);
-    getSimulation()->getSystemModule()->unsubscribe("pullObservations", (cListener*) this);
+    getSimulation()->getSystemModule()->unsubscribe("performAction", (cListener*) this);
+    getSimulation()->getSystemModule()->unsubscribe("obsRequest", (cListener*) this);
     rlInitialised = false;
     }
 }
@@ -117,44 +117,36 @@ void RLInterface::setOwner(cComponent *_owner)
 void RLInterface::receiveSignal(cComponent *source, simsignal_t id, cObject *value, cObject *details)
 {
     const char *signalName = owner->getSignalName(id);
-
-    
-    if (strcmp(signalName, "actionResponse") == 0)
+    if (strcmp(signalName, "performAction") == 0)
     {
-        //cout << "\tRLInterface: Received actionResponse signal! Calling decisionMade() and resetStepVariables()" << endl;
+        //cout << "\tRLInterface: Received performAction signal! Calling decisionMade() and resetStepVariables()" << endl;
         cString * c_id = dynamic_cast< cString *>(details);
         std::string id = c_id->str;
         std::string cartpolestr("cartpole");
         std::string resetstr("RESET");
 
-        // If a cartpole agent and a RESET event
-        if (strcmp(stringId.c_str(), cartpolestr.c_str()) == 0 && strcmp(id.c_str(), resetstr.c_str()) == 0){
+        // If this signal refers to this agent, then take the action.
+        if (strcmp(stringId.c_str(), id.c_str()) == 0) {
+            BrokerData *data = dynamic_cast< BrokerData *>(value);
+
+            this->isReset = data->isReset();
+            if (!this->isReset){
+                decisionMade(data->getAction());
+                resetStepVariables();
+            }
+        } 
+        // Special exception for the cartpole experiment. Unless you are using cartpole, ignore this.
+        else if (strcmp(stringId.c_str(), cartpolestr.c_str()) == 0 && strcmp(id.c_str(), resetstr.c_str()) == 0) 
+        {
             BrokerData *data = dynamic_cast< BrokerData *>(value);
             isReset = true;
             ActionType decision = data->getAction();
             
             decisionMade(decision);
         }
-        // If this signal refers to this agent, then take the action.
-        if (strcmp(stringId.c_str(), id.c_str()) == 0){
-            BrokerData *data = dynamic_cast< BrokerData *>(value);
-
-            if (!data->isReset()){
-                ActionType decision = data->getAction();
-
-                decisionMade(decision);
-                // Reset the variables that keep track of step wise stats.
-                resetStepVariables();
-            }
-            else{
-                isReset = true;
-            }
-
-        }
+        return;
     }
-    else {
-        EV_ERROR << "Unknown signal " << signalName << std::endl;
-    }
+    EV_ERROR << "Unknown signal " << signalName << std::endl;
 }
 
 // signal handler method for pull Observations request from Stepper. 
@@ -165,9 +157,9 @@ void RLInterface::receiveSignal(cComponent *source, simsignal_t id, const char *
 {
     const char *signalName = owner->getSignalName(id);
 
-    if (strcmp(signalName, "pullObservations") == 0)
+    if (strcmp(signalName, "obsRequest") == 0)
     {
-        //cout << "\tRLInterface: Received pullObservations signal! Sending self signal senderToStepper" << endl;
+        //cout << "\tRLInterface: Received obsRequest signal! Sending self signal obsResponse" << endl;
         if (strcmp(value, stringId.c_str()) == 0){
             BrokerData *return_data = new BrokerData();
 
@@ -188,7 +180,7 @@ void RLInterface::receiveSignal(cComponent *source, simsignal_t id, const char *
             EV_TRACE << stringId << " is sending step data to stepper..." << std::endl;
 
             cString * obj = new cString(stringId);
-            owner->emit(senderToStepper, return_data, obj); 
+            owner->emit(obsResponse, return_data, obj); 
             isValid = true;
         }
     }
@@ -198,11 +190,10 @@ void RLInterface::receiveSignal(cComponent *source, simsignal_t id, const char *
     }
 }
 
-
-
-void RLInterface::modifyStepSize(double stepSize) {
+void RLInterface::scheduleNextStep(double stepSize) {
+    EV_TRACE << "Scheduling next step!" << std::endl;
     cObject* newStepSize = new cSimTime(stepSize);
     owner->emit(this->modifyStepSizeSig, stringId.c_str(), newStepSize); 
 }
 
-}
+} // namespace learning

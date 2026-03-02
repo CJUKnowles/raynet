@@ -22,7 +22,8 @@ Orca::Orca():
 Orca::~Orca() {
     if (debug) cout << "\tOrca: Destructor method called. Goodbye.";
     getSimulation()->getSystemModule()->unsubscribe(stringId.c_str(), (cListener*) this);
-    getSimulation()->getSystemModule()->unsubscribe("actionResponse", (cListener*) this);
+    getSimulation()->getSystemModule()->unsubscribe("performAction", (cListener*) this);
+    
 }
 
 // Override receivedDataAck from TcpCubic to remove default pacing behaviour (pacing rate should only change once per monitor interval!')
@@ -242,7 +243,7 @@ void Orca::initialize() {
     // Register this agent with RayNet
     cObject* simtime = new cSimTime(this->conn->getTcpMain()->par("monitorIntervalDuration"));
     owner->emit(this->registerSig, stringId.c_str(), simtime); 
-
+    scheduleNextStep(this->initialStepLength);
     // Schedule the first RL step
     // RLStep = new cMessage("RLSTEP");
     // conn->scheduleAt(simTime() + RLStepInterval, RLStep);
@@ -375,6 +376,7 @@ RewardType Orca::computeReward(){
 
 // RayNet method: Make a decision based on the policy (alter snd_cwnd)
 void Orca::decisionMade(ActionType action) {
+    scheduleNextStep(state->srtt.dbl()); // Schedule the next RLStep
     if (debug) cout << "\tOrca: decisionMade()" << endl;
     RLStepsTaken++;
     if (debug) cout << "\t\tRLSteps taken: " << RLStepsTaken << endl;
@@ -414,11 +416,6 @@ void Orca::decisionMade(ActionType action) {
         // cout << "\t\tChanging step size to " << newStepSizeObj << endl;
         
         // owner->emit(this->modifyStepSizeSig, stringId.c_str(), newStepSizeObj); 
-
-        this->modifyStepSize(state->srtt.dbl());
-
-            
-            
 }
 
 

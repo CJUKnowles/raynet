@@ -75,7 +75,7 @@ public: // General use
     virtual void cleanup() override;
 
     // RL-related and utility variables
-    double RLStepInterval = 1.0; // How many sim seconds to wait between RL steps, 1 by default. Ideally I will modify the step size based on RTT instead of using this.
+    double initialStepLength = 1.0; // How many simseconds to wait before scheduling the initial step. SRTT will be used for future step lengths.
     int RLStepsTaken = 0; // How many RLSteps have been completed so far.
     int maxRLSteps = 10000; // How many training steps should be taken before this agent reports itself as done.
     bool debug = false; // Prints debug messages if true

@@ -153,7 +153,8 @@ class OmnetGymApiEnv(gym.Env):
         
         printFreq = 1
         if self.step_count % printFreq == 0:
-            print(f"\n{printFreq} step(s) completed (Agent total: {self.step_count}):")
+            print("-")
+            print(f"{printFreq} step(s) completed (Agent total: {self.step_count}):")
             print("\tObservations:")
             print(f"\t\tThroughput: {obs[0]:.2f}%             \t\t(Normalized, per interval)")
             print(f"\t\tPacing Rate: {obs[1]:.2f}%        \t\t(Normalized, per interval)")
@@ -184,7 +185,7 @@ if __name__ == '__main__':
     # bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
     # minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
     # bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
-    max_steps_range = (2000, 2000)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
+    max_steps_range = (500, 500)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
     bottleneck_bandwidth_range = (3, 3)            
     minimum_rtt_range = (10, 10)                     
     bottleneck_buffer_range = (960000, 960000) 

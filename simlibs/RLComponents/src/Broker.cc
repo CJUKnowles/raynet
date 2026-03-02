@@ -10,26 +10,34 @@
 
 #include "Broker.h"
 
-// The module class needs to be registered with OMNeT++
 Define_Module(Broker);
 
-
-
-/*
-Initialise the Broker by suscribing to the Sender signal
-*/
 void Broker::initialize()
 {
     getSimulation()->getSystemModule()->subscribe("registerAgent", this); // used to register stepping agents
     getSimulation()->getSystemModule()->subscribe("unregisterAgent", this);// used to unregister stepping agents
-   
-    allAgentsDone = false;
-
-    // Lifted from stepper class
-    getSimulation()->getSystemModule()->subscribe("senderToStepper", this); //suscribe to the broker's signal
+    getSimulation()->getSystemModule()->subscribe("obsResponse", this); //suscribe to the broker's signal
     getSimulation()->getSystemModule()->subscribe("modifyStepSize", this);// used to modify the size of the step used by Stepper
+}
 
-   // todo: unsubscirbe
+// Clean up this component. Called at the end of the simulation.
+void Broker::finish(){
+    // Cancel and delete any remaining STEP or EOS events
+    for (auto& it: activeAgents) {
+        if (it.second.stepMsg->isScheduled()) {
+            cancelEvent(it.second.stepMsg);
+            take(it.second.stepMsg);
+        }
+        if (it.second.endOfStep->isScheduled()) {
+            cancelEvent(it.second.endOfStep);
+        }
+        delete it.second.stepMsg;
+        delete it.second.endOfStep;
+    }
+    getSimulation()->getSystemModule()->unsubscribe("registerAgent", this); // used to register stepping agents
+    getSimulation()->getSystemModule()->unsubscribe("unregisterAgent", this);// used to unregister stepping agents
+    getSimulation()->getSystemModule()->unsubscribe("obsResponse", this); //suscribe to the broker's signal
+    getSimulation()->getSystemModule()->unsubscribe("modifyStepSize", this);// used to modify the size of the step used by Stepper
 }
 
 /*
@@ -40,11 +48,12 @@ void Broker::handleMessage(cMessage *msg)
 {
     std::string messageName(msg->getName());
     // Upper layer has requested a step to take place
-    if (messageName.find("STEP-") != std::string::npos) { // TODO: Make sure this check passes. Might need to do the getName() first or something
-        std::string id = messageName.substr(messageName.find("-")+1); // grab agent ID from string "STEP-{idNumber}"
-        emit(pullObservations, id.c_str()); 
-    } else {
-        // This is likely an end-of-step event (EOS). Do nothing, the upper layer will handle it.
+    if (messageName.find("STEP-") != std::string::npos) {
+        std::string agentID = messageName.substr(messageName.find("-")+1);
+        emit(this->obsRequestSig, agentID.c_str()); 
+    } else if (messageName.find("EOS-") != std::string::npos) {
+        std::string agentID = messageName.substr(messageName.find("-")+1);
+        EV_TRACE << "EOS event detected, doing nothing. "<< agentID << std::endl;
     }
 }
 
@@ -64,35 +73,16 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
 
         EV_TRACE << "Agent ID: " << id << std::endl;
 
-        // Creating detailsfor new agent
-        BrokerDetails EOS_details;
-        EOS_details.isReset = true;
-        EOS_details.endOfStep = new cMessage((std::string("EOS-") + id).c_str()); // Name of the message should match EOS-<ID>
-        EOS_details.rlId = id;
+        // Creating details for new agent
+        BrokerDetails details;
+        details.rlId = id;
+        details.isReset = true;
+        details.endOfStep = new cMessage((std::string("EOS-") + id).c_str()); // Name of the message should match EOS-<ID>
+        details.stepMsg = new cMessage((std::string("STEP-") + id).c_str()); // Name of the message should match STEP-<ID>
+        details.stepSize = ((cSimTime *) obj)->simtime.dbl();
 
         //Inserting new agent details into map (but do not schedule it yet!)
-        activeAgents.insert({id,EOS_details});
-
-        // STEPPER PORTION --------------------------------------------------------------------
-        EV_TRACE << "Registering new agent with Stepper..." << std::endl;
-
-        cSimTime * stepSize = (cSimTime *) obj;
-
-        // Creating detailsfor new agent
-        StepDetails STEP_details;
-        STEP_details.isReset = true;
-        STEP_details.stepMsg = new cMessage((std::string("STEP-") + id).c_str()); // Name of the message should match STEP-<ID>
-        STEP_details.stepSize = stepSize->simtime.dbl();
-        STEP_details.rlId = id;
-
-        delete stepSize;
-
-        //Inserting new agent details into map
-        activeAgentsStepper.insert({id,STEP_details});
-
-        //Schedule first step
-        scheduleAt(simTime() + STEP_details.stepSize, STEP_details.stepMsg);
-        EV_TRACE << "Agent " << id << " will step in " <<  STEP_details.stepSize << " seconds at " << simTime() + STEP_details.stepSize << std::endl;
+        activeAgents.insert({id,details});
     } else if (strcmp(signalName, "unregisterAgent") == 0){
         //Get id
         std::string id(value);
@@ -101,169 +91,100 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
         //Set done for agent to true and step right away
         activeAgents[id].done = true;
         
-        if(activeAgents[id].endOfStep->isScheduled())
+        if(activeAgents[id].endOfStep->isScheduled()) {
             cancelEvent(activeAgents[id].endOfStep);
-
+        }
+        if (activeAgents[id].stepMsg->isScheduled()){
+            cancelEvent(activeAgents[id].stepMsg);
+            take(activeAgents[id].stepMsg);
+        }
+        delete activeAgents[id].stepMsg;
         // Schedule an EOS message for the specific agent.
         scheduleAt(simTime(), activeAgents[id].endOfStep);
-
+        activeAgents.erase(id);
         //Check if all agents are done and store in variable for SimulationRunner
-        allAgentsDone = areAllAgentsDone();
-
-        // STEPPER PORTION ---------------------------------------------
-
-        EV_TRACE << "Removing agent from Stepper map: " << id << std::endl;
-
-        // Remove agent details from map after deleting the msg
-        if (activeAgentsStepper[id].stepMsg->isScheduled()){
-            cancelEvent(activeAgentsStepper[id].stepMsg);
-            take(activeAgentsStepper[id].stepMsg);
-        }
-        delete activeAgentsStepper[id].stepMsg;
-
-        activeAgentsStepper.erase(id);
+        this->allAgentsDone = areAllAgentsDone();
     } else if (strcmp(signalName, "modifyStepSize") == 0) {
         // STEPPER: schedule a new step event
         //Get id
         std::string id(value);
         float stepSize = (float) ((cSimTime *) obj)->simtime.dbl();
-        activeAgentsStepper[id].stepSize = stepSize;
+        activeAgents[id].stepSize = stepSize;
 
-        if(activeAgentsStepper[id].stepMsg->isScheduled()){
-            cancelEvent(activeAgentsStepper[id].stepMsg);
-            take(activeAgentsStepper[id].stepMsg);
-            scheduleAt(simTime() + activeAgentsStepper[id].stepSize, activeAgentsStepper[id].stepMsg);
+        if(activeAgents[id].stepMsg->isScheduled()){
+            cancelEvent(activeAgents[id].stepMsg);
+            take(activeAgents[id].stepMsg);
         }
+        scheduleAt(simTime() + activeAgents[id].stepSize, activeAgents[id].stepMsg);
     }
-
-
 }
-
-
-bool Broker::areAllAgentsDone(){
-    bool allDone = true;
-    for (auto& it: activeAgents) {
-        if(!it.second.done)
-            allDone = false;
-     }
-    return allDone;
-}
-
 
 /*
-
+    Receives observation signals from agents.
+    Stores them for later processing, and ends the current step.
 */
 void Broker::receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *obj)
 {
     Enter_Method("schedule a step event(self message)"); //need this for direct messaging. Allows us to call scheduleMessage from the sender(ownership).
     const char *signalName = getSignalName(signalID);
-    // BROKER SECTION
 
-    
-    // Agent has sent an observation. Notify the broker.
-    if (strcmp(signalName, "senderToStepper") == 0)
+    // Agent has sent an observation
+    if (strcmp(signalName, "obsResponse") == 0)
     {
-        //Get id
-        cString *c_id = (cString *) obj;
-        std::string id = c_id->str; // segfault if signal did not include sender ID in the details.
-        BrokerData *data = (BrokerData *)value;
-        
-        EV_TRACE << "Received signal senderToStepper from "<< id << std::endl;
-        // automatically schedule another event (eventually remove this?)
-        if (!data->getDone()){
-            cancelEvent(activeAgentsStepper[id].stepMsg);
-            take(activeAgentsStepper[id].stepMsg);
-            scheduleAt(simTime() + activeAgentsStepper[id].stepSize, activeAgentsStepper[id].stepMsg);
-        }
-        //CHeck if ORCA's obs is vlid, otherwise skip this step
-        if(data->isValid()){
-            activeAgents[id].observation = data->getObs();
+        std::string id = ((cString*) obj)->str; // segfault if signal did not include sender ID in the details.
+        EV_TRACE << "Received signal obsResponse from "<< id << std::endl;
 
-            if (!data->isReset()){
-                activeAgents[id].reward = data->getReward();
-                activeAgents[id].done = data->getDone();
+        // End this step if the data is valid (?)
+        BrokerData* agentData = (BrokerData*) value;
+        if(agentData->isValid()) {
+            // Collect and store the agent's data
+            activeAgents[id].observation = agentData->getObs();
+            if (!agentData->isReset()) {
+                activeAgents[id].reward = agentData->getReward();
+                activeAgents[id].done = agentData->getDone();
             }
-            bool test = activeAgents[id].endOfStep->isScheduled(); // segfault
-            if(test) { 
-                cancelEvent(activeAgents[id].endOfStep);
+            // Schedule the end of this step
+            if(activeAgents[id].endOfStep->isScheduled()) { 
+                cancelEvent(activeAgents[id].endOfStep); // cancel any existing EOS for this agent, just in case
             }
-            // Schedule an EOS message for the specific agent.
             scheduleAt(simTime(), activeAgents[id].endOfStep);
-
-
             EV_TRACE <<  simTime() <<" Scheduled end of step for " << id << "..." << std::endl;
-            
         }
-        //Clean up
+        
+        // Cleanup
         delete obj;
         delete value;
+        return;
     } 
-    else  
-    {
-        EV_TRACE << "Signal received by Broker not recognised" << std::endl;
-    }
+    EV_TRACE << "Signal received by Broker not recognised" << std::endl;
 }
 
-
 /*
-    Called by the upper layer. 
-    Forwards provided actions to every agent in the list (via the stepper, for now)
+    Forwards actions to all relevant agents.
+    Called by the upper layer upon receiving an observation (rllib->GymApi->cmdrlenv->this). 
 */
 void Broker::setActionAndMove(std::unordered_map<std::string, std::tuple<ActionType, bool>> &actionsAndMoves)
 {
+    // Build a BrokerData containing instructions to reset, take an action, etc. for each agent
     BrokerData *data;
-    cString *obj;
-    // Build a BrokerData for each agent, containing instructions to reset, take an action, etc.
     for (auto& it: actionsAndMoves) {
         data = new BrokerData();
         if (std::get<1>(it.second)){
             data->setReset(std::get<1>(it.second));
-        }
-        else
-        {
+        } else {
             data->setAction(std::get<0>(it.second));
             data->setReset(false);
         }
         // Forward instructions to the current agent
-        obj = new cString(it.first);
-        emit(actionResponse, data, obj); // Also pass the agent name (obj)
+        emit(this->performActionSig, data, new cString(it.first)); // Also pass the agent name (obj)
         delete data;
-        delete obj;
     }
 }
 
 
+// MARK: Getters
+// --------------------------------------------------------------------------------------------------------------------------------
 
-Broker::~Broker() {
-    for (auto& it: activeAgentsStepper) {
-        // Get agent id
-        if (it.second.stepMsg->isScheduled()){
-            cancelEvent(it.second.stepMsg);
-            take(it.second.stepMsg);
-        }
-            delete it.second.stepMsg;
-     }
-}
-
-void Broker::finish(){
-     for (auto& it: activeAgents) {
-        // Get agent id
-        if (it.second.endOfStep->isScheduled()){
-            cancelEvent(it.second.endOfStep);
-        }
-        delete it.second.endOfStep;
-     }
-}
-
-
-
-
-
-
-
-
-
-// Getters (for the trainer)
 // Observations
 ObsType Broker::getObservation(std::string id){
     return activeAgents[id].observation;
@@ -315,4 +236,13 @@ std::unordered_map<std::string, bool> Broker::getDones(){
 
 bool Broker::getAllDone(){
     return allAgentsDone;
+}
+
+bool Broker::areAllAgentsDone(){
+    bool allDone = true;
+    for (auto& it: activeAgents) {
+        if(!it.second.done)
+            allDone = false;
+     }
+    return allDone;
 }
