@@ -22,20 +22,22 @@
 using namespace omnetpp;
 using namespace std;
 
-struct StepDetails{
-  float stepSize; //Time in seconds 
-  cMessage* stepMsg; // Msg used to notify end of step
-  std::string rlId; // String ID returned into the dictionary of pthon step() function
-  bool isReset; // Whether the next step is used as a RESET step, rather than normal step
-};
-
 struct BrokerDetails{
-  cMessage* endOfStep; // Msg used to notify end of step
   std::string rlId; // String ID returned into the dictionary of pthon step() function
   bool isReset; // Whether the next step is used as a RESET step, rather than normal step
+  cMessage* endOfStep; // Msg used to notify end of step
+  
   ObsType observation;
   float reward;
   bool done;
+};
+
+struct StepDetails{
+  std::string rlId; // String ID returned into the dictionary of pthon step() function
+  bool isReset; // Whether the next step is used as a RESET step, rather than normal step
+  cMessage* stepMsg; // Msg used to notify end of step
+
+  float stepSize; //Time in seconds (might delete)
 };
 
 class Broker : public cSimpleModule, public cListener
@@ -46,9 +48,6 @@ protected:
   // is a struct containing info on the current stepping logic
   std::unordered_map<std::string, BrokerDetails> activeAgents;
   std::unordered_map<std::string, StepDetails> activeAgentsStepper;
-  std::unordered_map<std::string, StepDetails> rlId2id;
-
-  
 
   using cListener::finish;
   virtual void finish() override;
@@ -57,12 +56,8 @@ protected:
   void receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *obj) override;
   void receiveSignal(cComponent *source, simsignal_t signalID, const char *value, cObject *obj) override;
 
-  simsignal_t brokerToStepper;
-
-  // stolen stepper class
   simsignal_t actionResponse = registerSignal("actionResponse"); //communication signal from stepper to sender with the action from ray
   simsignal_t pullObservations = registerSignal("pullObservations"); //communication signal from stepper to sender requestiing the obsevations.
-  simsignal_t stepperToBroker = registerSignal("stepperToBroker"); //communication signal from stepper to broker with observations
 
 public:
   ~Broker();

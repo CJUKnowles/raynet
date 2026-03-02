@@ -20,17 +20,12 @@ Initialise the Broker by suscribing to the Sender signal
 */
 void Broker::initialize()
 {
-
-    brokerToStepper = registerSignal("brokerToStepper");     // Comunication channel from Broker to Stepper
-
-    getSimulation()->getSystemModule()->subscribe("stepperToBroker", this);  //Communication channel from Stepper to Broker;
     getSimulation()->getSystemModule()->subscribe("registerAgent", this); // used to register stepping agents
     getSimulation()->getSystemModule()->subscribe("unregisterAgent", this);// used to unregister stepping agents
    
     allAgentsDone = false;
 
     // Lifted from stepper class
-    getSimulation()->getSystemModule()->subscribe("brokerToStepper", this); //suscribe to the broker's signal
     getSimulation()->getSystemModule()->subscribe("senderToStepper", this); //suscribe to the broker's signal
     getSimulation()->getSystemModule()->subscribe("modifyStepSize", this);// used to modify the size of the step used by Stepper
 
@@ -164,43 +159,9 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, cObject *va
     const char *signalName = getSignalName(signalID);
     // BROKER SECTION
 
-    // Stepper has forwarded an obs from the agent. Store it and schedule an end-of-step (EOS) event. 
-    if (strcmp(signalName, "stepperToBroker") == 0){
-        BrokerData *data = (BrokerData *)value;
-        //Get id
-        cString *c_id = (cString *) obj;
-        std::string id = c_id->str;
-
-        activeAgents[id].observation = data->getObs();
-
-        if (!data->isReset()){
-            activeAgents[id].reward = data->getReward();
-            activeAgents[id].done = data->getDone();
-        }
-        bool test = activeAgents[id].endOfStep->isScheduled(); // segfault
-        if(test) { 
-            cancelEvent(activeAgents[id].endOfStep);
-        }
-        // Schedule an EOS message for the specific agent.
-        scheduleAt(simTime(), activeAgents[id].endOfStep);
-
-
-        EV_TRACE <<  simTime() <<" Scheduled end of step for " << id << "..." << std::endl;
-        //Clean up
-        delete obj;
-        delete value;
-    } 
-
-    // STEPPER SECTION
-
-    // Trainer->broker has sent an action. Forward it to the agent so it can perform the action.
-    else if (strcmp(signalName, "brokerToStepper") == 0)
-    {
-        emit(actionResponse, value, obj); // Also pass the agent name (obj)
-    }
-
+    
     // Agent has sent an observation. Notify the broker.
-    else if (strcmp(signalName, "senderToStepper") == 0)
+    if (strcmp(signalName, "senderToStepper") == 0)
     {
         //Get id
         cString *c_id = (cString *) obj;
@@ -208,7 +169,7 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, cObject *va
         BrokerData *data = (BrokerData *)value;
         
         EV_TRACE << "Received signal senderToStepper from "<< id << std::endl;
-
+        // automatically schedule another event (eventually remove this?)
         if (!data->getDone()){
             cancelEvent(activeAgentsStepper[id].stepMsg);
             take(activeAgentsStepper[id].stepMsg);
@@ -216,12 +177,28 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, cObject *va
         }
         //CHeck if ORCA's obs is vlid, otherwise skip this step
         if(data->isValid()){
-            emit(stepperToBroker, data, obj);
-        }else{
+            activeAgents[id].observation = data->getObs();
+
+            if (!data->isReset()){
+                activeAgents[id].reward = data->getReward();
+                activeAgents[id].done = data->getDone();
+            }
+            bool test = activeAgents[id].endOfStep->isScheduled(); // segfault
+            if(test) { 
+                cancelEvent(activeAgents[id].endOfStep);
+            }
+            // Schedule an EOS message for the specific agent.
+            scheduleAt(simTime(), activeAgents[id].endOfStep);
+
+
+            EV_TRACE <<  simTime() <<" Scheduled end of step for " << id << "..." << std::endl;
             
         }
+        //Clean up
+        delete obj;
+        delete value;
     } 
-    else 
+    else  
     {
         EV_TRACE << "Signal received by Broker not recognised" << std::endl;
     }
@@ -236,88 +213,25 @@ void Broker::setActionAndMove(std::unordered_map<std::string, std::tuple<ActionT
 {
     BrokerData *data;
     cString *obj;
-    // Set action and move for each agent in the unordered map
+    // Build a BrokerData for each agent, containing instructions to reset, take an action, etc.
     for (auto& it: actionsAndMoves) {
         data = new BrokerData();
-
         if (std::get<1>(it.second)){
             data->setReset(std::get<1>(it.second));
-            }
-
-        else //move is action step
+        }
+        else
         {
             data->setAction(std::get<0>(it.second));
             data->setReset(false);
         }
-
+        // Forward instructions to the current agent
         obj = new cString(it.first);
-        emit(brokerToStepper, data, obj);
+        emit(actionResponse, data, obj); // Also pass the agent name (obj)
         delete data;
         delete obj;
     }
-
-
 }
 
-ObsType Broker::getObservation(std::string id){
-
-    return activeAgents[id].observation;
-
-}
-
-std::unordered_map<std::string, ObsType> Broker::getObservations(){
-
-    std::unordered_map<std::string, ObsType> observations;
-     for (auto& it: activeAgents) {
-        // Get agent id
-        std::string id = it.first;
-        auto observation = it.second.observation;
-        observations.insert({id, observation});
-     }
-
-     return observations;
-}
-
-  // Get the reward
-RewardType Broker::getReward(std::string id){
-    return activeAgents[id].reward;
-
-}
-
-std::unordered_map<std::string, RewardType> Broker::getRewards(){
-
-      std::unordered_map<std::string,RewardType> rewards;
-     for (auto& it: activeAgents) {
-        // Get agent id
-        std::string id = it.first;
-        auto reward = it.second.reward;
-        rewards.insert({id, reward});
-     }
-
-     return rewards;
-
-}
-
-bool Broker::getDone(std::string id)
-{
-    return activeAgents[id].done;
-}
-
-std::unordered_map<std::string, bool> Broker::getDones(){
-    std::unordered_map<std::string, bool> dones;
-     for (auto& it: activeAgents) {
-        // Get agent id
-        std::string id = it.first;
-        auto done = it.second.done;
-        dones.insert({id, done});
-     }
-
-     return dones;
-}
-
-bool Broker::getAllDone(){
-    return allAgentsDone;
-}
 
 
 Broker::~Broker() {
@@ -339,4 +253,66 @@ void Broker::finish(){
         }
         delete it.second.endOfStep;
      }
+}
+
+
+
+
+
+
+
+
+
+// Getters (for the trainer)
+// Observations
+ObsType Broker::getObservation(std::string id){
+    return activeAgents[id].observation;
+}
+
+std::unordered_map<std::string, ObsType> Broker::getObservations(){
+    std::unordered_map<std::string, ObsType> observations;
+    for (auto& it: activeAgents) {
+        // Get agent id
+        std::string id = it.first;
+        auto observation = it.second.observation;
+        observations.insert({id, observation});
+    }
+    return observations;
+}
+
+// Rewards
+RewardType Broker::getReward(std::string id){
+    return activeAgents[id].reward;
+}
+
+std::unordered_map<std::string, RewardType> Broker::getRewards(){
+    std::unordered_map<std::string,RewardType> rewards;
+    for (auto& it: activeAgents) {
+        // Get agent id
+        std::string id = it.first;
+        auto reward = it.second.reward;
+        rewards.insert({id, reward});
+    }
+    return rewards;
+}
+
+// Dones
+bool Broker::getDone(std::string id)
+{
+    return activeAgents[id].done;
+}
+
+std::unordered_map<std::string, bool> Broker::getDones(){
+    std::unordered_map<std::string, bool> dones;
+    for (auto& it: activeAgents) {
+        // Get agent id
+        std::string id = it.first;
+        auto done = it.second.done;
+        dones.insert({id, done});
+    }
+    return dones;
+}
+
+bool Broker::getAllDone(){
+    return allAgentsDone;
 }
