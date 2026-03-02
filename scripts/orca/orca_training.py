@@ -220,7 +220,8 @@ if __name__ == '__main__':
         name="orca_training_2",
         stop={"num_env_steps_sampled_lifetime": steps_to_train},
         config=config,
-        # checkpoint_config=CheckpointConfig(checkpoint_frequency=5, checkpoint_at_end=True)
+        resume=False,
+        checkpoint_config=CheckpointConfig(checkpoint_frequency=5, checkpoint_at_end=True)
     )
     
     trials_dfs = exp.trial_dataframes # Returns a dict of dfs. Each df represents a trial, and contains rows of training iterations. Used for time series plots.
