@@ -42,7 +42,7 @@ struct BrokerDetails{
 /*
   The broker facilitaties communications between the agents and the upper layer of RayNet (Trainer, rllib, etc.).
   It is responsible for collection and forwarding observations/rewards/actions,
-  as well as scheduling STEP and EOS (end-of-step) events for agents.
+  as well as scheduling STEP events for agents.
 */
 class Broker : public cSimpleModule, public cListener
 {

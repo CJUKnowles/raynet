@@ -152,7 +152,7 @@ class OmnetGymApiEnv(gym.Env):
             sim_truncated = True
         
         printFreq = 1
-        if self.step_count % printFreq == -1:
+        if self.step_count % printFreq == 0:
             print("-")
             print(f"{printFreq} step(s) completed (Agent total: {self.step_count}):")
             print("\tObservations:")
@@ -180,12 +180,12 @@ register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
     env = "OmnetGymApiEnv"
-    num_workers = 14 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
     # bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
     # minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
     # bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
-    max_steps_range = (5000, 5000)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
+    max_steps_range = (500, 500)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
     bottleneck_bandwidth_range = (6, 6)            
     minimum_rtt_range = (5, 5)                     
     bottleneck_buffer_range = (5280000, 5280000) 
@@ -225,12 +225,12 @@ if __name__ == '__main__':
         checkpoint_config=CheckpointConfig(checkpoint_frequency=1000, checkpoint_at_end=True)
     )
     
-    trials_dfs = exp.trial_dataframes # Returns a dict of dfs. Each df represents a trial, and contains rows of training iterations. Used for time series plots.
-    trials_results = exp.results_df # Returns a df in which each row represents a trial, and contains aggregate/summary information about it. Used for scalar plots.
-    #results = exp.dataframe()
+    # trials_dfs = exp.trial_dataframes # Returns a dict of dfs. Each df represents a trial, and contains rows of training iterations. Used for time series plots.
+    # trials_results = exp.results_df # Returns a df in which each row represents a trial, and contains aggregate/summary information about it. Used for scalar plots.
+    # #results = exp.dataframe()
     
-    results_path = exp.experiment_path
+    # results_path = exp.experiment_path
     
-    for trial_id, trial_df in trials_dfs.items():
-        print(f"Creating plot for trial {trial_id}")
-        eval_utils.plot_experiment_summary(trial_df, exp.experiment_path, f"{trial_id}_time_series.pdf")
+    # for trial_id, trial_df in trials_dfs.items():
+    #     print(f"Creating plot for trial {trial_id}")
+    #     eval_utils.plot_experiment_summary(trial_df, exp.experiment_path, f"{trial_id}_time_series.pdf")

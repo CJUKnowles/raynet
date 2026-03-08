@@ -198,7 +198,8 @@ std::string Cmdrlenv::step(ActionType action, bool isReset){
                 string eventName = event -> getName();
                 getSimulation()->executeEvent(event);                
 
-                if (eventName.find(std::string("EOS")) != std::string::npos) {
+                if (eventName.find(std::string("STEP")) != std::string::npos) {
+                    cout << eventName << endl;
                     std::string agentId = eventName.substr(eventName.find(std::string("-"))+1);
                     return agentId;
                     }
@@ -209,9 +210,6 @@ std::string Cmdrlenv::step(ActionType action, bool isReset){
                 checkTimeLimits();
                 if (sigintReceived)
                     throw cTerminationException("SIGINT or SIGTERM received, exiting");
-
-             
-
             }
         }
         else {
@@ -242,7 +240,8 @@ std::string Cmdrlenv::step(ActionType action, bool isReset){
 
                 // execute event
                 getSimulation()->executeEvent(event);
-                if (eventName.find(std::string("EOS")) != std::string::npos) {
+                if (eventName.find(std::string("STEP")) != std::string::npos) {
+                    cout << eventName << endl;
                     std::string agentId = eventName.substr(eventName.find(std::string("-"))+1);
                     return agentId;
                     }
@@ -337,7 +336,8 @@ std::string Cmdrlenv::step(std::unordered_map<std::string, ActionType>  actions,
                 getSimulation()->executeEvent(event);
                 // std::cout << eventName << std::endl;
 
-                if (eventName.find(std::string("EOS")) != std::string::npos) {
+                if (eventName.find(std::string("STEP")) != std::string::npos) {
+                    cout << eventName << endl;
                     std::string agentId = eventName.substr(eventName.find(std::string("-"))+1);
                     return agentId;
                     }
@@ -382,7 +382,8 @@ std::string Cmdrlenv::step(std::unordered_map<std::string, ActionType>  actions,
                
                 string eventName = event -> getName();
                 getSimulation()->executeEvent(event);
-                if (eventName.find(std::string("EOS")) != std::string::npos) {
+                if (eventName.find(std::string("STEP")) != std::string::npos) {
+                    cout << eventName << endl;
                     std::string agentId = eventName.substr(eventName.find(std::string("-"))+1);
                     return agentId;
                     }
