@@ -4,6 +4,7 @@
 #include "inet/transportlayer/tcp/flavours/TcpNoCongestionControl.h"
 #include "transportlayer/tcp/flavours/TcpPacedFamily.h"
 #include <numeric>
+#include <optional>
 #ifdef CLEANSLATE
 #include "CleanSlate.h"
 #include "typedefs.h"
@@ -78,14 +79,20 @@ void CleanSlate::established(bool active) {
 
 
 // Perform and observation and store the result into the provided vector (or append to it, if you're keeping history)
-ObsType CleanSlate::computeObservation(){
+std::optional<ObsType> CleanSlate::computeObservation(){
     if (debug) cout << "\tCleanSlate: computeObservation()" << endl; 
-    if (debug) cout << "\tCleanSlate: cwnd=" << state->snd_cwnd << endl;
     
     //dynamic_cast<TcpPacedConnection*>(conn)->computeRetransmissionRate(); // Updates this->retransmissionBytes via TcpPaced Connection
     double delta_snd_max = state->snd_max - this->last_snd_max;
     double delta_snd_una = state->snd_una - this->last_snd_una;
     this->cleanslateIntervalDuration = (simTime() - this->lastIntervalTime).dbl();
+
+    if (delta_snd_una == 0) {
+        // If no acks have been received, this obs is invalid. Schedule another step and skip the current one.
+        scheduleNextStep(this->cleanslateIntervalDuration); // re-use the last interval duration. Prevents shrinking SRTT during congestion from oversaturing event queue with STEP events.
+        //scheduleNextStep(state->srtt.dbl());
+        return std::nullopt;
+    }
 
     // Throughput: How many bytes were DELIVERED this interval (basically goodput?)
     this->cleanslateThroughput = delta_snd_una / this->cleanslateIntervalDuration;
@@ -104,9 +111,7 @@ ObsType CleanSlate::computeObservation(){
 
     // SRTT: Smoothed round trip time. Already tracked by TCP.
     this->cleanslateSRTT = state->srtt.dbl();
-    if (this->cleanslateSRTT > 0.0) {
-        this->cleanslateMinDelay = std::min(this->cleanslateMinDelay, this->cleanslateSRTT);
-    }
+    this->cleanslateMinDelay = std::min(this->cleanslateMinDelay, this->cleanslateSRTT);
 
     // CWND: Size of the congestion window. Already tracked by TCP.
     this->cleanslateCwnd = (double) state->snd_cwnd;
@@ -118,31 +123,29 @@ ObsType CleanSlate::computeObservation(){
         this->cleanslateDelayMetric = this->cleanslateMinDelay * this->rewardDelayForgiveness / this->cleanslateSRTT;
     }
 
+    
+
     if(debug) {
         cout << "-" << endl;
         cout << "-" << endl;
-        cout << "\t\tState:" << endl;
-            cout << "\t\t\tsnd_una: " << state->snd_una << endl;
-            cout << "\t\t\tdelta_snd_una: " << delta_snd_una << endl;
-            cout << "\t\t\tcwnd: " << state->snd_cwnd << endl;
-            cout << "\t\t\tsnd_max: " << state->snd_max << endl;
-        cout << "\t\tObservations:" << endl;
-            cout << "\t\t\tThroughput: " << this->cleanslateThroughput / this->cleanslateMaxThroughput << endl;
-            cout << "\t\t\tPacerate: " << this->cleanslatePaceRate / this->cleanslateMaxThroughput << endl;
-            cout << "\t\t\tlossrate: " << -9 << endl;
-            cout << "\t\t\tACKs: " << this->cleanslateACKTotal /  state->snd_cwnd << endl;
-            cout << "\t\t\tMTP Duration: " << this->cleanslateIntervalDuration << endl;
-            cout << "\t\t\tSRTT: " << this->cleanslateMinDelay / this->cleanslateSRTT << endl;
-            cout << "\t\t\tDelay Metric: " << this->cleanslateDelayMetric  << endl;
-        
+        cout << "\tState:" << endl;
+            cout << "\t\tsnd_una: " << state->snd_una << endl;
+            cout << "\t\tdelta_snd_una: " << delta_snd_una << endl;
+            cout << "\t\tcwnd: " << state->snd_cwnd << endl;
+            cout << "\t\tsnd_max: " << state->snd_max << endl;
+            cout << "\t\tSRTT: " << state->srtt << endl;
+        cout << "\tObservations:" << endl;
+            cout << "\t\tThroughput: " << this->cleanslateThroughput / this->cleanslateMaxThroughput << endl;
+            cout << "\t\tACKs: " << this->cleanslateACKTotal /  state->snd_cwnd << endl;
+            cout << "\t\tMTP Duration: " << this->cleanslateIntervalDuration << endl;
+            cout << "\t\tSRTT: " << this->cleanslateMinDelay / this->cleanslateSRTT << endl;
+            cout << "\t\tDelay Metric: " << this->cleanslateDelayMetric  << endl;
+        cout << "-" << endl;
+        cout << "-" << endl;
     } 
 
-    if (state->srtt.dbl() == 0) {
-        return {0,0,0,0,0,0,0}; // Schedule the next RLStep
-    }
-    return {this->cleanslateThroughput / this->cleanslateMaxThroughput,     // Normalized throughput
-            this->cleanslatePaceRate / this->cleanslateMaxThroughput,       // Normalized pacerate
-            -9, // Normalized lossrate
+    scheduleNextStep(state->srtt.dbl());
+    return ObsType{this->cleanslateThroughput / this->cleanslateMaxThroughput,     // Normalized throughput
             this->cleanslateACKTotal /  state->snd_cwnd,              // Normalized ACKs count (maybe use tcp_cwnd? ask aiden)     
             this->cleanslateIntervalDuration,                         // Monitor interval duration
             this->cleanslateMinDelay / this->cleanslateSRTT,                // Normalized SRTT (delay)
@@ -161,29 +164,9 @@ ObsType CleanSlate::computeObservation(){
 
 RewardType CleanSlate::computeReward(){
     if (debug) cout << "\tCleanSlate: computeReward()" << endl;
-    if (state->srtt.dbl() == 0) {
-        return 0; // Schedule the next RLStep
-    }
-    // Do not compute a reward if no ACKs were received. No ACKs means no throughput, no valid RTT measurement, etc.
-    // Currently this just returns a 0 reward. TODO: Find a way to skip the RLStep altogether.
-    // Note to self - maybe just don't return reward/obs, and instead schedule a new event? Something the upper layers won't see.
-    // if (this->rttReportCount == 0 || done || !this->first_slowstart_complete) {
-    //     return RewardType(0.0);
-    // }
-    // // Reward calculation: Reward the agent based on their proximity to the optimal throughput/delay ratio. (power)
-    //     // Delay: If the measured delay is within some forgiveness window, then it does not negatively impact reward. Forgiveness window determined by rewardDelayForgiveness.
-    //     // Loss: Loss directly subtracts from the rewards gained from thoughput. Strength of effect determined by rewardLossMultiplier.
-    // double optimalPower = (this->cleanslateMaxThroughput/this->cleanslateMinDelay);         // Max possible reward based on observed max/min throughput/delay so far.
-    // double currentPower;                                                        // Our actual measured reward for this interval
-    // if (this->cleanslateDelay <= this->cleanslateMinDelay *this->rewardDelayForgiveness) {
-    //     currentPower = (this->cleanslateThroughput - this->cleanslateLossRate*this->rewardLossMultiplier) / this->cleanslateMinDelay;   // Delay forgiven
-    // } else {                                                                    
-    //     currentPower = (this->cleanslateThroughput - this->cleanslateLossRate*this->rewardLossMultiplier) / this->cleanslateDelay;      // Delay NOT forgiven
-    // }
-    // double normalizedPower = currentPower / optimalPower; // How close this reward is to optimal. (0 is worst, 1 is optimal)
-    // return RewardType(normalizedPower);
-
-    return(this->cleanslateThroughput/this->cleanslateMaxThroughput*this->cleanslateDelayMetric);
+    double reward = this->cleanslateThroughput/this->cleanslateMaxThroughput*this->cleanslateDelayMetric;
+    if (debug) cout << "\t" << reward << endl;
+    return reward;
     //return(this->cleanslateThroughput/state->srtt);
 }
 
@@ -198,46 +181,18 @@ void CleanSlate::decisionMade(ActionType action) {
             done = true; // Don't set done yourself. Unsure of the correct way to handle this, but this isn't it.
     }
 
-    if (state->srtt.dbl() == 0) {
-        scheduleNextStep(this->initialStepLength); // Schedule the next RLStep
-    } else {
-        scheduleNextStep(this->initialStepLength);
-        //scheduleNextStep(state->srtt.dbl()); // Schedule the next RLStep
+    double fakeAction = action;
+    uint32_t newCwnd = ceil(std::pow(2.0, fakeAction) * (double) state->snd_cwnd);
+    newCwnd =  max(state->snd_mss, newCwnd); // cwnd should not deflate below 1mss
+    // dont let cwnd inflate to ridiculous values. Learning will take care of this eventually, but large values eventually kill simulations.
+    if (newCwnd < 1000000) {
+        if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << (double)newCwnd/(double)state->snd_cwnd << "x)" << endl;
+        if (takeActions) state->snd_cwnd = newCwnd;
     }
-    // if (this->cleanslateACKTotal == 0) {
-    //     if (debug) cout << "No packets ACK'd this interval. Skipping action, cwnd staying at " << state->snd_cwnd << endl;
-    //     return;
-    // } 
+    
 
-    // Avoid taking actions until initial slowstart is complete
-    // if (this->first_slowstart_complete == false) {
-    //     if (debug) cout << "Currently in slow start. CleanSlate will not apply any action.";
-    //     return;
-    // }
-        double fakeAction = action;
-        uint32_t newCwnd = ceil(std::pow(2.0, fakeAction) * (double) state->snd_cwnd);
-        newCwnd =  max(state->snd_mss, newCwnd); // cwnd should not deflate below 1mss
-        newCwnd = max(state->snd_max - state->snd_una, newCwnd); // cwnd should not deflate below in flight bytes
-        // dont let cwnd inflate to ridiculous values. Learning will take care of this eventually, but large values eventually kill simulations.
-        if (newCwnd < 1000000) {
-            if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << (double)newCwnd/(double)state->snd_cwnd << "x)" << endl;
-            if (takeActions) state->snd_cwnd = newCwnd;
-        }
-        
+    double newIntersendingTime = state->srtt.dbl() / (double) state->snd_cwnd;  // Pace rate expressed as seconds between packets (cwnd/srtt per second)
 
-        double newIntersendingTime = state->srtt.dbl() / (double) state->snd_cwnd;  // Pace rate expressed as seconds between packets (cwnd/srtt per second)
-        
-        // cout << "srtt: " << state->srtt.dbl() << endl;
-        // cout << "interSendTime: " << newIntersendingTime << endl;
-        
-        //cleanslatePaceRate = (double) state->snd_cwnd / state->srtt.dbl();  // Bytes/s
-        //if (takeActions) dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(1/cleanslatePaceRate); // Time between bytes
-
-        // Change the stepSize to be 1 RTT (based on srtt)
-        // cObject* newStepSizeObj = new cSimTime(state->srtt.dbl());
-        // cout << "\t\tChanging step size to " << newStepSizeObj << endl;
-        
-        // owner->emit(this->modifyStepSizeSig, stringId.c_str(), newStepSizeObj); 
 }
 
 

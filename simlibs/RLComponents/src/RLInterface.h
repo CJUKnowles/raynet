@@ -21,7 +21,7 @@
 #include <omnetpp.h>
 #include "BrokerData.h"
 #include <iostream>
-
+#include <optional>
 
 #include "rlUtil.h"
 #include "cobjects.h"
@@ -92,7 +92,7 @@ public:
     virtual RewardType getReward() = 0;
     virtual bool getDone() = 0;
     virtual void resetStepVariables() = 0;
-    virtual ObsType computeObservation() = 0;
+    virtual std::optional<ObsType> computeObservation() = 0; // Computes and returns an observation. Returns std::nullopt if there is no valid obs to return.
     virtual RewardType computeReward() = 0;
     // --------------------------------------------------
 

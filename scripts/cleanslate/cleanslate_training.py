@@ -45,14 +45,12 @@ class OmnetGymApiEnv(gym.Env):
         self.max_steps_range = self.env_config["max_steps_range"][1]
 
         # Define the action space (possible values for actions)
-        self.action_space = spaces.Box(low=-.01, high=.01, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
+        self.action_space = spaces.Box(low=-2, high=.8, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
 
 
         # Define the observation space (expected values/types for each observation feature)
         self.obs_min = np.tile(np.array(
                      [0,                            # Throughput
-                      0,                            # Pacerate
-                      0,                            # Lossrate
                       0,                            # number of acks
                       0,                            # Interval duration
                       0,                            # srtt
@@ -60,8 +58,6 @@ class OmnetGymApiEnv(gym.Env):
                       ], dtype=np.float32), 10)
         self.obs_max = np.tile(np.array(
                      [1,                            # Throughput
-                      10,                           # Pacerate
-                      10,                           # Lossrate
                       10,                           # Number of ACKs
                       1,                            # Interval duration
                       1,                            # srtt
@@ -154,14 +150,12 @@ class OmnetGymApiEnv(gym.Env):
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
             sim_truncated = True
             
-        printFreq = 10
+        printFreq = 1
         if self.step_count % printFreq == -1:
             print("-")
             print(f"{printFreq} step(s) completed (Agent total: {self.step_count}):")
             print("\tObservations:")
             print(f"\t\tThroughput: {obs[0]:.2f}%             \t\t(Normalized, per interval)")
-            print(f"\t\tPacing Rate: {obs[1]:.2f}%        \t\t(Normalized, per interval)")
-            print(f"\t\tLoss Rate: {obs[2]:.2f}%          \t\t(Normalized, per interval)")
             print(f"\t\tACKs: {obs[3]:.2f}x              \t\t(Multiplier of cwnd, per interval)") #? Identical to goodput(throughput) if normalized. 
             print(f"\t\tInterval time: {obs[4]:.2f}s      \t\t(Raw, per interval)") #? Identical to delay if normalized?
             print(f"\t\tSRTT: {obs[5]:.2f}%                   \t\t(Normalized, current)") #? Basically same as delay? slightly longer time horizon
@@ -188,10 +182,10 @@ if __name__ == '__main__':
     # bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
     # minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
     # bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
-    max_steps_range = (3000,3000)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
-    bottleneck_bandwidth_range = (1, 1)            
-    minimum_rtt_range = (5, 5)                     
-    bottleneck_buffer_range = (16384, 16384) 
+    max_steps_range = (5000, 5000)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
+    bottleneck_bandwidth_range = (6, 6)            
+    minimum_rtt_range = (5, 5)
+    bottleneck_buffer_range = (5280000, 5280000) 
     load_from_checkpoint = False
     checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_OmnetGymApiEnv_2026-03-10_01-19-546lihpmj1/checkpoints/checkpoint_22"
     steps_to_train = 5000000

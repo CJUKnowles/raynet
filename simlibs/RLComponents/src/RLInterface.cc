@@ -161,12 +161,17 @@ void RLInterface::receiveSignal(cComponent *source, simsignal_t id, const char *
     {
         //cout << "\tRLInterface: Received obsRequest signal! Sending self signal obsResponse" << endl;
         if (strcmp(value, stringId.c_str()) == 0){
+            
+            auto obs = computeObservation(); // Will be an ObsType if valid
+            if (!obs) {
+                // Either an error has occurred, or the agent wishes to skip this step. Useful for skipping an MTP, like in Orca.
+                // Note: If the agent wishes to skip a step, it should schedule a new one before returning.
+                EV_TRACE << stringId << " has returned a NULL observation. Skipping this step." << std::endl;
+                return;
+            }
             BrokerData *return_data = new BrokerData();
-
-            //We only care about the observation in a reset call
             return_data->setReset(isReset);
-            //TODO: compute actual observastion
-            return_data->setObs(computeObservation());
+            return_data->setObs(*obs);
             return_data->setValid(isValid);
             if (!isReset){
                 return_data->setDone(done);

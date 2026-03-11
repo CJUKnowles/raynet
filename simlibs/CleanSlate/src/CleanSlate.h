@@ -65,7 +65,7 @@ public: // General use
     virtual void initialize() override; // This also overrides the TcpNewReno initialize(). Be sure to super() both of them.
     virtual void resetStepVariables()override;
     virtual void decisionMade(ActionType action) override; // Call back from RLInterface. Called when the action from the agent has been received.
-    virtual ObsType computeObservation()override;
+    virtual std::optional<ObsType> computeObservation()override;
     virtual RewardType computeReward()override;
     virtual ObsType getRLState() override;
     virtual RewardType getReward() override;
