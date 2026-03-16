@@ -44,6 +44,8 @@ class OmnetGymApiEnv(gym.Env):
         self.buffer_size = self.env_config["bottleneck_buffer_range"][0]
         self.max_steps_range = self.env_config["max_steps_range"][1]
 
+        self.has_reset = False
+
         # Define the action space (possible values for actions)
         self.action_space = spaces.Box(low=-2, high=2, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
 
@@ -76,9 +78,14 @@ class OmnetGymApiEnv(gym.Env):
         
        
     def reset(self, *, seed=None, options=None):
+        # if self.has_reset:
+        #     return  return_obs_history, {}
+        # self.has_reset=True
         # Reset the observation history to empty
         self.obs_history = deque(np.zeros(len(self.obs_min)),maxlen=len(self.obs_min))
         
+
+
         # Grab environment parameter ranges
         bottleneck_bw_range = self.env_config["bottleneck_bw_range"]
         base_rtt_range = self.env_config["minimum_rtt_range"]
@@ -187,14 +194,14 @@ if __name__ == '__main__':
     # bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
     # minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
     # bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
-    max_steps_range = (100, 100)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
+    max_steps_range = (1000000, 1000000)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
     bottleneck_bandwidth_range = (6, 6)            
     minimum_rtt_range = (5, 5)
     bottleneck_buffer_range = (5280000, 5280000) 
-    load_from_checkpoint = True
+    load_from_checkpoint = False
     checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_OmnetGymApiEnv_2026-03-10_11-30-01ifnnidtm/checkpoints/checkpoint_8"
-    steps_to_train = 100
-    env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/orca/orca.ini",
+    steps_to_train = 1000000
+    env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/orca/orca_eval.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
                   "minimum_rtt_range": minimum_rtt_range,
                   "bottleneck_buffer_range": bottleneck_buffer_range,

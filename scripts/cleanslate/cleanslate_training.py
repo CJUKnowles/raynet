@@ -44,6 +44,8 @@ class OmnetGymApiEnv(gym.Env):
         self.buffer_size = self.env_config["bottleneck_buffer_range"][0]
         self.max_steps_range = self.env_config["max_steps_range"][1]
 
+        self.has_reset = False
+
         # Define the action space (possible values for actions)
         self.action_space = spaces.Box(low=-2, high=.8, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
 
@@ -73,6 +75,9 @@ class OmnetGymApiEnv(gym.Env):
         
        
     def reset(self, *, seed=None, options=None):
+        if self.has_reset:
+            return
+        self.has_reset = True
         # Reset the observation history to empty
         self.obs_history = deque(np.zeros(len(self.obs_min)),maxlen=len(self.obs_min))
         
@@ -175,20 +180,20 @@ def omnetgymapienv_creator(env_config):
 
 
 if __name__ == '__main__':
-    env_name = "CleanSlate-baseline"
+    env_name = "CleanSlate-evaltest"
     register_env(env_name, omnetgymapienv_creator)
-    num_workers = 13 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
     # bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
     # minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
     # bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
-    max_steps_range = (5000, 5000)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
+    max_steps_range = (200, 200)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
     bottleneck_bandwidth_range = (6, 6)            
     minimum_rtt_range = (5, 5)
     bottleneck_buffer_range = (5280000, 5280000) 
     load_from_checkpoint = False
     checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_OmnetGymApiEnv_2026-03-10_01-19-546lihpmj1/checkpoints/checkpoint_22"
-    steps_to_train = 5000000
+    steps_to_train = 200
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/cleanslate/cleanslate.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
                   "minimum_rtt_range": minimum_rtt_range,
