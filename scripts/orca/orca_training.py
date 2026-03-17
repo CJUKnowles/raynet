@@ -180,7 +180,7 @@ def omnetgymapienv_creator(env_config):
 register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
-    env_name = "Orca"
+    env_name = "Orca-1.1"
     register_env(env_name, omnetgymapienv_creator)
     num_workers = 13 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211

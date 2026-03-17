@@ -278,20 +278,19 @@ void Orca::established(bool active) {
 // Perform and observation and store the result into the provided vector (or append to it, if you're keeping history)
 std::optional<ObsType> Orca::computeObservation(){
     if (debug) cout << "\tOrca: computeObservation()" << endl; 
-    if (this->first_slowstart_complete == false) {
-        if (debug) cout << "First slowstart not complete - skipping obs" << endl;
-        // TODO: return nulopt to properly skip the step. Will likely have to restart training.
-        return ObsType{0, 0, 0, 0, 0, 0, 0};
-    }
-    if (done) {
-        cout << "Agent reported as done, skipping this obs" << endl;
-        // TODO: return nulopt to properly skip the step. Will likely have to restart training.
-        return ObsType{0, 0, 0, 0, 0, 0, 0};
-    }
+
     dynamic_cast<TcpPacedConnection*>(conn)->computeRetransmissionRate(); // Updates this->retransmissionBytes via TcpPaced Connection
     double delta_snd_max = state->snd_max - this->last_snd_max;
     double delta_snd_una = state->snd_una - this->last_snd_una;
     this->orcaIntervalDuration = (simTime() - this->lastIntervalTime).dbl();
+    
+    // Skip this step if this obs is invalid. Schedule another step to check-in again later.
+    if (delta_snd_una == 0 || this->first_slowstart_complete == false || done) {
+        scheduleNextStep(this->orcaIntervalDuration); // re-use the last interval duration. Prevents shrinking SRTT during congestion from oversaturing event queue with STEP events.
+        //scheduleNextStep(state->srtt.dbl());
+        return std::nullopt;
+    }
+
 
     // Throughput: How many bytes were DELIVERED this interval (basically goodput?)
     this->orcaThroughput = delta_snd_una / this->orcaIntervalDuration;
@@ -324,12 +323,6 @@ std::optional<ObsType> Orca::computeObservation(){
     if (this->orcaDelay > this->orcaMinDelay * this->rewardDelayForgiveness) {                                             
         this->orcaDelayMetric = this->orcaMinDelay * this->rewardDelayForgiveness / state->srtt;
     }
-    
-    if (this->orcaACKTotal == 0 || done) {
-        if (debug) cout << "No packets ACKed. Skipping this observation." << endl;
-        // TODO: return nulopt to properly skip the step. Will likely have to restart training.
-        return ObsType{0, 0, 0, 0, 0, 0, 0};
-    }
 
     throughputSignal = owner->registerSignal("throughput");
     srttSignal = owner->registerSignal("srtt");
@@ -341,6 +334,7 @@ std::optional<ObsType> Orca::computeObservation(){
     owner->emit(pacerateSignal, this->orcaPaceRate);
     owner->emit(intervalDurationSignal, this->orcaIntervalDuration);
 
+    scheduleNextStep(state->srtt.dbl());
     return ObsType{this->orcaThroughput / this->orcaMaxThroughput,     // Normalized throughput
             this->orcaPaceRate / this->orcaMaxThroughput,       // Normalized pacerate
             this->retransmissionRate / this->orcaMaxThroughput, // Normalized lossrate
@@ -353,26 +347,8 @@ std::optional<ObsType> Orca::computeObservation(){
 
 RewardType Orca::computeReward(){
     if (debug) cout << "\tOrca: computeReward()" << endl;
-    // Do not compute a reward if no ACKs were received. No ACKs means no throughput, no valid RTT measurement, etc.
-    // Currently this just returns a 0 reward. TODO: Find a way to skip the RLStep altogether.
-    // Note to self - maybe just don't return reward/obs, and instead schedule a new event? Something the upper layers won't see.
-    if (this->rttReportCount == 0 || done || !this->first_slowstart_complete) {
-        return RewardType(0.0);
-    }
-    // // Reward calculation: Reward the agent based on their proximity to the optimal throughput/delay ratio. (power)
-    //     // Delay: If the measured delay is within some forgiveness window, then it does not negatively impact reward. Forgiveness window determined by rewardDelayForgiveness.
-    //     // Loss: Loss directly subtracts from the rewards gained from thoughput. Strength of effect determined by rewardLossMultiplier.
-    // double optimalPower = (this->orcaMaxThroughput/this->orcaMinDelay);         // Max possible reward based on observed max/min throughput/delay so far.
-    // double currentPower;                                                        // Our actual measured reward for this interval
-    // if (this->orcaDelay <= this->orcaMinDelay *this->rewardDelayForgiveness) {
-    //     currentPower = (this->orcaThroughput - this->orcaLossRate*this->rewardLossMultiplier) / this->orcaMinDelay;   // Delay forgiven
-    // } else {                                                                    
-    //     currentPower = (this->orcaThroughput - this->orcaLossRate*this->rewardLossMultiplier) / this->orcaDelay;      // Delay NOT forgiven
-    // }
-    // double normalizedPower = currentPower / optimalPower; // How close this reward is to optimal. (0 is worst, 1 is optimal)
-    // return RewardType(normalizedPower);
 
-    return( (this->orcaThroughput-(this->rewardLossMultiplier*this->orcaLossRate))/this->orcaMaxThroughput*this->orcaDelayMetric);
+    return((this->orcaThroughput-(this->rewardLossMultiplier*this->orcaLossRate))/this->orcaMaxThroughput*this->orcaDelayMetric);
 }
 
 // RayNet method: Make a decision based on the policy (alter snd_cwnd)

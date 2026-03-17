@@ -67,7 +67,7 @@ def dumb_plot(csv_file:str, output_name:str="plotted"):
 if __name__ == "__main__":
     filePath = os.getenv('HOME') + "/raynet/_experiments/experiment1/results/output.csv"
     exp = "Dumbbell"
-    protocol = "CleanSlate"
+    protocol = "Orca"
     argNum = 0
     vectorsToExtract = ["throughput", "srtt", "pacerate", "intervalDuration", "cwnd", "action"]
     extracted = False
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     
     # Generate index file (.vci) and results (.csv)
     results_dir = filePath.rsplit("/", 1)[0]
-    vec_file = results_dir + "/General-#0.vec"
+    vec_file = results_dir + f"/{protocol}-#0.vec"
     cmd = f"""
                 source ~/omnetpp/setenv &&
                 opp_scavetool i "{vec_file}" &&

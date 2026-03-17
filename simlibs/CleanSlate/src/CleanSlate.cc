@@ -196,7 +196,7 @@ void CleanSlate::decisionMade(ActionType action) {
     newCwnd =  max(state->snd_mss, newCwnd); // cwnd should not deflate below 1mss
     // dont let cwnd inflate to ridiculous values. Learning will take care of this eventually, but large values eventually kill simulations.
     if (newCwnd < 1000000) {
-        conn->emit(actionSignal, ceil(std::pow(2.0, fakeAction)));
+        conn->emit(actionSignal, std::pow(2.0, fakeAction));
         if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << (double)newCwnd/(double)state->snd_cwnd << "x)" << endl;
         if (takeActions) state->snd_cwnd = newCwnd;
     }

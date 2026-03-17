@@ -117,7 +117,7 @@ class OmnetGymApiEnv(gym.Env):
             fout.write(ini_string)
         
         # Start a new simulation runner on the modified ini file
-        self.runner.initialise(original_ini_file + f".worker{os.getpid()}", "General")
+        self.runner.initialise(original_ini_file + f".worker{os.getpid()}", "Orca")
         obs = self.runner.reset()
         obs = obs['Orca']
         self.obs_history.extend(obs)
@@ -187,7 +187,7 @@ def omnetgymapienv_creator(env_config):
 register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
-    env_name = "OrcaInferenceTesting"
+    env_name = "Orca-1.1-InferenceTesting"
     register_env(env_name, omnetgymapienv_creator)
     num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
@@ -201,7 +201,7 @@ if __name__ == '__main__':
     load_from_checkpoint = True
     checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.0/SAC_Orca_2026-03-13_14-42-05b6jzob3t/checkpoints/checkpoint_107"
     steps_to_train = 1000000
-    env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/orca/orca_eval.ini",
+    env_config = {"iniPath": os.getenv('HOME') + "/raynet/_experiments/experiment1/experiment1.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
                   "minimum_rtt_range": minimum_rtt_range, 
                   "bottleneck_buffer_range": bottleneck_buffer_range,
