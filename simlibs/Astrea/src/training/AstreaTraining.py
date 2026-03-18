@@ -1,3 +1,4 @@
+
 import sys, os
 from ray.runtime_env import RuntimeEnv
 from build.omnetbind import OmnetGymApi
@@ -22,8 +23,8 @@ import time
 from random import randint
 from ray.tune.analysis import ExperimentAnalysis
 import GPUtil
-import eval_utils
 from collections import deque
+
 
 class OmnetGymApiEnv(gym.Env):
     def __init__(self,env_config):
@@ -47,13 +48,12 @@ class OmnetGymApiEnv(gym.Env):
         self.has_reset = False
 
         # Define the action space (possible values for actions)
-        self.action_space = spaces.Box(low=-2, high=2, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
+        self.action_space = spaces.Box(low=-2, high=.8, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
+
 
         # Define the observation space (expected values/types for each observation feature)
         self.obs_min = np.tile(np.array(
                      [0,                            # Throughput
-                      0,                            # Pacerate
-                      0,                            # Lossrate
                       0,                            # number of acks
                       0,                            # Interval duration
                       0,                            # srtt
@@ -61,8 +61,6 @@ class OmnetGymApiEnv(gym.Env):
                       ], dtype=np.float32), 10)
         self.obs_max = np.tile(np.array(
                      [1,                            # Throughput
-                      10,                           # Pacerate
-                      10,                           # Lossrate
                       10,                           # Number of ACKs
                       1,                            # Interval duration
                       1,                            # srtt
@@ -78,14 +76,12 @@ class OmnetGymApiEnv(gym.Env):
         
        
     def reset(self, *, seed=None, options=None):
-        # if self.has_reset:
-        #     return  return_obs_history, {}
-        # self.has_reset=True
+        if self.has_reset:
+            return
+        self.has_reset = True
         # Reset the observation history to empty
         self.obs_history = deque(np.zeros(len(self.obs_min)),maxlen=len(self.obs_min))
         
-
-
         # Grab environment parameter ranges
         bottleneck_bw_range = self.env_config["bottleneck_bw_range"]
         base_rtt_range = self.env_config["minimum_rtt_range"]
@@ -105,6 +101,7 @@ class OmnetGymApiEnv(gym.Env):
         
         # Modify the base config .ini with a proper home directory and the random environment parameters
         original_ini_file = self.env_config["iniPath"]
+        ini_variants_base = f"{self.env_config["iniPath"].rsplit("/", 1)[0]}/ini_variants/{self.env_config["iniPath"].rsplit("/", 1)[1]}"
         with open(original_ini_file, 'r') as fin:
             ini_string = fin.read()
         ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
@@ -113,13 +110,13 @@ class OmnetGymApiEnv(gym.Env):
         ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")
         ini_string = ini_string.replace("MAX_RL_STEPS", f"{self.max_steps}")
         # TODO: Include these strings in the .ini somewhere that actually makes them alter the experiment
-        with open(original_ini_file + f".worker{os.getpid()}", 'w') as fout:
+        with open(ini_variants_base + f".worker{os.getpid()}", 'w') as fout:
             fout.write(ini_string)
         
         # Start a new simulation runner on the modified ini file
-        self.runner.initialise(original_ini_file + f".worker{os.getpid()}", "Orca")
+        self.runner.initialise(ini_variants_base + f".worker{os.getpid()}", "General")
         obs = self.runner.reset()
-        obs = obs['Orca']
+        obs = obs['Astrea']
         self.obs_history.extend(obs)
         return_obs_history = np.asarray(list(self.obs_history),dtype=np.float32)
         #TODO: return history of observations, not just this observation. Compile a self.obs_history and return that instead.
@@ -134,15 +131,15 @@ class OmnetGymApiEnv(gym.Env):
         """
         # Forward the action (provided by RLlib) to OMNeT++ (and eventually our RLAgent Orca), and retrieve the RLAgent's reported result
         actions = actions.item() # TODO: Make sure this is right. Your types and shapes are a bit sketchy atm
-        action = {'Orca': actions}               
+        action = {'Astrea': actions}               
         obs, rewards, terminateds, info_ = self.runner.step(action)
-        self.obs_history.extend(obs['Orca'])
+        self.obs_history.extend(obs['Astrea'])
         
         # Extra the relevant obs/rewards from the environment info (only the info relevent to our single-agent)
-        obs = np.asarray(list(obs['Orca']), dtype=np.float32)    # also formats the RLAgent's obs so RLlib can understand it
+        obs = np.asarray(list(obs['Astrea']), dtype=np.float32)    # also formats the RLAgent's obs so RLlib can understand it
         return_obs_history = np.asarray(list(self.obs_history),dtype=np.float32)
         #TODO: Append this to self.obs_history and return that instead. 
-        reward = rewards['Orca']                               # Get the reward our RLAgent is reporting
+        reward = rewards['Astrea']                               # Get the reward our RLAgent is reporting
         sim_truncated = False
   
         # Debug stuff
@@ -154,20 +151,18 @@ class OmnetGymApiEnv(gym.Env):
         if math.isnan(reward):
             print("Warning: NaN reward returned!")
         # Check if this training episode is complete
-        if terminateds['Orca']:      # TERMINATED - The RLAgent has reported itself as done (within the context of the MDP.) End the simulation.
+        if terminateds['Astrea']:      # TERMINATED - The RLAgent has reported itself as done (within the context of the MDP.) End the simulation.
             self.runner.shutdown()
             self.runner.cleanup()
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
             sim_truncated = True
-        
+            
         printFreq = 1
-        if self.step_count % printFreq == 0:
+        if self.step_count % printFreq == -1:
             print("-")
             print(f"{printFreq} step(s) completed (Agent total: {self.step_count}):")
             print("\tObservations:")
             print(f"\t\tThroughput: {obs[0]:.2f}%             \t\t(Normalized, per interval)")
-            print(f"\t\tPacing Rate: {obs[1]:.2f}%        \t\t(Normalized, per interval)")
-            print(f"\t\tLoss Rate: {obs[2]:.2f}%          \t\t(Normalized, per interval)")
             print(f"\t\tACKs: {obs[3]:.2f}x              \t\t(Multiplier of cwnd, per interval)") #? Identical to goodput(throughput) if normalized. 
             print(f"\t\tInterval time: {obs[4]:.2f}s      \t\t(Raw, per interval)") #? Identical to delay if normalized?
             print(f"\t\tSRTT: {obs[5]:.2f}%                   \t\t(Normalized, current)") #? Basically same as delay? slightly longer time horizon
@@ -178,32 +173,32 @@ class OmnetGymApiEnv(gym.Env):
         self.step_count += 1
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
         
-        return  return_obs_history, reward, terminateds['Orca'], sim_truncated, {}
+        return  return_obs_history, reward, terminateds['Astrea'], sim_truncated, {}
         
 # Generates the OmnetGymApiEnv for the calling ray worker
 def omnetgymapienv_creator(env_config):
     return OmnetGymApiEnv(env_config)  # return an env instance
 
-register_env("OmnetGymApiEnv", omnetgymapienv_creator)
+
 
 if __name__ == '__main__':
-    env_name = "Orca-1.1-InferenceTesting"
+    env_name = "Astrea-evaltest"
     register_env(env_name, omnetgymapienv_creator)
     num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
     # bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
     # minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
     # bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
-    max_steps_range = (1000000, 1000000)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
+    max_steps_range = (5000, 5000)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
     bottleneck_bandwidth_range = (6, 6)            
     minimum_rtt_range = (5, 5)
     bottleneck_buffer_range = (5280000, 5280000) 
-    load_from_checkpoint = True
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_Orca-1.1_2026-03-18_01-32-37c7bgae2s/checkpoints/checkpoint_13"
-    steps_to_train = 1000000
-    env_config = {"iniPath": os.getenv('HOME') + "/raynet/_experiments/experiment1/experiment1.ini",
+    load_from_checkpoint = False
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_OmnetGymApiEnv_2026-03-10_01-19-546lihpmj1/checkpoints/checkpoint_22"
+    steps_to_train = 20000000
+    env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Astrea/src/training/AstreaTraining.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
-                  "minimum_rtt_range": minimum_rtt_range, 
+                  "minimum_rtt_range": minimum_rtt_range,
                   "bottleneck_buffer_range": bottleneck_buffer_range,
                   "max_steps_range": max_steps_range}
     random.seed(seed)
@@ -224,7 +219,9 @@ if __name__ == '__main__':
             #.training(training_intensity=1000)  # num_steps_sampled_before_learning_starts=0 training_intensity=1000
             # .build_algo()
             )
-    algo = config.build()
+
+    algo = config.build_algo(
+    )
     
     # Convert betas? (solution found online, fixes a crash when loading a checkpoint)
     def betas_tensor_to_float(learner):
@@ -239,14 +236,20 @@ if __name__ == '__main__':
     
     pprint.pprint(algo.config)
     # Main training loop!
-    step = 0
+    iteration = 0
     checkpoint = 0
-    while step < steps_to_train-1:
-        # result = algo.train()   # Perform a single training iteration (many steps, usually shorter than an episode. Changes depending on training parameters.)
-        result = algo.training_step()
-        step += 1
-        print(f"Step {step} complete")
-
+    iterations_per_checkpoint = 1000
+    while True:
+        result = algo.train()   # Perform a single training iteration (many steps, usually shorter than an episode. Changes depending on training parameters.)
+        iteration += 1
+        print(f"Iteration {iteration} complete")
+        if (iteration % iterations_per_checkpoint == 0):
+            checkpoint_dir = algo.logdir + f"/checkpoints/checkpoint_{checkpoint}"
+            algo.save_checkpoint(checkpoint_dir) # Somehow get the directory from this?
+            print(f"Saved checkpoint to {checkpoint_dir}")
+            checkpoint += 1
+    
+    
     # old -------------------------------
     #algo = SAC.from_checkpoint(os.getenv('HOME') + "/ray_results/orca/SAC_OmnetGymApiEnv_8fe1c_00000_0_2026-03-04_01-57-55/checkpoint_000021")
     # ray.tune.run(
@@ -257,7 +260,6 @@ if __name__ == '__main__':
     #     restore=os.getenv('HOME') + "/ray_results/orca/SAC_OmnetGymApiEnv_8fe1c_00000_0_2026-03-04_01-57-55/checkpoint_000021",
     #     #resume=True,
     #     checkpoint_config=CheckpointConfig(checkpoint_frequency=1000, checkpoint_at_end=True),
-
     # )
     
     # trials_dfs = exp.trial_dataframes # Returns a dict of dfs. Each df represents a trial, and contains rows of training iterations. Used for time series plots.
@@ -269,3 +271,4 @@ if __name__ == '__main__':
     # for trial_id, trial_df in trials_dfs.items():
     #     print(f"Creating plot for trial {trial_id}")
     #     eval_utils.plot_experiment_summary(trial_df, exp.experiment_path, f"{trial_id}_time_series.pdf")
+    

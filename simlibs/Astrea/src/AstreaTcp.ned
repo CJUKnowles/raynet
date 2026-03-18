@@ -1,10 +1,10 @@
-package Orca;
-import tcppaced.transportlayer.tcp.TcpPaced;
+package Astrea;
+import inet.transportlayer.tcp.Tcp;
 
-simple OrcaTcp extends TcpPaced
+simple AstreaTcp extends Tcp
 {
     parameters:
-        @class(OrcaTcp);
+        @class(AstreaTcp);
 
         int maxWindow; 					                    // maximum window size
         int stateSize; 					                    // dimension of the state space
@@ -17,19 +17,18 @@ simple OrcaTcp extends TcpPaced
         bool takeActions;                                   // Skips actions if set to false. Useful for comparing against the base case without altering code.
         int maxRLSteps;                                     // how many training steps should take place before the agent reports as done
         double monitorIntervalDuration = default(1.0);      // How many seconds a monitor interval should last
-        double delayWeight = default(5);                  // Beta term from Orca paper. Reward degrades when RTT > baseRTT*delayWeight. Larger values emphasize throughput in reward calculation.
         @signal[stepData];				                    // step data signal
         @signal[actionQuery];			                    // action query signal
 
-        // Statistics recording
+
         @signal[throughput];
         @signal[srtt];
-        @signal[pacerate];
+        @signal[action];
         @signal[intervalDuration];
         @signal[cwnd];
         @statistic[cwnd](record=vector(removeRepeats); interpolationmode=sample-hold);
         @statistic[throughput](record=vector(removeRepeats); interpolationmode=sample-hold);
         @statistic[srtt](record=vector(removeRepeats); interpolationmode=sample-hold);
-        @statistic[pacerate](record=vector(removeRepeats); interpolationmode=sample-hold);
+        @statistic[action](record=vector(removeRepeats); interpolationmode=sample-hold);
         @statistic[intervalDuration](record=vector(removeRepeats); interpolationmode=sample-hold);
 }

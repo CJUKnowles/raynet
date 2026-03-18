@@ -251,6 +251,7 @@ void Orca::initialize() {
     srttSignal = owner->registerSignal("srtt");
     pacerateSignal = owner->registerSignal("pacerate");
     intervalDurationSignal = owner->registerSignal("intervalDuration");
+    cwndSignal = owner->registerSignal("cwnd");
     
     // Schedule the first RL step
     // RLStep = new cMessage("RLSTEP");
@@ -333,6 +334,7 @@ std::optional<ObsType> Orca::computeObservation(){
     owner->emit(srttSignal, state->srtt);
     owner->emit(pacerateSignal, this->orcaPaceRate);
     owner->emit(intervalDurationSignal, this->orcaIntervalDuration);
+    owner->emit(cwndSignal, state->snd_cwnd);
 
     scheduleNextStep(state->srtt.dbl());
     return ObsType{this->orcaThroughput / this->orcaMaxThroughput,     // Normalized throughput

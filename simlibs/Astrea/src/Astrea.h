@@ -1,8 +1,8 @@
 #include "omnetpp/clistener.h"
 #include "omnetpp/simkerneldefs.h"
-#ifdef ORCA
-#ifndef __ORCA_CC_H_
-#define __ORCA_CC_H_
+#ifdef ASTREA
+#ifndef __ASTREA_CC_H_
+#define __ASTREA_CC_H_
 
 #include <omnetpp.h>
 #include <iostream>
@@ -20,6 +20,8 @@
 #include "inet/transportlayer/tcp/flavours/TcpNewReno.h"
 #include <inet/transportlayer/tcp/Tcp.h>
 #include <inet/transportlayer/tcp/TcpConnection.h>
+#include <inet/transportlayer/tcp/flavours/DumbTcp.h>
+#include <inet/transportlayer/tcp/flavours/TcpNoCongestionControl.h>
 #include <transportlayer/tcp/flavours/TcpCubic.h>
 
 using namespace omnetpp;
@@ -27,39 +29,37 @@ using namespace inet::tcp;
 using namespace inet;
 using namespace learning;
 
-class Orca : public TcpCubic, public RLInterface
+class Astrea : public TcpNoCongestionControl, public RLInterface
 {
-public:
+protected:
     // am I running on active open (client) or passive open connection (server)
     bool isActive;
 
+    // utility object that keeps track of Monitor Intervals and relevant calculations
+    MonitorIntervalsHandler miHandler;
     //Signals for result recording
     simsignal_t throughputSignal;
     simsignal_t actionSignal;
     simsignal_t srttSignal;
-    simsignal_t pacerateSignal;
-    simsignal_t intervalDurationSignal;
     simsignal_t cwndSignal;
+    simsignal_t intervalDurationSignal;
     uint32_t dupAcks;
 public: // General use
-    Orca();
-    virtual ~Orca();
+    Astrea();
+    virtual ~Astrea();
 
     // 
     using RLInterface::receiveSignal;
     virtual void receiveSignal(cComponent *source, simsignal_t signalID, double value, cObject *details) override 
     {
-      TcpPacedConnection* pacedConn = dynamic_cast<TcpPacedConnection*>(conn);
-      if (signalID == pacedConn->retransmissionRateSignal) {
-        retransmissionRate = value/8.0; // Retransmiitted bytes/s this interval
-      } 
+      // TcpPacedConnection* pacedConn = dynamic_cast<TcpPacedConnection*>(conn);
+      // if (signalID == pacedConn->retransmissionRateSignal) {
+      //   retransmissionRate = value/8.0; // Retransmiitted bytes/s this interval
+      // } 
     }
 
     // TcpCubic Overrides (These are mostly unchanged, and just used to gather statistic or disable automatic pacing)
-    virtual void receivedDataAck(uint32_t firstSeqAcked) override;
-    virtual void receivedDuplicateAck() override;
     virtual void established(bool active) override; // Called when the TCP CONNECTION is established (some time AFTER startup!)
-    virtual void rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) override;  // Overridden so we can track 
 
     // RLInterface Overrides (Required by the RL agent)
     virtual void initialize() override; // This also overrides the TcpNewReno initialize(). Be sure to super() both of them.
@@ -77,26 +77,25 @@ public: // General use
     int RLStepsTaken = 0; // How many RLSteps have been completed so far.
     int maxRLSteps = 10000; // How many training steps should be taken before this agent reports itself as done.
     bool debug = false; // Prints debug messages if true
-    bool takeActions = true; // Skips Orca actions if false
+    bool takeActions = true; // Skips Astrea actions if false
 
-    // Orca parameters (Default values here, overridden in orca.ini)
-    double rewardDelayForgiveness = 1; // Beta term from Orca paper. Delay only degrades reward if RTT > baseRTT*rewardDelayForgiveness. Larger values emphasize aggressive throughputs by forgiving delay increases.
-    double rewardLossMultiplier = 1;   // Zeta term from Orca paper. Throughput is substracted by lossRate*rewardLossMultiplier in reward computation.  Larger values emphasize conservative throughputs by punishing loss. 
+    // Astrea parameters (Default values here, overridden in astrea.ini)
+    double rewardDelayForgiveness = 1; // Beta term from Astrea paper. Delay only degrades reward if RTT > baseRTT*rewardDelayForgiveness. Larger values emphasize aggressive throughputs by forgiving delay increases.
+    double rewardLossMultiplier = 1;   // Zeta term from Astrea paper. Throughput is substracted by lossRate*rewardLossMultiplier in reward computation.  Larger values emphasize conservative throughputs by punishing loss. 
     
-    // Orca observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
-    double orcaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
-    double orcaLossRate=0.0;      // The average loss rate of packets over the last interval
-    double orcaDelay=0.0;         // The average delay of packets over the last interval
-    double orcaACKTotal=0.0;      // The number of valid acknowledgements over the last interval
-    double orcaIntervalDuration=0.0;  // The simtime elapsed over the last interval
-    double orcaSRTT=0.0;          // The smoothed RTT of (all?) packets so far
-    double orcaCwnd=0.0;          // The current congestion window (don't really need a new variable here, this is just useful for reference. Just use conn->snd_cwnd)
-    double orcaMaxThroughput=.000001; // The maximum delivery rate so far
-    double orcaMinDelay=9999;      // The minimum packet delay so far. Initialize to large value so the minimum is guaranteed to update.
-    double orcaPaceRate=1;        // Bytes sent per second. Usually smaller than cwnd.
-    double orcaDelayMetric=1;     // A measure of how close the currenty delay is to optimal. Will be 1 as long as the delay is within the forgiveness window.
+    // Astrea observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
+    double astreaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
+    double astreaLossRate=0.0;      // The average loss rate of packets over the last interval
+    double astreaACKTotal=0.0;      // The number of valid acknowledgements over the last interval
+    double astreaIntervalDuration=0.0;  // The simtime elapsed over the last interval
+    double astreaSRTT=0.0;          // The smoothed RTT of (all?) packets so far
+    double astreaCwnd=0.0;          // The current congestion window (don't really need a new variable here, this is just useful for reference. Just use conn->snd_cwnd)
+    double astreaMaxThroughput=.000001; // The maximum delivery rate so far
+    double astreaMinDelay=9999;      // The minimum packet delay so far. Initialize to large value so the minimum is guaranteed to update.
+    double astreaPaceRate=1;        // Bytes sent per second. Usually smaller than cwnd.
+    double astreaDelayMetric=1;     // A measure of how close the currenty delay is to optimal. Will be 1 as long as the delay is within the forgiveness window.
 
-    // Orca helper variables (mostly used to facilitate computing the observations)
+    // Astrea helper variables (mostly used to facilitate computing the observations)
     simtime_t lastIntervalTime = 0.0;
     double last_snd_max = 0.0; // Whatever value state->snd_max returned last interval. The TOTAL so far; NOT what was sent DURING the last interval.
     uint32_t last_snd_una = 0;  // Whatever the oldest reported unACK'd byte was at the last monitor interval
@@ -111,7 +110,7 @@ public: // General use
     double maxCwnd=1.0; // The max cwnd observed in an interval
     double maxACKTotal=1.0; // The max ACK total observed in an interval
     double retransmissionRate; // The most recent measurement of bytes retransmitted.
-    bool first_slowstart_complete = false; // Do not take orca actions until the first slow start phase has completed. This allows the initial state (max througphut and min delay) to form naturally and prevents deadlocks.
+    bool first_slowstart_complete = false; // Do not take astrea actions until the first slow start phase has completed. This allows the initial state (max througphut and min delay) to form naturally and prevents deadlocks.
   };
 #endif
 #endif

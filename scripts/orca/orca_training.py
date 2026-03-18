@@ -57,7 +57,7 @@ class OmnetGymApiEnv(gym.Env):
                       0,                            # srtt
                       0                             # Delay metric
                       ], dtype=np.float32), 10)
-        self.obs_max = np.tile(np.array(
+        self.obs_max = np.tile(np.array(   
                      [1,                            # Throughput
                       10,                           # Pacerate
                       10,                           # Lossrate
@@ -110,7 +110,7 @@ class OmnetGymApiEnv(gym.Env):
             fout.write(ini_string)
         
         # Start a new simulation runner on the modified ini file
-        self.runner.initialise(original_ini_file + f".worker{os.getpid()}")
+        self.runner.initialise(original_ini_file + f".worker{os.getpid()}", "General")
         obs = self.runner.reset()
         obs = obs['Orca']
         self.obs_history.extend(obs)
@@ -191,7 +191,7 @@ if __name__ == '__main__':
     bottleneck_bandwidth_range = (6, 6)            
     minimum_rtt_range = (5, 5)
     bottleneck_buffer_range = (5280000, 5280000) 
-    load_from_checkpoint = True
+    load_from_checkpoint = False
     checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.0/SAC_Orca_2026-03-13_14-42-05b6jzob3t/checkpoints/checkpoint_107"
     steps_to_train = 5000000
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/configs/orca/orca.ini",
