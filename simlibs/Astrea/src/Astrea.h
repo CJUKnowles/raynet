@@ -56,6 +56,15 @@ public: // General use
       // if (signalID == pacedConn->retransmissionRateSignal) {
       //   retransmissionRate = value/8.0; // Retransmiitted bytes/s this interval
       // } 
+      const char *signalName = inet::tcp::Tcp::getSignalName(signalID);
+
+      // TODO: Check if this signal is meant for this agent or not
+      if (strcmp(signalName, "globalStateResponse") == 0) {
+        cout << "Received a globalStateResponse from the Observer" << endl;
+        this->globalThroughput = value;
+      } else {
+        cout << "Received the wrong signal" << endl;
+      }
     }
 
     // TcpCubic Overrides (These are mostly unchanged, and just used to gather statistic or disable automatic pacing)
@@ -111,6 +120,12 @@ public: // General use
     double maxACKTotal=1.0; // The max ACK total observed in an interval
     double retransmissionRate; // The most recent measurement of bytes retransmitted.
     bool first_slowstart_complete = false; // Do not take astrea actions until the first slow start phase has completed. This allows the initial state (max througphut and min delay) to form naturally and prevents deadlocks.
+  
+    simsignal_t registerAstreaAgentSig = owner->registerSignal("registerAstreaAgent");
+    simsignal_t astreaStateReportSig = owner->registerSignal("astreaStateReport");
+    simsignal_t globalStateRequestSig = owner->registerSignal("globalStateRequest");
+
+    double globalThroughput = 0; // placeholder
   };
 #endif
 #endif

@@ -134,7 +134,10 @@ class OmnetGymApiEnv(gym.Env):
         """
         # Forward the action (provided by RLlib) to OMNeT++ (and eventually our RLAgent Orca), and retrieve the RLAgent's reported result
         actions = actions.item() # TODO: Make sure this is right. Your types and shapes are a bit sketchy atm
-        action = {'Orca': actions}               
+        action = {'Orca': actions}              
+        print("reformatted action: ")
+        print(action)
+        print(type(action))  
         obs, rewards, terminateds, info_ = self.runner.step(action)
         self.obs_history.extend(obs['Orca'])
         

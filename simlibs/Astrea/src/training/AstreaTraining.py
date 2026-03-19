@@ -1,9 +1,8 @@
 
 import sys, os
 from ray.runtime_env import RuntimeEnv
-from build.omnetbind import OmnetGymApi
 import gymnasium as gym
-from gymnasium import spaces
+from gymnasium import spaces, logger
 import numpy as np
 import math
 from ray.tune.registry import register_env
@@ -16,27 +15,45 @@ from ray.air import CheckpointConfig
 import random
 import math
 from ray.rllib.algorithms.ppo.ppo import PPOConfig
-from ray.rllib.algorithms.sac.sac import SACConfig
-from ray.rllib.algorithms.sac.sac import SAC
 import os
 import time
 from random import randint
 from ray.tune.analysis import ExperimentAnalysis
 import GPUtil
-from collections import deque
+from collections import deque, defaultdict
+from ray.rllib.env.multi_agent_env import MultiAgentEnv
 
-
-class OmnetGymApiEnv(gym.Env):
+class OmnetGymApiEnv(MultiAgentEnv):
+    
+    # def get_observation_space(self, agent_id):
+    #     if agent_id.startswith("Astrea"):
+    #         return spaces.Box(
+    #             low=self.obs_min, 
+    #             high=self.obs_max,
+    #             dtype=np.float32) # A 4-dimensional array, each feature is a float value with its own bounds
+    #     else:
+    #         raise ValueError(f"bad agent id: {agent_id}!")
+    
+    # def get_action_space(self, agent_id):
+    #     print("HI HI HELLO HI")
+    #     if agent_id.startswith("Astrea"):
+    #         return gym.spaces.Box(low=np.array(-2.0, dtype=np.float32), high=np.array(2.0, dtype=np.float32), dtype=np.float32)
+    #     else:
+    #         raise ValueError(f"bad agent id: {agent_id}!")
+    
     def __init__(self,env_config):
         """
         Initialize the training environment configuration
         - This mostly involves setting spcaes (bounds, shapes, types) for actions and observations.
         - These bounds are needed for RL algorithms provided by RLlib- They limit the problem space and are also used for normalization.
         """
-        #self.spec = gym.envs.registration.EnvSpec(id="OmnetppEnv", entry_point=self.__init__,max_episode_steps=400)
+        sys.path.insert(0, os.path.join(os.getenv('HOME'), "raynet", "build"))
+        from omnetbind import OmnetGymApi
         self.runner = OmnetGymApi()
+        
         self.env_config = env_config
         self.step_count = 0 # just for debugging
+        self.stacking = self.env_config["stacking"]
         self.random_seed = os.getpid() # Ensures each ray worker generates different parameters
         random.seed(self.random_seed)
         # Initialize env parameters to some reasonable defaults (these should be quickly overwritten in reset())
@@ -44,35 +61,35 @@ class OmnetGymApiEnv(gym.Env):
         self.base_rtt = self.env_config["minimum_rtt_range"][1]
         self.buffer_size = self.env_config["bottleneck_buffer_range"][0]
         self.max_steps_range = self.env_config["max_steps_range"][1]
-
         self.has_reset = False
-
-        # Define the action space (possible values for actions)
-        self.action_space = spaces.Box(low=-2, high=.8, shape=(1,), dtype=np.float32) # Orca: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
-
-
-        # Define the observation space (expected values/types for each observation feature)
+        
+        self.obs_size = 5   # How many values are in a given obs
         self.obs_min = np.tile(np.array(
                      [0,                            # Throughput
                       0,                            # number of acks
                       0,                            # Interval duration
                       0,                            # srtt
                       0                             # Delay metric
-                      ], dtype=np.float32), 10)
+                      ], dtype=np.float32), self.stacking)
         self.obs_max = np.tile(np.array(
-                     [1,                            # Throughput
-                      10,                           # Number of ACKs
-                      1,                            # Interval duration
-                      1,                            # srtt
-                      1,                            # Delay metric
-                      ], dtype=np.float32), 10)
-        self.observation_space = spaces.Box(
-            low=self.obs_min, 
-            high=self.obs_max, 
-            dtype=np.float32) # A 4-dimensional array, each feature is a float value with its own bounds
+                    [1,                            # Throughput
+                    10,                           # Number of ACKs
+                    1,                            # Interval duration
+                    1,                            # srtt
+                    1,                            # Delay metric
+                    ], dtype=np.float32), self.stacking)
         
-        # Create empty observation history deque
-        self.obs_history = deque(np.zeros(len(self.obs_min)),maxlen=len(self.obs_min))
+        
+        obs_spaces = {}
+        action_spaces = {}
+        self.possible_agents = []
+        for i in range(100):
+            self.possible_agents.append(f"`Astrea`{i}")
+            obs_spaces[f"Astrea{i}"] = spaces.Box(low=self.obs_min, high=self.obs_max, dtype=np.float32)
+            action_spaces[f"Astrea{i}"] = spaces.Box(low=-2.0, high=2.0, dtype=np.float32)
+        
+        self.observation_space = spaces.Dict(obs_spaces)
+        self.action_space = spaces.Dict(action_spaces)
         
        
     def reset(self, *, seed=None, options=None):
@@ -80,7 +97,12 @@ class OmnetGymApiEnv(gym.Env):
             return
         self.has_reset = True
         # Reset the observation history to empty
-        self.obs_history = deque(np.zeros(len(self.obs_min)),maxlen=len(self.obs_min))
+        self.obs_history = defaultdict(
+            lambda: deque(
+                [np.zeros(self.obs_size, dtype=np.float32) for _ in range(self.stacking)],
+                maxlen=self.stacking
+            )
+        )
         
         # Grab environment parameter ranges
         bottleneck_bw_range = self.env_config["bottleneck_bw_range"]
@@ -116,11 +138,12 @@ class OmnetGymApiEnv(gym.Env):
         # Start a new simulation runner on the modified ini file
         self.runner.initialise(ini_variants_base + f".worker{os.getpid()}", "General")
         obs = self.runner.reset()
-        obs = obs['Astrea']
-        self.obs_history.extend(obs)
-        return_obs_history = np.asarray(list(self.obs_history),dtype=np.float32)
-        #TODO: return history of observations, not just this observation. Compile a self.obs_history and return that instead.
-        return  return_obs_history, {}
+        
+        # Append the most recent observations to their agents' histories. Store the updated histories in obs and return.
+        for agent, agent_obs in obs.items():
+            self.obs_history[agent].append(np.asarray(agent_obs, dtype=np.float32))
+            obs[agent] = np.concatenate(self.obs_history[agent])
+        return  obs, {}
 
     def step(self, actions):
         """
@@ -129,33 +152,24 @@ class OmnetGymApiEnv(gym.Env):
         - Actions/observations exist in a dictionary to support multi-agent environments.
         - This experiment only support single-agent environments, so observations/rewards are immediately extracted from the dictionary
         """
-        # Forward the action (provided by RLlib) to OMNeT++ (and eventually our RLAgent Orca), and retrieve the RLAgent's reported result
-        actions = actions.item() # TODO: Make sure this is right. Your types and shapes are a bit sketchy atm
-        action = {'Astrea': actions}               
-        obs, rewards, terminateds, info_ = self.runner.step(action)
-        self.obs_history.extend(obs['Astrea'])
+        # Convert the policy's action dict(str:np.float32) to dict(str:float) so omnet can use it
+        for agent_id, action in actions.items():
+            actions[agent_id] = float(np.asarray(action).item())
+        obs, rewards, terminateds, info_ = self.runner.step(actions)
+    
+        # Append the most recent observations to their agents' histories. Store the updated histories in obs
+        for agent, agent_obs in obs.items():
+            self.obs_history[agent].append(np.asarray(agent_obs, dtype=np.float32))
+            obs[agent] = np.concatenate(self.obs_history[agent])
         
-        # Extra the relevant obs/rewards from the environment info (only the info relevent to our single-agent)
-        obs = np.asarray(list(obs['Astrea']), dtype=np.float32)    # also formats the RLAgent's obs so RLlib can understand it
-        return_obs_history = np.asarray(list(self.obs_history),dtype=np.float32)
-        #TODO: Append this to self.obs_history and return that instead. 
-        reward = rewards['Astrea']                               # Get the reward our RLAgent is reporting
-        sim_truncated = False
-  
-        # Debug stuff
-        # print("\t\t\tSTEP: ")
-        # print("\t\t\tobs: ", obs)
-        # print("\t\t\trewards: ", rewards)
-        # print("\t\t\tterminateds: ", terminateds)
-        # print("\t\t\tinfo_: ", info_)
-        if math.isnan(reward):
-            print("Warning: NaN reward returned!")
         # Check if this training episode is complete
-        if terminateds['Astrea']:      # TERMINATED - The RLAgent has reported itself as done (within the context of the MDP.) End the simulation.
+        if terminateds['__all__']:      # TERMINATED - The RLAgent has reported itself as done (within the context of the MDP.) End the simulation.
             self.runner.shutdown()
             self.runner.cleanup()
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
             sim_truncated = True
+        else:
+            sim_truncated = False    
             
         printFreq = 1
         if self.step_count % printFreq == -1:
@@ -171,13 +185,15 @@ class OmnetGymApiEnv(gym.Env):
             print(f"\tRewards:")
             print(f"\t\tREWARD: {reward:.5f}                  \t(Raw, per interval)")
         self.step_count += 1
-        # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
         
-        return  return_obs_history, reward, terminateds['Astrea'], sim_truncated, {}
+        # TODO: Implement trucation. This was simple with single-agent, harder with multiple. Maybe use a copy of terminateds and replace the values.
+        # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
+        return  obs, rewards, terminateds, terminateds, {}
         
 # Generates the OmnetGymApiEnv for the calling ray worker
 def omnetgymapienv_creator(env_config):
-    return OmnetGymApiEnv(env_config)  # return an env instance
+    env = OmnetGymApiEnv(env_config)
+    return env  # return an env instance
 
 
 
@@ -196,32 +212,79 @@ if __name__ == '__main__':
     load_from_checkpoint = False
     checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_OmnetGymApiEnv_2026-03-10_01-19-546lihpmj1/checkpoints/checkpoint_22"
     steps_to_train = 20000000
+    stacking = 3
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Astrea/src/training/AstreaTraining.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
                   "minimum_rtt_range": minimum_rtt_range,
                   "bottleneck_buffer_range": bottleneck_buffer_range,
-                  "max_steps_range": max_steps_range}
+                  "max_steps_range": max_steps_range,
+                  "stacking": stacking} # how many observations to keep in an obs_history
     random.seed(seed)
     np.random.seed(seed)
     gpus = GPUtil.getGPUs()
     print("GPUs Available:", gpus)
-    ray.init(num_cpus=16, num_gpus=len(gpus))
+    
+    obs_min = np.tile(np.array(
+                     [0,                            # Throughput
+                      0,                            # number of acks
+                      0,                            # Interval duration
+                      0,                            # srtt
+                      0                             # Delay metric
+                      ], dtype=np.float32), stacking)
+    obs_max = np.tile(np.array(
+                [1,                            # Throughput
+                10,                           # Number of ACKs
+                1,                            # Interval duration
+                1,                            # srtt
+                1,                            # Delay metric
+                ], dtype=np.float32), stacking)
+        
+    #dummy_env = omnetgymapienv_creator(env_config)
     config = (
-            SACConfig()
+            PPOConfig()
             .resources(num_gpus=len(gpus))
             .env_runners(num_env_runners=num_workers) #, rollout_fragment_length=1000
             .learners(num_learners=1, num_gpus_per_learner=len(gpus), num_cpus_per_learner=1)
-            .environment(env_name, env_config=env_config) # "OmnetGymApiEnv
-            .training(store_buffer_in_checkpoints=True)
+            .environment(env_name, env_config=env_config, disable_env_checking=True) # "OmnetGymApiEnv
+            .multi_agent(
+                policies={
+                    "shared_policy": (
+                        None,
+                        spaces.Box(low=obs_min, high=obs_max, dtype=np.float32),    # Obs space
+                        spaces.Box(low=-2, high=.8, shape=(1,), dtype=np.float32),  # action space
+                        {}
+                    ),
+                },
+                policy_mapping_fn=lambda agent_id, episode, **kwargs: "shared_policy"
+            )
             #.training(optimizer={"foreach": False, "capturable": True})
             ##.evaluation(evaluation_interval=1000, evaluation_duration_unit="timesteps")
             ##.fault_tolerance(restart_failed_sub_environments=True)
             #.training(training_intensity=1000)  # num_steps_sampled_before_learning_starts=0 training_intensity=1000
             # .build_algo()
             )
-
-    algo = config.build_algo(
-    )
+    print(config.is_multi_agent)
+    
+    algo = config.build_algo()
+    
+    
+    # config = {
+    #     "env": env_name,
+    #     "env_config": env_config,
+    #     "evaluation_config": {
+    #         "explore": False
+    #     },
+    #     "num_workers": num_workers,
+    #     "multiagent": {
+    #         "count_steps_by": "agent_steps"
+    #     }
+    # }
+    # ray.init(num_cpus=16, num_gpus=len(gpus))
+    
+    # cls = get_trainable_cls("SAC")
+    # env = omnetgymapienv_creator(config['env_config'])
+    # agent = cls(env=env_name, config=config)
+    
     
     # Convert betas? (solution found online, fixes a crash when loading a checkpoint)
     def betas_tensor_to_float(learner):
@@ -232,7 +295,6 @@ if __name__ == '__main__':
         #algo.load_checkpoint(os.getenv('HOME') + "/ray_results/JAMESTEST")
         algo.restore(checkpoint_load_dir)
         algo.learner_group.foreach_learner(betas_tensor_to_float)
-    
     
     pprint.pprint(algo.config)
     # Main training loop!

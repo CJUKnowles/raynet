@@ -10,6 +10,7 @@ import RLComponents.Broker;
 import Astrea.AstreaTraining;
 import Astrea.Astrea;
 import Astrea.AstreaTcp;
+import Astrea.training.Observer;
 
 
 network AstreaTraining
@@ -40,6 +41,7 @@ network AstreaTraining
         router1: Router;
         router2: Router;
         broker: Broker;
+        observer: Observer;
     connections:
         // Left
         for i=0..sizeof(client)-1 {

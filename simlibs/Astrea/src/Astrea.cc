@@ -1,4 +1,5 @@
 #include "omnetpp/ccomponent.h"
+#include "omnetpp/cobject.h"
 #include "omnetpp/simtime_t.h"
 #include "transportlayer/tcp/TcpPacedConnection.h"
 #include "inet/transportlayer/tcp/flavours/TcpNoCongestionControl.h"
@@ -9,6 +10,7 @@
 #include "Astrea.h"
 #include "typedefs.h"
 #include <inet/common/INETDefs.h>
+#include "training/Observer.h"
 
 using namespace inet::tcp;
 using namespace inet;
@@ -40,19 +42,22 @@ void Astrea::initialize() {
 
     // provide the RLInterface with a cComponent API (to use signaling functionality)
     setOwner((cComponent*) conn->getTcpMain());
-    
+    conn -> subscribe("globalStateResponse", (cListener*) this);
+
     // Initalize parent classes
     // RLInterface::initialize(_stateSize, _maxObsCount); // Deprecated initialization function. Delete this later.
     RLInterface::initialise();
     TcpNoCongestionControl::initialize();
-
+    cout << "ID: " << std::to_string(owner->getId()) << endl;
     // Set the RL ID of this component (for use by the training script). Ensure this is unique for multi-agent environments (perhaps use the IP of the host?)
-    std::string s("Astrea");
+    std::string s("Astrea" + std::to_string(owner->getId()));
+    //std::string s("Astrea12345");
     setStringId(s);
     
     // Register this agent with RayNet
     cObject* simtime = new cSimTime(this->conn->getTcpMain()->par("monitorIntervalDuration"));
-    owner->emit(this->registerSig, stringId.c_str(), simtime); 
+    owner->emit(this->registerSig, stringId.c_str(), simtime);
+    owner->emit(this->registerAstreaAgentSig, stringId.c_str(), simtime);
     scheduleNextStep(this->initialStepLength);
     // Schedule the first RL step
     // RLStep = new cMessage("RLSTEP");
@@ -65,11 +70,11 @@ void Astrea::established(bool active) {
     if (debug) cout << "\tAstrea: established()" << endl;
     TcpNoCongestionControl::established(active);
     //dynamic_cast<TcpPacedConnection*>(conn)->subscribe(dynamic_cast<TcpPacedConnection*>(conn)->retransmissionRateSignal, (cListener*) this);
-    if (active) {
-        std::string s("Astrea");
-        setStringId(s);
-        this->isActive = active;
-    }
+    // if (active) {
+    //     std::string s("Astrea");
+    //     setStringId(s);
+    //     this->isActive = active;
+    // }
     throughputSignal = conn->registerSignal("throughput");
     srttSignal = conn->registerSignal("srtt");
     cwndSignal = conn->registerSignal("cwnd");
@@ -133,7 +138,7 @@ std::optional<ObsType> Astrea::computeObservation(){
     if(debug) {
         cout << "-" << endl;
         cout << "-" << endl;
-        cout << "\tState:" << endl;
+        cout << "\t" << stringId << " State:" << endl;
             cout << "\t\tsnd_una: " << state->snd_una << endl;
             cout << "\t\tdelta_snd_una: " << delta_snd_una << endl;
             cout << "\t\tcwnd: " << state->snd_cwnd << endl;
@@ -154,6 +159,11 @@ std::optional<ObsType> Astrea::computeObservation(){
     conn->emit(cwndSignal, state->snd_cwnd);
     conn->emit(intervalDurationSignal, this->astreaIntervalDuration);
 
+    // Send data to Observer before returning
+    cObject* localState = new LocalState(this->astreaThroughput / this->astreaMaxThroughput, this->astreaIntervalDuration);
+    conn->emit(this->astreaStateReportSig, localState, new cString(stringId));
+
+    //owner->emit(this->registerAstreaAgentSig, stringId.c_str(), simtime);
     scheduleNextStep(state->srtt.dbl());
     return ObsType{this->astreaThroughput / this->astreaMaxThroughput,     // Normalized throughput
             this->astreaACKTotal /  state->snd_cwnd,              // Normalized ACKs count (maybe use tcp_cwnd? ask aiden)     
@@ -176,7 +186,14 @@ RewardType Astrea::computeReward(){
     if (debug) cout << "\tAstrea: computeReward()" << endl;
     double reward = this->astreaThroughput/this->astreaMaxThroughput*this->astreaDelayMetric;
     if (debug) cout << "\t" << reward << endl;
-    return reward;
+
+    // Emit a placeholder state request signal
+    LocalState* dummy = new LocalState(0,0);
+    conn->emit(this->globalStateRequestSig, dummy, new cString(stringId));
+    
+    cout << "Global throughput: " << this->globalThroughput << endl;
+    // The output of globalTSateRequestSig is currently globalThroughput, as a placeholder
+    return this->globalThroughput;
     //return(this->astreaThroughput/state->srtt);
 }
 
