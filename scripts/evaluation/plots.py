@@ -167,15 +167,15 @@ def plot_summary(experiment:str, protocols:list, metrics:list=None, results_dir:
     If no metrics are provided, this function will plot anything it can find, and combine/match by metric name.
     """    
     if not results_dir:
-        results_dir = os.getenv('HOME') + "/raynet/_experiments/experiment1/results"
+        results_dir = os.getenv('HOME') + "/raynet/_experiments/experiment2/results"
         
     for metric in metrics:
         print()
         
     
 if __name__ == "__main__":
-    # results_dir = os.getenv('HOME') + "/raynet/_experiments/experiment1/results"
-    # exp = "Dumbbell"
+    # results_dir = os.getenv('HOME') + "/raynet/_experiments/experiment2/results"
+    # exp = "Responsiveness"
     # protocol = "Orca"
     # generate_csvs(results_dir, exp, protocol, protocol_name="Orca-1.1", do_dumb_plots=True)
     
@@ -185,7 +185,7 @@ if __name__ == "__main__":
     
 
     experiments = ["Dumbbell"]
-    metrics = ["throughput", "srtt", "pacerate", "intervalDuration", "cwnd"]
+    metrics = ["throughput", "srtt", "pacerate", "intervalDuration", "cwnd", "action"]
     module_types = ["client", "server"]
     for experiment in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == experiment]

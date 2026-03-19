@@ -2,6 +2,7 @@ package topologies;
 
 @namespace(inet);
 
+import inet.common.scenario.ScenarioManager;
 import inet.common.misc.ThruputMeteringChannel;
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import inet.node.inet.Router;
@@ -34,6 +35,7 @@ network Dumbbell
     submodules:
     
         configurator: Ipv4NetworkConfigurator;
+        scenarioManager: ScenarioManager;
         
         client[numberOfFlows]: StandardHost;
         server[numberOfFlows]: StandardHost;
@@ -41,6 +43,9 @@ network Dumbbell
         router2: Router;
         broker: Broker;
     connections:
+        // Bottleneck
+        router1.pppg++ <--> bottleneck: bottleneckLine <--> router2.pppg++;
+        
         // Left
         for i=0..sizeof(client)-1 {
             client[i].pppg++ <--> standardLine <--> router1.pppg++;
@@ -51,6 +56,5 @@ network Dumbbell
             router2.pppg++ <--> standardLine <--> server[n].pppg++;
         }
         
-        // Bottleneck
-        router1.pppg++ <--> bottleneckLine <--> router2.pppg++;
+
 }

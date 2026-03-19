@@ -204,7 +204,7 @@ if __name__ == '__main__':
     load_from_checkpoint = True
     checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_Orca-1.1_2026-03-18_01-32-37c7bgae2s/checkpoints/checkpoint_13"
     steps_to_train = 1000000
-    env_config = {"iniPath": os.getenv('HOME') + "/raynet/_experiments/experiment1/experiment1.ini",
+    env_config = {"iniPath": os.getenv('HOME') + "/raynet/_experiments/experiment2/experiment2.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
                   "minimum_rtt_range": minimum_rtt_range, 
                   "bottleneck_buffer_range": bottleneck_buffer_range,
