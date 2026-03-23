@@ -16,7 +16,7 @@ simlibs/*/src/Makefile
 
 .cache
 *.venv
-*.csv
+resultsoutput.csv
 Release
 cart.exe
 build/
