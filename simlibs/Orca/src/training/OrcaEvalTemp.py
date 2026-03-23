@@ -207,14 +207,15 @@ if __name__ == '__main__':
     # minimum_rtt_range = (5, 5)
     # bottleneck_buffer_range = (5280000, 5280000) 
     
-    bottleneck_bandwidth_range = (6, 6)            # Orca: 6Mbps-192Mbps
+    bottleneck_bandwidth_range = (5, 5)            # Orca: 6Mbps-192Mbps
     minimum_rtt_range = (5, 5)                      # Orca: 4ms-400ms
-    bottleneck_buffer_range = (5280000, 5280000)    # Orca: 3KB-96MB, expressed in terms of bits
+    #bottleneck_buffer_range = (5280000, 5280000)    # Orca: 3KB-96MB, expressed in terms of bits
+    bottleneck_buffer_range = (250000, 250000)    # Orca: 3KB-96MB, expressed in terms of bits
     
     load_from_checkpoint = True
     checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.2/SAC_Orca-1.2_2026-03-22_03-44-274aq8j9dl/checkpoints/checkpoint_23"
     steps_to_train = 800000
-    env_config = {"iniPath": os.getenv('HOME') + "/raynet/_experiments/double-flow-dumbbell/double-flow-dumbbell.ini",
+    env_config = {"iniPath": os.getenv('HOME') + "/raynet/_experiments/responsiveness/responsiveness.ini",
     #env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Orca/src/training/OrcaTraining.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
                   "minimum_rtt_range": minimum_rtt_range, 

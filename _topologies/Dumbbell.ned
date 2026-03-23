@@ -24,7 +24,7 @@ network Dumbbell
             datarate = parent.bottleneckDatarate; 
         }
         
-        channel standardLine extends DatarateChannel
+        channel standardLine extends ThruputMeteringChannel
         {
             delay = 0ms;
             datarate = 1000Gbps;

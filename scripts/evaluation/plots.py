@@ -67,17 +67,19 @@ def dumb_plot(csv_file:str, output_name:str="plotted"):
     plt.savefig(pdf_path)
 
 
-def generate_csvs(filepath:str, exp, protocol, do_dumb_plots=False, protocol_name=None):
+def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickname=None, do_dumb_plots=False):
     """
     Uses the .vec file in the included results directory and produces a series of metric CSVs.
     The exp and protocol parameters are used to locate the correct vec file and to organize the output directories.
     do_dumb_plots=True will automatically produce a simple plot.pdf for each metric, for quick debugging.
     """
     argNum = 0
-    vectorsToExtract = ["throughput", "srtt", "pacerate", "intervalDuration", "cwnd", "action"]
+    vectorsToExtract = ["throughput", "srtt", "paceRate", "intervalDuration", "cwnd", "action", "queueLength", "queueBitLength", "incomingDataRate", "outgoingDataRate"]
     extracted = False
-    if not protocol_name:
-        protocol_name = protocol
+    if not protocol_nickname:
+        protocol_nickname = protocol
+    if not exp_nickname:
+        exp_nickname = filepath.rsplit("/", 1)[1]
     # for arg in sys.argv[1:]:
     #     if(argNum == 0):
     #         filePath = str(arg)
@@ -118,9 +120,9 @@ def generate_csvs(filepath:str, exp, protocol, do_dumb_plots=False, protocol_nam
                 finallist = pd.DataFrame({'time': time, str(vec): val})
                 subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp + "/summary", shell=True).communicate(timeout=40)
                 subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp + "/csvs", shell=True).communicate(timeout=40) 
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp + "/csvs/" + protocol_name, shell=True).communicate(timeout=40)
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp + "/csvs/" + protocol_name + "/" + str(modName), shell=True).communicate(timeout=40)
-                csv_path = os.getenv('HOME') + '/raynet/results/'+ exp +'/csvs/' + protocol_name + "/" + str(modName) + "/" + vec + '.csv'
+                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp + "/csvs/" + protocol_nickname, shell=True).communicate(timeout=40)
+                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp + "/csvs/" + protocol_nickname + "/" + str(modName), shell=True).communicate(timeout=40)
+                csv_path = os.getenv('HOME') + '/raynet/results/'+ exp +'/csvs/' + protocol_nickname + "/" + str(modName) + "/" + vec + '.csv'
                 finallist.to_csv(csv_path, index=False)
                 extracted = True
                 if (do_dumb_plots): 
@@ -143,7 +145,7 @@ def create_csv_dict(results_dir:str=None):
                 
                 dir_names = root.split(os.sep)          # Split by "/" or "\\" depending on platform
                 module = dir_names[-1].split('.', 1)[1]   # Module name, excluding the network name prefix
-                module_type = "client" if "client" in module else "server" if "server" in module else "other"
+                module_type = "client" if "client" in module else "server" if "server" in module else "queue" if "queue" in module else "other"
                 protocol = dir_names[-2]
                 experiment = dir_names[-4]
                 
@@ -174,19 +176,24 @@ def plot_summary(experiment:str, protocols:list, metrics:list=None, results_dir:
         
     
 if __name__ == "__main__":
-    results_dir = os.getenv('HOME') + "/raynet/_experiments/double-flow-dumbbell/ini_variants/results"
-    exp = "double-flow-dumbbell"
+    exp = "responsiveness"
     protocol = "Orca"
-    generate_csvs(results_dir, exp, protocol, protocol_name="Orca-1.2", do_dumb_plots=True)
+    protocol_nickname = "Orca"
     
-    metric_csvs = create_csv_dict()        # dataframe containing [experiment, protocol, module, metric, csv_path] for easy sorting
+    
+    # Generate output.csv and individual vector csvs for all tracked vectors of agiven experiment
+    exp_results_dir = os.getenv('HOME') + f"/raynet/_experiments/{exp}/ini_variants/results"
+    generate_exp_csvs(exp_results_dir, protocol, protocol_nickname=protocol_nickname, do_dumb_plots=True)
+    
+    
+    metric_csvs = create_csv_dict()        # dataframe containing [experiment, protocol, module, metric, csv_path] for easy access
     metric_csvs = metric_csvs[metric_csvs["module"].str.contains("0")]          # Only grab data from primary flows
     #metric_csvs = metric_csvs[(metric_csvs["module_type"] == "client")]       # Only grab data from clients
     
-
-    experiments = ["double-flow-dumbbell"]
-    metrics = ["throughput", "srtt", "pacerate", "intervalDuration", "cwnd", "action"]
-    module_types = ["client", "server"]
+    # Make Plots
+    experiments = ["responsiveness"]
+    metrics = ["throughput", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "incomingDataRate", "outgoingDataRate"]
+    module_types = ["client", "server", "queue"]
     for experiment in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == experiment]
         for module_type in module_types:
