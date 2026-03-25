@@ -79,17 +79,7 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
     if not protocol_nickname:
         protocol_nickname = protocol
     if not exp_nickname:
-        exp_nickname = filepath.rsplit("/", 1)[1]
-    # for arg in sys.argv[1:]:
-    #     if(argNum == 0):
-    #         filePath = str(arg)
-    #     elif(argNum == 1):
-    #         exp = str(arg)
-    #     elif(argNum == 2):
-    #         protocol = str(arg) #Protocol Name
-    #     elif(argNum == 3):
-    #         run = int(arg) #Run
-    #     argNum = argNum + 1
+        exp_nickname = filepath.rsplit("/", 3)[1]
     
     vec_file = filepath + f"/{protocol}-#0.vec"
     out_path = filepath + "output.csv"
@@ -118,11 +108,11 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
                 modName = re.sub(r'(conn)-\d+', r'\1', modName)
                 
                 finallist = pd.DataFrame({'time': time, str(vec): val})
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp + "/summary", shell=True).communicate(timeout=40)
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp + "/csvs", shell=True).communicate(timeout=40) 
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp + "/csvs/" + protocol_nickname, shell=True).communicate(timeout=40)
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp + "/csvs/" + protocol_nickname + "/" + str(modName), shell=True).communicate(timeout=40)
-                csv_path = os.getenv('HOME') + '/raynet/results/'+ exp +'/csvs/' + protocol_nickname + "/" + str(modName) + "/" + vec + '.csv'
+                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/summary", shell=True).communicate(timeout=40)
+                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/csvs", shell=True).communicate(timeout=40) 
+                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/csvs/" + protocol_nickname, shell=True).communicate(timeout=40)
+                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/csvs/" + protocol_nickname + "/" + str(modName), shell=True).communicate(timeout=40)
+                csv_path = os.getenv('HOME') + '/raynet/results/'+ exp_nickname +'/csvs/' + protocol_nickname + "/" + str(modName) + "/" + vec + '.csv'
                 finallist.to_csv(csv_path, index=False)
                 extracted = True
                 if (do_dumb_plots): 
@@ -176,14 +166,12 @@ def plot_summary(experiment:str, protocols:list, metrics:list=None, results_dir:
         
     
 if __name__ == "__main__":
-    exp = "responsiveness"
-    protocol = "Orca"
-    protocol_nickname = "Orca"
-    
-    
-    # Generate output.csv and individual vector csvs for all tracked vectors of agiven experiment
-    exp_results_dir = os.getenv('HOME') + f"/raynet/_experiments/{exp}/ini_variants/results"
-    generate_exp_csvs(exp_results_dir, protocol, protocol_nickname=protocol_nickname, do_dumb_plots=True)
+    # expe = "single-flow"
+    # protocols = ["Cubic", "Orca"]
+    # for protocol in protocols:
+    #     # Generate output.csv and individual vector csvs for all tracked vectors of agiven experiment
+    #     exp_results_dir = os.getenv('HOME') + f"/raynet/_experiments/{expe}/ini_variants/results"
+    #     generate_exp_csvs(exp_results_dir, protocol, do_dumb_plots=True)
     
     
     metric_csvs = create_csv_dict()        # dataframe containing [experiment, protocol, module, metric, csv_path] for easy access
@@ -191,8 +179,8 @@ if __name__ == "__main__":
     #metric_csvs = metric_csvs[(metric_csvs["module_type"] == "client")]       # Only grab data from clients
     
     # Make Plots
-    experiments = ["responsiveness"]
-    metrics = ["throughput", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "incomingDataRate", "outgoingDataRate"]
+    experiments = ["single-flow"]
+    metrics = ["throughput", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "incomingDataRate", "outgoingDataRate", "queueBitLength"]
     module_types = ["client", "server", "queue"]
     for experiment in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == experiment]
@@ -200,6 +188,9 @@ if __name__ == "__main__":
             module_type_df = exp_df[exp_df["module_type"] == module_type]
             for metric in metrics:
                 metric_df = module_type_df[module_type_df["metric"] == metric]
+                if metric_df.empty:
+                    print("Dataframe is emtpy, continuing")
+                    continue
                 print(f"Plotting {metric} using: ")
                 print(tabulate(metric_df, headers='keys'))
                 
