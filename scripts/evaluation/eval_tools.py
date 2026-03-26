@@ -109,6 +109,8 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
                 
                 finallist = pd.DataFrame({'time': time, str(vec): val})
                 subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/summary", shell=True).communicate(timeout=40)
+                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/runs", shell=True).communicate(timeout=40)
+                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/runs/" + protocol_nickname, shell=True).communicate(timeout=40)
                 subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/csvs", shell=True).communicate(timeout=40) 
                 subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/csvs/" + protocol_nickname, shell=True).communicate(timeout=40)
                 subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/csvs/" + protocol_nickname + "/" + str(modName), shell=True).communicate(timeout=40)
@@ -166,12 +168,13 @@ def plot_summary(experiment:str, protocols:list, metrics:list=None, results_dir:
         
     
 if __name__ == "__main__":
-    # expe = "single-flow"
-    # protocols = ["Cubic", "Orca"]
-    # for protocol in protocols:
-    #     # Generate output.csv and individual vector csvs for all tracked vectors of agiven experiment
-    #     exp_results_dir = os.getenv('HOME') + f"/raynet/_experiments/{expe}/ini_variants/results"
-    #     generate_exp_csvs(exp_results_dir, protocol, do_dumb_plots=True)
+    experimentNames = ["double-flow-dumbbell", "single-flow", "responsiveness"]
+    protocols = ["Cubic", "Orca"]
+    for experimentName in experimentNames:
+        for protocol in protocols:
+            # Generate output.csv and individual vector csvs for all tracked vectors of agiven experiment
+            exp_results_dir = os.getenv('HOME') + f"/raynet/_experiments/{experimentName}/ini_variants/results"
+            generate_exp_csvs(exp_results_dir, protocol, do_dumb_plots=True)
     
     
     metric_csvs = create_csv_dict()        # dataframe containing [experiment, protocol, module, metric, csv_path] for easy access
@@ -179,8 +182,8 @@ if __name__ == "__main__":
     #metric_csvs = metric_csvs[(metric_csvs["module_type"] == "client")]       # Only grab data from clients
     
     # Make Plots
-    experiments = ["single-flow"]
-    metrics = ["throughput", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "incomingDataRate", "outgoingDataRate", "queueBitLength"]
+    experiments = ["single-flow", "double-flow-dumbbell", "responsiveness"]
+    metrics = ["throughput", "srtt", "pacerate","paceRate", "intervalDuration", "cwnd", "action", "incomingDataRate", "outgoingDataRate", "queueBitLength"]
     module_types = ["client", "server", "queue"]
     for experiment in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == experiment]
