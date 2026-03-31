@@ -6,6 +6,7 @@ Define_Module(Observer);
 // Called at start of simulation
 void Observer::initialize()
 {
+    this->globalState = new GlobalState();
     getSimulation()->getSystemModule()->subscribe("registerAstreaAgent", this);     // used to register Astrea agents
     getSimulation()->getSystemModule()->subscribe("unregisterAstreaAgent", this);   // used to unregister Astrea agents
     getSimulation()->getSystemModule()->subscribe("astreaStateReport", this);       // used to report a given agent's current state
@@ -67,38 +68,84 @@ void Observer::receiveSignal(cComponent *source, simsignal_t signalID, cObject *
         std::string id = ((cString*) obj)->str;
         LocalState* agentCurrentState = check_and_cast<LocalState*>(value);
         astreaAgents[id].addStateEntry(agentCurrentState);
+        this->globalState->needsUpdating = true; // Global state is no longer up-to-date. GlobalStateRequests will trigger it to update.
         
         // cout << "OBSERVER: Received state report from " << id << endl;
         return;
     } else if (strcmp(signalName, "globalStateRequest") == 0) {
-        // TODO: Emit a signal containg some global state metrics
-        // TODO: Move globalStateRequest to a function (or a more lightweight signal handler)
         std::string id = ((cString*) obj)->str;
         // cout << "OBSERVER: Received global state request from " << id << endl;
-        //GlobalState* globalState = new GlobalState();
-        emit(this->globalStateResponseSig, computeAverageThroughput(), obj); // Placeholder, send computed state back to the requester
+        if (globalState->needsUpdating) {
+            computeGlobalState();
+        }
+        emit(this->globalStateResponseSig, globalState->reward, obj); // Placeholder, send computed state back to the requester
         return;
     }
     EV_TRACE << "Signal received by Observer not recognised" << std::endl;
 }
 
-// Returns the average throughput, sampled from the most recent throughput report of each active agent.
-// TODO: Use some sort of weighing of the previous X entries, like the paper
-double Observer::computeAverageThroughput() {
-    double sum = 0.0;
-    int count = 0;
+// // Returns the average throughput, sampled from the most recent throughput report of each active agent.
+// // TODO: Use some sort of weighing of the previous X entries, like the paper
+// double Observer::computeAverageThroughput() {
+//     double sum = 0.0;
+//     int count = 0;
+
+//     for (auto& [agentId, stateHistory] : astreaAgents) {
+//         if (!stateHistory.history.empty()) {
+//             LocalState* latestState = stateHistory.history.front();
+//             sum += latestState->throughput;
+//             count++;
+//         }
+//     }
+
+//     if (count == 0) {
+//         return 0;
+//     }
+
+//     return sum/count;
+// }
+
+// Loop through all agents' most recent state reports to update the global state
+void Observer::computeGlobalState() {
+    globalState->reset();
+
+    double latencySum = 0;
+    double cwndSum = 0;
+    double lossSum = 0;
+
+    int numStates = 0;
 
     for (auto& [agentId, stateHistory] : astreaAgents) {
         if (!stateHistory.history.empty()) {
-            LocalState* latestState = stateHistory.history.front();
-            sum += latestState->throughput;
-            count++;
+            LocalState* localState = stateHistory.history.front(); // The most recent localState for the given agent
+            
+            double throughput = localState->throughput;
+            globalState->ovrThroughput += throughput;
+            globalState->minThroughput = std::min(globalState->minThroughput, throughput);
+            globalState->maxThroughput = std::max(globalState->maxThroughput, throughput);
+
+            double latency = localState->delay;
+            latencySum += latency;
+
+            double cwnd = localState->cwnd;
+            cwndSum += cwnd;
+            globalState->minCwnd = std::min(globalState->minCwnd, cwnd);
+            globalState->maxCwnd = std::max(globalState->maxCwnd, cwnd);
+
+            double loss = localState->lossRate;
+            lossSum += loss;
+
+            numStates++;
         }
     }
 
-    if (count == 0) {
-        return 0;
+    if (numStates > 0) {
+        globalState->avgLatency = latencySum/numStates;
+        globalState->avgCwnd = cwndSum/numStates;
+        globalState->lossRatio = lossSum/numStates;
     }
-    // cout << "Computed global throughput: " << sum/count << endl;
-    return sum/count; // TODO: Make the Astrea agent intercept this signal (or, please, make it a function call)
+
+    // TODO: Compute reward values like fairness
+    globalState->reward = globalState->ovrThroughput; // PLACEHOLDER!!!
+
 }

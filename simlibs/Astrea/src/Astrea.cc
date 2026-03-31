@@ -106,6 +106,9 @@ std::optional<ObsType> Astrea::computeObservation(){
         return std::nullopt;
     }
 
+    // Begin preparing a local state report to send to the Observer
+    LocalState* localState = new LocalState();
+
     // Initialize empty obs to populate as we go
     double obs[7] = {0,0,0,0,0,0,};
 
@@ -114,23 +117,30 @@ std::optional<ObsType> Astrea::computeObservation(){
     this->astreaMaxThroughput = std::max(this->astreaMaxThroughput, this->astreaThroughput);
     obs[0] = this->astreaThroughput / this->astreaMaxThroughput;
     obs[1] = this->astreaMaxThroughput;
+    localState->throughput = obs[0];
+    localState->maxThroughput = obs[1];
 
     // Latency: What is our RTT relative to the minimum observed
     this->astreaSRTT = state->srtt.dbl();
     this->astreaMinDelay = std::min(this->astreaMinDelay, this->astreaSRTT);
     obs[2] = state->srtt.dbl()/this->astreaMinDelay;
     obs[3] = this->astreaMinDelay;
+    localState->delay = obs[2];
+    localState->minDelay = obs[3];
 
     // CWND: How does our current cwnd compare to the observed BDP
     obs[4] = state->snd_cwnd/(this->astreaMaxThroughput*this->astreaMinDelay);
+    localState->cwnd = obs[4];
 
     // Lossrate: What percentage of bytes sent this interval were retransmissions
     this->astreaLossRate = delta_rexmit_count/this->astreaIntervalDuration;
     obs[5] = this->astreaLossRate/this->astreaMaxThroughput;
+    localState->lossRate = obs[5];
 
     // in-flight: How many bytes are currently sent but not ACKed
     double inflight = state->snd_max - state->snd_una;
     obs[6] = inflight/state->snd_cwnd;
+    localState->inflight = obs[6];
 
     // Pacing rate: How quickly are we sending bytes to the TCP stack
     // obs[7] = state->paceRate / this->astreaMaxThroughput;
@@ -171,18 +181,9 @@ std::optional<ObsType> Astrea::computeObservation(){
     conn->emit(intervalDurationSignal, this->astreaIntervalDuration);
 
     // Send data to Observer before returning
-    cObject* localState = new LocalState(this->astreaThroughput / this->astreaMaxThroughput, this->astreaIntervalDuration);
-    conn->emit(this->astreaStateReportSig, localState, new cString(stringId));
+    
+    conn->emit(this->astreaStateReportSig, (cObject*) localState, new cString(stringId));
 
-   // Observations:
-   // throughput ratio (thr/thr_max) 0
-   // max throughput (raw) 1
-   // latency ratio (lat/lat_min) 2
-   // minimum latency (raw) 3 
-   // relative cwnd (cwnd/(thr_max*lat_min)) 4
-   // loss (loss/thr_max) 5
-   // in-flight packets (pkt_flight/cwnd) 6
-   // prate (prate/thr_max)
     scheduleNextStep(state->srtt.dbl());
     return ObsType{
             obs[0],     // Normalized throughput (thr/thr_max)
@@ -211,7 +212,7 @@ RewardType Astrea::computeReward(){
     if (debug) cout << "\t" << reward << endl;
 
     // Emit a placeholder state request signal
-    LocalState* dummy = new LocalState(0,0);
+    LocalState* dummy = new LocalState();
     conn->emit(this->globalStateRequestSig, dummy, new cString(stringId));
     
     // cout << "Global throughput: " << this->globalThroughput << endl;

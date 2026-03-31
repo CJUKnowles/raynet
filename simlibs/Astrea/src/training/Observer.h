@@ -2,6 +2,7 @@
 #define OBSERVER_H_
 
 #include "omnetpp/cobject.h"
+#include "omnetpp/csimulation.h"
 #include <string.h>
 #include <omnetpp.h>
 #include <unordered_map>
@@ -10,13 +11,46 @@
 using namespace omnetpp;
 using namespace std;
 
+// A single state representing the entire network, containing 
 class GlobalState : public cObject, noncopyable
 {
   public:
-    double average_throughput;
+    // Global state (computed from many LocalStates)
+    double minThroughput;   // Minimum current throughput of all flows
+    double maxThroughput;   // Maximum current throughput of all flows
+    double ovrThroughput;   // Overall current throughput of all flows (sum)
+    double avgLatency;      // Average current latency of all flows
+    double minCwnd;         // Minimum current cwnd of all flows
+    double maxCwnd;         // Maximum current cwnd of all flows
+    double avgCwnd;         // Average current cwnd of all flows
+    double lossRatio;       // Average current loss ratio of all flows
+    double numFlows;        // Current number of flows (agents)
+
+    // Ground truth (network parameters)
+    double LINK_DELAY;
+    double BUFFER_SIZE;
+    double BANDWIDTH;
+
+    // Rewards
+    double reward;
     double fairness;
-    double something;
-};
+    // etc..
+
+    // Meta
+    bool needsUpdating = false; // True if new localStates have been received, but GlobalState has yet to be updated
+    void reset() {
+      minThroughput = 9999999999;
+      maxThroughput = 0;
+      ovrThroughput = 0;
+      avgLatency = 99999999;
+      minCwnd = 999999999;
+      maxCwnd = 0;
+      avgCwnd = 0;
+      lossRatio = 99999999;
+      numFlows = 0;
+      needsUpdating = false;
+    }
+  };
 
 // A single state reported by an agent, containing a timestamp and several other parameters
 class LocalState : public cObject, noncopyable
@@ -24,12 +58,16 @@ class LocalState : public cObject, noncopyable
   public:
     simtime_t timestamp;
     double throughput;
-    double srtt;
+    double maxThroughput;
+    double delay;
+    double minDelay;
+    double cwnd;
+    double lossRate;
+    double inflight;
 
-    LocalState(double throughput, double srtt) {
-      this->throughput = throughput;
-      this->srtt = srtt;
+    LocalState() {
     }
+
 };
 
 // A deque of the past n states reported by a given agent
@@ -70,21 +108,22 @@ struct StateHistory {
 class Observer : public cSimpleModule, public cListener
 {
 protected:
+  // Values
+  GlobalState* globalState; // The most recently computed global state
+  std::unordered_map<std::string, StateHistory> astreaAgents; // Map of all Astrea agents. <agent_id, agent_current_info>
+
   // Omnet setup stuff
   virtual void initialize() override;
   using cListener::finish;
   virtual void finish() override;
-
-  // Map of all Astrea agents. <agent_id, agent_current_info>
-  std::unordered_map<std::string, StateHistory> astreaAgents;
 
   // Omnet signalling/scheduling stuff
   simsignal_t globalStateResponseSig = registerSignal("globalStateResponse");   // Signal used to report global state metrics to an agent upon request
   void receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *obj) override;
   void receiveSignal(cComponent *source, simsignal_t signalID, const char *value, cObject *obj) override;
 
-  // Getters
-  double computeAverageThroughput();
+  // Observer
+  void computeGlobalState(); // Updates the global state based on the most recently collected localStates
 };
 
 #endif

@@ -174,21 +174,6 @@ class OmnetGymApiEnv(MultiAgentEnv):
             sim_truncated = True
         else:
             sim_truncated = False    
-            
-        printFreq = 1
-        if self.step_count % printFreq == -1:
-            print("-")
-            print(f"{printFreq} step(s) completed (Agent total: {self.step_count}):")
-            print("\tObservations:")
-            print(f"\t\tThroughput: {obs[0]:.2f}%             \t\t(Normalized, per interval)")
-            print(f"\t\tACKs: {obs[3]:.2f}x              \t\t(Multiplier of cwnd, per interval)") #? Identical to goodput(throughput) if normalized. 
-            print(f"\t\tInterval time: {obs[4]:.2f}s      \t\t(Raw, per interval)") #? Identical to delay if normalized?
-            print(f"\t\tSRTT: {obs[5]:.2f}%                   \t\t(Normalized, current)") #? Basically same as delay? slightly longer time horizon
-            print(f"\t\tDelay: {obs[6]:.2f}%                    \t\t(Log, current)") #? Maybe normalize?
-            
-            print(f"\tRewards:")
-            print(f"\t\tREWARD: {reward:.5f}                  \t(Raw, per interval)")
-        self.step_count += 1
         
         # TODO: Implement trucation. This was simple with single-agent, harder with multiple. Maybe use a copy of terminateds and replace the values.
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
