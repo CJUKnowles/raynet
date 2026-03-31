@@ -181,32 +181,51 @@ if __name__ == "__main__":
     path = os.getenv('HOME') + "/raynet/results"
     metric_csvs = eval_tools.create_csv_dict()
 
-
-    # competition plots:
-    # Make Plots
+    # Per-run plots (time series of a given run vs any competing flows)
     experiments = ["double-flow-dumbbell"]
-    metrics = ["throughput", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "incomingDataRate", "outgoingDataRate", "queueBitLength"]
-    module_types = ["server", "client", "queue"]
+    metrics = {
+        "throughput": {
+            "title": "Throughput vs Competing Flows",
+            "y_title": "Throughput (bps)",
+            "module_types": ["server"],
+            },
+        "srtt": {
+            "title": "srtt vs Competing Flows",
+            "y_title": "srtt (ms)",
+            "module_types": ["client"],
+            },
+        "cwnd": {
+            "title": "cwnd vs Competing Flows",
+            "y_title": "cwnd (pkt)",
+            "module_types": ["client"],
+            },
+    }
+    
+    df_copy = metric_csvs.copy()
     for experiment in experiments:
-        exp_df = metric_csvs[metric_csvs["experiment"] == experiment]
-        for module_type in module_types:
-            module_type_df = exp_df[exp_df["module_type"] == module_type]
-            for metric in metrics:
-                metric_df = module_type_df[module_type_df["metric"] == metric]
-                if metric_df.empty:
-                    print("Dataframe is emtpy, continuing")
+        df_exp = df_copy[df_copy["experiment"] == experiment]
+        for metric, plot_info in metrics.items():
+            df_metric = df_exp[df_exp["metric"] == metric]
+            for module_type in plot_info["module_types"]:
+                df_module = df_metric[df_metric["module_type"] == module_type]
+                if df_module.empty:
+                    print(f"Dataframe is empty, continuing: {metric} {module_type}")
                     continue
-                
-                for protocol in metric_df['protocol'].unique():
-                    protocol_df = metric_df[metric_df['protocol'] == protocol]
+                # Create a plot for each protocol (run)
+                for protocol in df_module['protocol'].unique():
+                    print(f"{experiment}: Plotting {metric} for {protocol} against competing flows")
+                    protocol_df = df_module[df_module['protocol'] == protocol]
                     plt.figure(figsize=(15,6))
+                    
+                    # Create a line for each module (row remaining in dataframe)
                     for _, row in protocol_df.iterrows():
                         csv_data = pd.read_csv(row["csv_path"])
                         plt.plot(csv_data["time"], csv_data[metric], label=f'{row["protocol"]}: {row["module"]}')
                     
+                    # Boilerplate
                     plt.xlabel("Time")
-                    plt.ylabel(metric)
-                    plt.title(f"{metric} vs competing flow")
+                    plt.ylabel(plot_info["y_title"])
+                    plt.title(plot_info["title"])
                     plt.legend(fontsize=8)  # smaller font if many lines
                     plt.ylim(bottom=0)
                     plt.yscale("linear")
@@ -215,6 +234,82 @@ if __name__ == "__main__":
                     plt.tight_layout()
                     plt.savefig(os.getenv('HOME') + f"/raynet/results/{experiment}/runs/{protocol}/COMPETITION-{metric}-{module_type}.pdf")
                     plt.close()
+
+    # # competition plots:
+    # experiments = ["double-flow-dumbbell"]
+    # metrics = {
+    #     "throughput": ["server"],
+    #     "srtt": ["client"],
+    #     "cwnd": ["client"],
+    # }
+    
+    # df_copy = metric_csvs.copy()
+    # for experiment in experiments:
+    #     df_exp = df_copy[df_copy["experiment"] == experiment]
+    #     for metric, module_types in metrics.items():
+    #         df_metric = df_exp[df_exp["metric"] == metric]
+    #         for module_type in module_types:
+    #             df_module = df_metric[df_metric["module_type"] == module_type]
+    #             if df_module.empty:
+    #                 print("Dataframe is empty, continuing")
+    #                 continue
+    #             # Create a plot for each protocol (run)
+    #             for protocol in df_module['protocol'].unique():
+    #                 print(f"{experiment}: Plotting {metric} for {protocol} against competing flows")
+    #                 protocol_df = df_module[df_module['protocol'] == protocol]
+    #                 plt.figure(figsize=(15,6))
+                    
+    #                 # Create a line for each module (row remaining in dataframe)
+    #                 for _, row in protocol_df.iterrows():
+    #                     csv_data = pd.read_csv(row["csv_path"])
+    #                     plt.plot(csv_data["time"], csv_data[metric], label=f'{row["protocol"]}: {row["module"]}')
+                    
+    #                 # Boilerplate
+    #                 plt.xlabel("Time")
+    #                 plt.ylabel(metric)
+    #                 plt.title(f"{metric} vs competing flow")
+    #                 plt.legend(fontsize=8)  # smaller font if many lines
+    #                 plt.ylim(bottom=0)
+    #                 plt.yscale("linear")
+    #                 plt.ticklabel_format(style='plain', axis='y')
+    #                 plt.grid(True)
+    #                 plt.tight_layout()
+    #                 plt.savefig(os.getenv('HOME') + f"/raynet/results/{experiment}/runs/{protocol}/COMPETITION-{metric}-{module_type}.pdf")
+    #                 plt.close()
+    
+    # # competition plots:
+    # # Make Plots
+    # experiments = ["double-flow-dumbbell"]
+    # metrics = ["throughput", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "incomingDataRate", "outgoingDataRate", "queueBitLength"]
+    # module_types = ["server", "client", "queue"]
+    # for experiment in experiments:
+    #     exp_df = metric_csvs[metric_csvs["experiment"] == experiment]
+    #     for module_type in module_types:
+    #         module_type_df = exp_df[exp_df["module_type"] == module_type]
+    #         for metric in metrics:
+    #             metric_df = module_type_df[module_type_df["metric"] == metric]
+    #             if metric_df.empty:
+    #                 print("Dataframe is emtpy, continuing")
+    #                 continue
+                
+    #             for protocol in metric_df['protocol'].unique():
+    #                 protocol_df = metric_df[metric_df['protocol'] == protocol]
+    #                 plt.figure(figsize=(15,6))
+    #                 for _, row in protocol_df.iterrows():
+    #                     csv_data = pd.read_csv(row["csv_path"])
+    #                     plt.plot(csv_data["time"], csv_data[metric], label=f'{row["protocol"]}: {row["module"]}')
+                    
+    #                 plt.xlabel("Time")
+    #                 plt.ylabel(metric)
+    #                 plt.title(f"{metric} vs competing flow")
+    #                 plt.legend(fontsize=8)  # smaller font if many lines
+    #                 plt.ylim(bottom=0)
+    #                 plt.yscale("linear")
+    #                 plt.ticklabel_format(style='plain', axis='y')
+    #                 plt.grid(True)
+    #                 plt.tight_layout()
+    #                 plt.savefig(os.getenv('HOME') + f"/raynet/results/{experiment}/runs/{protocol}/COMPETITION-{metric}-{module_type}.pdf")
+    #                 plt.close()
     # fig, axs = plt.subplots(2, 3, figsize=(15, 10), constrained_layout=True)
     # axs = axs.flatten()
 

@@ -42,7 +42,8 @@ void Astrea::initialize() {
 
     // provide the RLInterface with a cComponent API (to use signaling functionality)
     setOwner((cComponent*) conn->getTcpMain());
-    conn -> subscribe("globalStateResponse", (cListener*) this);
+    // conn -> subscribe("globalStateResponse", (cListener*) this);
+    getSimulation()->getSystemModule()->subscribe("globalStateResponse", this);
 
     // Initalize parent classes
     // RLInterface::initialize(_stateSize, _maxObsCount); // Deprecated initialization function. Delete this later.
@@ -95,6 +96,7 @@ std::optional<ObsType> Astrea::computeObservation(){
     //dynamic_cast<TcpPacedConnection*>(conn)->computeRetransmissionRate(); // Updates this->retransmissionBytes via TcpPaced Connection
     double delta_snd_max = state->snd_max - this->last_snd_max;
     double delta_snd_una = state->snd_una - this->last_snd_una;
+    double delta_rexmit_count = state->rexmit_count - this->last_rexmit_count;
     this->astreaIntervalDuration = (simTime() - this->lastIntervalTime).dbl();
 
     if (delta_snd_una == 0) {
@@ -104,36 +106,42 @@ std::optional<ObsType> Astrea::computeObservation(){
         return std::nullopt;
     }
 
+    // Initialize empty obs to populate as we go
+    double obs[7] = {0,0,0,0,0,0,};
+
     // Throughput: How many bytes were DELIVERED this interval (basically goodput?)
     this->astreaThroughput = delta_snd_una / this->astreaIntervalDuration;
     this->astreaMaxThroughput = std::max(this->astreaMaxThroughput, this->astreaThroughput);
+    obs[0] = this->astreaThroughput / this->astreaMaxThroughput;
+    obs[1] = this->astreaMaxThroughput;
 
-    // Lossrate: What percentage of bytes sent this interval were retransmissions
-    // this->astreaLossRate = 0.0;
-    // if (this->retransmissionRate > 0.0) {  // Avoid division by 0
-    //     double transmissionRate = delta_snd_max/this->astreaIntervalDuration; // How many non-retransmits occurred this interval
-    //     this->astreaLossRate = this->retransmissionRate / (this->retransmissionRate + transmissionRate);
-    // }
-
-    // ACKed: How many bytes were ACKed this interval (basically raw goodput?)
-    this->astreaACKTotal= delta_snd_una;
-    this->maxACKTotal = std::max(this->maxACKTotal, this->astreaACKTotal);
-
-    // SRTT: Smoothed round trip time. Already tracked by TCP.
+    // Latency: What is our RTT relative to the minimum observed
     this->astreaSRTT = state->srtt.dbl();
     this->astreaMinDelay = std::min(this->astreaMinDelay, this->astreaSRTT);
+    obs[2] = state->srtt.dbl()/this->astreaMinDelay;
+    obs[3] = this->astreaMinDelay;
 
-    // CWND: Size of the congestion window. Already tracked by TCP.
-    this->astreaCwnd = (double) state->snd_cwnd;
-    this->maxCwnd = std::max(this->maxCwnd, this->astreaCwnd);
+    // CWND: How does our current cwnd compare to the observed BDP
+    obs[4] = state->snd_cwnd/(this->astreaMaxThroughput*this->astreaMinDelay);
+
+    // Lossrate: What percentage of bytes sent this interval were retransmissions
+    this->astreaLossRate = delta_rexmit_count/this->astreaIntervalDuration;
+    obs[5] = this->astreaLossRate/this->astreaMaxThroughput;
+
+    // in-flight: How many bytes are currently sent but not ACKed
+    double inflight = state->snd_max - state->snd_una;
+    obs[6] = inflight/state->snd_cwnd;
+
+    // Pacing rate: How quickly are we sending bytes to the TCP stack
+    // obs[7] = state->paceRate / this->astreaMaxThroughput;
+
 
     // Delay Metric: The delay metric is treated as optimal if within the forgiveness window. Otherwise, have it slowly decrease as delay inflates.
-    this->astreaDelayMetric = 1.0; 
-    if (this->astreaSRTT > this->astreaMinDelay * this->rewardDelayForgiveness) {                                   
-        this->astreaDelayMetric = this->astreaMinDelay * this->rewardDelayForgiveness / this->astreaSRTT;
-    }
+    // this->astreaDelayMetric = 1.0; 
+    // if (this->astreaSRTT > this->astreaMinDelay * this->rewardDelayForgiveness) {                                   
+    //     this->astreaDelayMetric = this->astreaMinDelay * this->rewardDelayForgiveness / this->astreaSRTT;
+    // }
 
-    
 
     if(debug) {
         cout << "-" << endl;
@@ -145,11 +153,14 @@ std::optional<ObsType> Astrea::computeObservation(){
             cout << "\t\tsnd_max: " << state->snd_max << endl;
             cout << "\t\tSRTT: " << state->srtt << endl;
         cout << "\tObservations:" << endl;
-            cout << "\t\tThroughput: " << this->astreaThroughput / this->astreaMaxThroughput << endl;
-            cout << "\t\tACKs: " << this->astreaACKTotal /  state->snd_cwnd << endl;
-            cout << "\t\tMTP Duration: " << this->astreaIntervalDuration << endl;
-            cout << "\t\tSRTT: " << this->astreaMinDelay / this->astreaSRTT << endl;
-            cout << "\t\tDelay Metric: " << this->astreaDelayMetric  << endl;
+            cout << "\t\tThroughput ratio: \t" << obs[0] << endl;
+            cout << "\t\tMax Throughput: \t" << obs[1] << endl;
+            cout << "\t\tLatency Ratio: \t\t"  << obs[2] << endl;
+            cout << "\t\tMin Latency: \t\t"    << obs[3] << endl;
+            cout << "\t\tRelative cwnd: \t\t"  << obs[4]  << endl;
+            cout << "\t\tLossrate: \t\t"       << obs[5]  << endl;
+            cout << "\t\tInflight bytes: \t" << obs[6] << endl;
+            // cout << "\t\tPacerate: \t"       << obs[7]  << endl;
         cout << "-" << endl;
         cout << "-" << endl;
     } 
@@ -163,13 +174,25 @@ std::optional<ObsType> Astrea::computeObservation(){
     cObject* localState = new LocalState(this->astreaThroughput / this->astreaMaxThroughput, this->astreaIntervalDuration);
     conn->emit(this->astreaStateReportSig, localState, new cString(stringId));
 
-    //owner->emit(this->registerAstreaAgentSig, stringId.c_str(), simtime);
+   // Observations:
+   // throughput ratio (thr/thr_max) 0
+   // max throughput (raw) 1
+   // latency ratio (lat/lat_min) 2
+   // minimum latency (raw) 3 
+   // relative cwnd (cwnd/(thr_max*lat_min)) 4
+   // loss (loss/thr_max) 5
+   // in-flight packets (pkt_flight/cwnd) 6
+   // prate (prate/thr_max)
     scheduleNextStep(state->srtt.dbl());
-    return ObsType{this->astreaThroughput / this->astreaMaxThroughput,     // Normalized throughput
-            this->astreaACKTotal /  state->snd_cwnd,              // Normalized ACKs count (maybe use tcp_cwnd? ask aiden)     
-            this->astreaIntervalDuration,                         // Monitor interval duration
-            this->astreaMinDelay / this->astreaSRTT,                // Normalized SRTT (delay)
-            this->astreaDelayMetric                               // Normalized SRTT (possibly forgiven, if within the forgiveness window)
+    return ObsType{
+            obs[0],     // Normalized throughput (thr/thr_max)
+            obs[1],     // max throughput (raw)
+            obs[2],     // latency ratio (lat/lat_min)
+            obs[3],                                               // Min latency (raw)
+            obs[4],   // relative cwnd (cwnd/(thr_max)*(lat_min))
+            obs[5],                     // loss (lossrate/thr_max)
+            obs[6],                                           // in-flight bytes (pkt_flight/cwnd)
+            //obs[7],                          // pacing rate (prate/thr_max, will require tcpPaced and currently doesn't work)
         };
 
     // return {delta_snd_una,                      // Throughput (number of bytes acked)
@@ -191,7 +214,7 @@ RewardType Astrea::computeReward(){
     LocalState* dummy = new LocalState(0,0);
     conn->emit(this->globalStateRequestSig, dummy, new cString(stringId));
     
-    cout << "Global throughput: " << this->globalThroughput << endl;
+    // cout << "Global throughput: " << this->globalThroughput << endl;
     // The output of globalTSateRequestSig is currently globalThroughput, as a placeholder
     return this->globalThroughput;
     //return(this->astreaThroughput/state->srtt);
@@ -232,6 +255,7 @@ void Astrea::resetStepVariables()
     }
     this->last_snd_max = state->snd_max;
     this->last_snd_una = state->snd_una;
+    this->last_rexmit_count = state->rexmit_count;
     this->lastIntervalTime = simTime();
 }
 

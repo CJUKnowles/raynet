@@ -24,13 +24,7 @@ simple OrcaTcp extends TcpPaced
 
         // Statistics recording
         @signal[throughput];
-        @signal[srtt];
-        @signal[pacerate];
         @signal[intervalDuration];
-        @signal[cwnd];
-        @statistic[cwnd](record=vector(removeRepeats); interpolationmode=sample-hold);
         @statistic[throughput](record=vector(removeRepeats); interpolationmode=sample-hold);
-        @statistic[srtt](record=vector(removeRepeats); interpolationmode=sample-hold);
-        @statistic[pacerate](record=vector(removeRepeats); interpolationmode=sample-hold);
         @statistic[intervalDuration](record=vector(removeRepeats); interpolationmode=sample-hold);
 }

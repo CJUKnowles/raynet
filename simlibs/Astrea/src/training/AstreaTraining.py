@@ -63,13 +63,15 @@ class OmnetGymApiEnv(MultiAgentEnv):
         self.max_steps_range = self.env_config["max_steps_range"][1]
         self.has_reset = False
         
-        self.obs_size = 5   # How many values are in a given obs
+        self.obs_size = 7   # How many values are in a given obs
         self.obs_min = np.tile(np.array(
                      [0,                            # Throughput
                       0,                            # number of acks
                       0,                            # Interval duration
                       0,                            # srtt
-                      0                             # Delay metric
+                      0,                             # Delay metric
+                      0,
+                      0,
                       ], dtype=np.float32), self.stacking)
         self.obs_max = np.tile(np.array(
                     [1,                            # Throughput
@@ -77,6 +79,8 @@ class OmnetGymApiEnv(MultiAgentEnv):
                     1,                            # Interval duration
                     1,                            # srtt
                     1,                            # Delay metric
+                    0,
+                    0
                     ], dtype=np.float32), self.stacking)
         
         
@@ -229,7 +233,9 @@ if __name__ == '__main__':
                       0,                            # number of acks
                       0,                            # Interval duration
                       0,                            # srtt
-                      0                             # Delay metric
+                      0,                             # Delay metric
+                      0,
+                      0
                       ], dtype=np.float32), stacking)
     obs_max = np.tile(np.array(
                 [1,                            # Throughput
@@ -237,6 +243,8 @@ if __name__ == '__main__':
                 1,                            # Interval duration
                 1,                            # srtt
                 1,                            # Delay metric
+                1,
+                1
                 ], dtype=np.float32), stacking)
         
     #dummy_env = omnetgymapienv_creator(env_config)

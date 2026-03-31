@@ -74,7 +74,7 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
     do_dumb_plots=True will automatically produce a simple plot.pdf for each metric, for quick debugging.
     """
     argNum = 0
-    vectorsToExtract = ["throughput", "srtt", "paceRate", "intervalDuration", "cwnd", "action", "queueLength", "queueBitLength", "incomingDataRate", "outgoingDataRate"]
+    vectorsToExtract = ["throughput", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "queueLength", "queueBitLength", "incomingDataRate", "outgoingDataRate"]
     extracted = False
     if not protocol_nickname:
         protocol_nickname = protocol
@@ -168,13 +168,13 @@ def plot_summary(experiment:str, protocols:list, metrics:list=None, results_dir:
         
     
 if __name__ == "__main__":
-    experimentNames = ["double-flow-dumbbell", "single-flow", "responsiveness"]
-    protocols = ["Cubic", "Orca"]
-    for experimentName in experimentNames:
-        for protocol in protocols:
-            # Generate output.csv and individual vector csvs for all tracked vectors of agiven experiment
-            exp_results_dir = os.getenv('HOME') + f"/raynet/_experiments/{experimentName}/ini_variants/results"
-            generate_exp_csvs(exp_results_dir, protocol, do_dumb_plots=True)
+    # experimentNames = ["double-flow-dumbbell", "single-flow", "responsiveness"]
+    # protocols = ["Cubic", "Orca"]
+    # for experimentName in experimentNames:
+    #     for protocol in protocols:
+    #         # Generate output.csv and individual vector csvs for all tracked vectors of agiven experiment
+    #         exp_results_dir = os.getenv('HOME') + f"/raynet/_experiments/{experimentName}/ini_variants/results"
+    #         generate_exp_csvs(exp_results_dir, protocol, do_dumb_plots=True)
     
     
     metric_csvs = create_csv_dict()        # dataframe containing [experiment, protocol, module, metric, csv_path] for easy access

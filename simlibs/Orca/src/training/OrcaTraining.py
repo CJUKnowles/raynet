@@ -209,15 +209,15 @@ if __name__ == '__main__':
     
     # Original run training params
     bottleneck_bandwidth_range = (5, 20)            # Orca: 6Mbps-192Mbps
-    minimum_rtt_range = (5, 10)                      # Orca: 4ms-400ms
-    bottleneck_buffer_range = (25000, 200000)    # Orca: 3KB-96MB, expressed in terms of bits
+    minimum_rtt_range = (5, 100)                      # Orca: 4ms-400ms
+    bottleneck_buffer_range = (25000, 2000000)    # Orca: 3KB-96MB, expressed in terms of bits
     
     # Second run training params (further explore larger BDPs and smaller queue sizes)
     
 
     
     load_from_checkpoint = True
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.2/SAC_Orca-1.2_2026-03-23_19-08-55zoflfxd9/checkpoints/checkpoint_51"
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.3/SAC_Orca-1.2_2026-03-29_21-38-407tn0om0b/checkpoints/checkpoint_134"
     steps_to_train = 1000000
     
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Orca/src/training/OrcaTraining.ini",
