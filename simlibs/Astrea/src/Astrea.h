@@ -57,13 +57,11 @@ public: // General use
       //   retransmissionRate = value/8.0; // Retransmiitted bytes/s this interval
       // } 
       const char *signalName = inet::tcp::Tcp::getSignalName(signalID);
-
       // TODO: Check if this signal is meant for this agent or not
       if (strcmp(signalName, "globalStateResponse") == 0) {
-        cout << "Received a globalStateResponse from the Observer" << endl;
         this->globalThroughput = value;
       } else {
-        cout << "Received the wrong signal" << endl;
+        cout << "Received invalid wrong signal" << endl;
       }
     }
 
@@ -108,6 +106,7 @@ public: // General use
     simtime_t lastIntervalTime = 0.0;
     double last_snd_max = 0.0; // Whatever value state->snd_max returned last interval. The TOTAL so far; NOT what was sent DURING the last interval.
     uint32_t last_snd_una = 0;  // Whatever the oldest reported unACK'd byte was at the last monitor interval
+    uint32_t last_rexmit_count = 0; // How many bytes were retransmitted in TOTAL, as reported last interval
     uint32_t bytesSentTotal = 0;
     uint32_t rttReportCount = 0;    // How many rtt reports we received this interval
     // Old - to be removed

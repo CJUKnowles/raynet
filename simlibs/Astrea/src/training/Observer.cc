@@ -68,15 +68,15 @@ void Observer::receiveSignal(cComponent *source, simsignal_t signalID, cObject *
         LocalState* agentCurrentState = check_and_cast<LocalState*>(value);
         astreaAgents[id].addStateEntry(agentCurrentState);
         
-        cout << "OBSERVER: Received state report from " << id << endl;
+        // cout << "OBSERVER: Received state report from " << id << endl;
         return;
     } else if (strcmp(signalName, "globalStateRequest") == 0) {
         // TODO: Emit a signal containg some global state metrics
         // TODO: Move globalStateRequest to a function (or a more lightweight signal handler)
         std::string id = ((cString*) obj)->str;
-        cout << "OBSERVER: Received global state request from " << id << endl;
+        // cout << "OBSERVER: Received global state request from " << id << endl;
         //GlobalState* globalState = new GlobalState();
-        emit(globalStateResponseSig, computeAverageThroughput(), obj); // Placeholder, send computed state back to the requester
+        emit(this->globalStateResponseSig, computeAverageThroughput(), obj); // Placeholder, send computed state back to the requester
         return;
     }
     EV_TRACE << "Signal received by Observer not recognised" << std::endl;
@@ -99,6 +99,6 @@ double Observer::computeAverageThroughput() {
     if (count == 0) {
         return 0;
     }
-    cout << "Computed global throughput: " << sum/count << endl;
+    // cout << "Computed global throughput: " << sum/count << endl;
     return sum/count; // TODO: Make the Astrea agent intercept this signal (or, please, make it a function call)
 }

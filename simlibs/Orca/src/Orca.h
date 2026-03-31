@@ -57,7 +57,6 @@ public: // General use
 
     // TcpCubic Overrides (These are mostly unchanged, and just used to gather statistic or disable automatic pacing)
     virtual void receivedDataAck(uint32_t firstSeqAcked) override;
-    virtual void receivedDuplicateAck() override;
     virtual void established(bool active) override; // Called when the TCP CONNECTION is established (some time AFTER startup!)
     virtual void rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) override;  // Overridden so we can track 
 
