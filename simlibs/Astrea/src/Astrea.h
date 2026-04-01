@@ -52,16 +52,17 @@ public: // General use
     using RLInterface::receiveSignal;
     virtual void receiveSignal(cComponent *source, simsignal_t signalID, double value, cObject *details) override 
     {
-      // TcpPacedConnection* pacedConn = dynamic_cast<TcpPacedConnection*>(conn);
-      // if (signalID == pacedConn->retransmissionRateSignal) {
-      //   retransmissionRate = value/8.0; // Retransmiitted bytes/s this interval
-      // } 
+      std::string agentId = ((cString*) details)->str;
+      if (agentId != this->stringId) {
+        if (debug) cout << "\t\t" << stringId << " recieved signal meant for " << agentId << ", ignoring" << endl;
+        return;
+      }
+
       const char *signalName = inet::tcp::Tcp::getSignalName(signalID);
-      // TODO: Check if this signal is meant for this agent or not
       if (strcmp(signalName, "globalStateResponse") == 0) {
-        this->globalThroughput = value;
+        this->reward = value;
       } else {
-        cout << "Received invalid wrong signal" << endl;
+        cout << "Received invalid signal" << endl;
       }
     }
 
@@ -125,7 +126,7 @@ public: // General use
     simsignal_t astreaStateReportSig = owner->registerSignal("astreaStateReport");
     simsignal_t globalStateRequestSig = owner->registerSignal("globalStateRequest");
 
-    double globalThroughput = 0; // placeholder
+    double reward = 0; // Will automatically be set when globalStateResponse signal is received
   };
 #endif
 #endif

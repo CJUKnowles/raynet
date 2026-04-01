@@ -26,14 +26,18 @@ class GlobalState : public cObject, noncopyable
     double lossRatio;       // Average current loss ratio of all flows
     double numFlows;        // Current number of flows (agents)
 
-    // Ground truth (network parameters)
-    double LINK_DELAY;
-    double BUFFER_SIZE;
-    double BANDWIDTH;
+    // Ground truth (network parameters) // TODO: Set these dynamically
+    double LINK_DELAY = .02;
+    double BUFFER_SIZE = 1024;
+    double BANDWIDTH = 6000;
 
-    // Rewards
+    // Reward metrics
+    double throughputMetric;
+    double latencyMetric;
+    double lossMetric;
+    double fairnessMetric;
+    double stabilityMetric;
     double reward;
-    double fairness;
     // etc..
 
     // Meta
@@ -50,6 +54,16 @@ class GlobalState : public cObject, noncopyable
       numFlows = 0;
       needsUpdating = false;
     }
+
+    void printSummary() {
+      cout << "\tGlobalState Summary: " << endl;
+      cout << "\t\t" << "throughputMetric: " << throughputMetric << endl;
+      cout << "\t\t" << "latencyMetric: " << latencyMetric << endl;
+      cout << "\t\t" << "lossMetric: " << lossMetric << endl;
+      cout << "\t\t" << "fairnessMetric: " << fairnessMetric << endl;
+      cout << "\t\t" << "stabilityMetric: " << stabilityMetric << endl;
+      cout << "\t\t" << "Reward: " << reward << endl;
+    }
   };
 
 // A single state reported by an agent, containing a timestamp and several other parameters
@@ -57,13 +71,22 @@ class LocalState : public cObject, noncopyable
 {
   public:
     simtime_t timestamp;
+
+    // Raw statistics
     double throughput;
-    double maxThroughput;
-    double delay;
-    double minDelay;
+    double latency;
     double cwnd;
     double lossRate;
     double inflight;
+
+    // Observation values (mostly normalized, aside fomr the max/mins)
+    double throughputRatio;
+    double maxThroughput;
+    double latencyRatio;
+    double minLatency;
+    double cwndRatio;
+    double lossRateRatio;
+    double inflightRatio;
 
     LocalState() {
     }
@@ -74,7 +97,7 @@ class LocalState : public cObject, noncopyable
 struct StateHistory {
   std::deque<LocalState*> history;           // This agent's past n reported observations
   size_t max_history_length = 3;             // n, how many state entries should be stored for a given agent (just an unsigned int)
-  
+  double avgThroughput = 0;                  // Average throughput over entire history
   // Constructor - Maybe unnecessary
   StateHistory() {
 
@@ -98,6 +121,20 @@ struct StateHistory {
       delete(stateToRemove);
     }
   }
+
+  // Returns the average throughput of a given flow's entire history
+  double getAverageThroughput() const {
+    if (history.empty()) {
+        return 0.0;
+    }
+
+    double throughputSum = 0.0;
+    for (const LocalState* entry : history) {
+        throughputSum += entry->throughput;
+    }
+
+    return throughputSum / static_cast<double>(history.size());
+  }
 };
 
 /*
@@ -108,9 +145,19 @@ struct StateHistory {
 class Observer : public cSimpleModule, public cListener
 {
 protected:
-  // Values
+  // State
   GlobalState* globalState; // The most recently computed global state
   std::unordered_map<std::string, StateHistory> astreaAgents; // Map of all Astrea agents. <agent_id, agent_current_info>
+  
+  // Params
+  double delayCoeff = 1.5; // Delays below minDelay*delayCoeff will be treated as optimal
+
+  // Reward weights // TODO: Allow default weights to be overridden by the config.ini
+  double throughputWeight = 0.1;
+  double latencyWeight = 0.02;
+  double lossWeight = 1.0;
+  double fairnessWeight = 0.02;
+  double stabilityWeight = 0.01;
 
   // Omnet setup stuff
   virtual void initialize() override;

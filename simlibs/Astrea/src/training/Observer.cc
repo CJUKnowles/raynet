@@ -1,4 +1,5 @@
 #include "Observer.h"
+#include <cmath>
 #include <cobjects.h>
 
 Define_Module(Observer);
@@ -68,10 +69,9 @@ void Observer::receiveSignal(cComponent *source, simsignal_t signalID, cObject *
         std::string id = ((cString*) obj)->str;
         LocalState* agentCurrentState = check_and_cast<LocalState*>(value);
         astreaAgents[id].addStateEntry(agentCurrentState);
-        this->globalState->needsUpdating = true; // Global state is no longer up-to-date. GlobalStateRequests will trigger it to update.
-        
-        // cout << "OBSERVER: Received state report from " << id << endl;
+        this->globalState->needsUpdating = true; // GlobalState is now out of date and needs updating
         return;
+    // Agent has requested global state information (more specifically, a reward value)
     } else if (strcmp(signalName, "globalStateRequest") == 0) {
         std::string id = ((cString*) obj)->str;
         // cout << "OBSERVER: Received global state request from " << id << endl;
@@ -84,36 +84,16 @@ void Observer::receiveSignal(cComponent *source, simsignal_t signalID, cObject *
     EV_TRACE << "Signal received by Observer not recognised" << std::endl;
 }
 
-// // Returns the average throughput, sampled from the most recent throughput report of each active agent.
-// // TODO: Use some sort of weighing of the previous X entries, like the paper
-// double Observer::computeAverageThroughput() {
-//     double sum = 0.0;
-//     int count = 0;
-
-//     for (auto& [agentId, stateHistory] : astreaAgents) {
-//         if (!stateHistory.history.empty()) {
-//             LocalState* latestState = stateHistory.history.front();
-//             sum += latestState->throughput;
-//             count++;
-//         }
-//     }
-
-//     if (count == 0) {
-//         return 0;
-//     }
-
-//     return sum/count;
-// }
-
 // Loop through all agents' most recent state reports to update the global state
 void Observer::computeGlobalState() {
     globalState->reset();
 
-    double latencySum = 0;
-    double cwndSum = 0;
-    double lossSum = 0;
-
-    int numStates = 0;
+    double latencySum = 0;      // Total latency
+    double cwndSum = 0;         // Total cwnd
+    double lossSum = 0;         // Total number of lost bytes
+    double lossRatioSum = 0;    // Sum of loss ratios (loss rate relative to current throughput, NOT max)
+    double avgThroughputSum = 0; // Sum of all average throughputs (avg over each agent's entire state history)
+    int numFlows = 0;
 
     for (auto& [agentId, stateHistory] : astreaAgents) {
         if (!stateHistory.history.empty()) {
@@ -123,8 +103,9 @@ void Observer::computeGlobalState() {
             globalState->ovrThroughput += throughput;
             globalState->minThroughput = std::min(globalState->minThroughput, throughput);
             globalState->maxThroughput = std::max(globalState->maxThroughput, throughput);
+            avgThroughputSum += stateHistory.getAverageThroughput(); // Used for reward metrics
 
-            double latency = localState->delay;
+            double latency = localState->latency;
             latencySum += latency;
 
             double cwnd = localState->cwnd;
@@ -132,20 +113,64 @@ void Observer::computeGlobalState() {
             globalState->minCwnd = std::min(globalState->minCwnd, cwnd);
             globalState->maxCwnd = std::max(globalState->maxCwnd, cwnd);
 
-            double loss = localState->lossRate;
-            lossSum += loss;
+            lossSum += localState->lossRate;
+            if (localState->throughput > 0) {
+                lossRatioSum += (localState->lossRate/localState->throughput);
+            }
 
-            numStates++;
+            numFlows++;
         }
     }
 
-    if (numStates > 0) {
-        globalState->avgLatency = latencySum/numStates;
-        globalState->avgCwnd = cwndSum/numStates;
-        globalState->lossRatio = lossSum/numStates;
+    if (numFlows < 1) {
+        string error = "ERROR: cannot compute global state before any local states have been received! This shouldn't happen.";
+        throw runtime_error(error);
     }
 
-    // TODO: Compute reward values like fairness
-    globalState->reward = globalState->ovrThroughput; // PLACEHOLDER!!!
+    // AVERAGE VALUES ======
+    globalState->avgLatency = latencySum/numFlows;
+    globalState->avgCwnd = cwndSum/numFlows;
+    globalState->lossRatio = lossSum/numFlows;
 
+    // REWARD METRICS ======
+    globalState->reward = 0.0;
+
+    // Throughput metric
+    globalState->throughputMetric = globalState->ovrThroughput/globalState->BANDWIDTH;
+    globalState->reward += this->throughputWeight * globalState->throughputMetric;
+
+    // Latency Metric
+    double latencyThreshold = (1.0 + delayCoeff)*globalState->LINK_DELAY;
+    if(globalState->avgLatency > latencyThreshold) {
+        globalState->latencyMetric = (globalState->avgLatency - latencyThreshold) * 1; // TODO: Multiply by the paceRate
+    } else {
+        // Treat latency as optimal if it falls below the threshold
+        globalState->latencyMetric = 0;
+    }
+    globalState->reward += this->latencyWeight * globalState->latencyMetric;
+
+    // Loss metric
+    globalState->lossMetric = lossRatioSum/numFlows;
+    globalState->reward += this->lossWeight * globalState->lossMetric;
+    
+    // Fairness Metric
+    double globalAvgThroughput = avgThroughputSum/numFlows; // Average of all average throughputs (kill me)
+    double fairnessNumerator = 0;
+    for (auto& [agentId, stateHistory] : astreaAgents) {
+        if (!stateHistory.history.empty()) {
+            fairnessNumerator += std::pow(stateHistory.avgThroughput - globalAvgThroughput, 2.0);
+        }
+    }
+    double fairnessDenominator = numFlows * std::pow(avgThroughputSum,2.0);
+    globalState->fairnessMetric = std::sqrt(fairnessNumerator/fairnessDenominator);
+    globalState->reward += this->fairnessWeight * globalState->fairnessMetric;
+
+    // TODO: Stability Metric
+    globalState->stabilityMetric = 1.0;
+    globalState->reward += this->stabilityWeight * globalState->stabilityMetric;
+
+    // Global state has been updated. Only re-compute if new observations arrive.
+    globalState->needsUpdating = false;
+
+    globalState->printSummary();
 }

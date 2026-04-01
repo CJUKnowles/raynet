@@ -117,7 +117,8 @@ std::optional<ObsType> Astrea::computeObservation(){
     this->astreaMaxThroughput = std::max(this->astreaMaxThroughput, this->astreaThroughput);
     obs[0] = this->astreaThroughput / this->astreaMaxThroughput;
     obs[1] = this->astreaMaxThroughput;
-    localState->throughput = obs[0];
+    localState->throughput = this->astreaThroughput;
+    localState->throughputRatio = obs[0];
     localState->maxThroughput = obs[1];
 
     // Latency: What is our RTT relative to the minimum observed
@@ -125,22 +126,25 @@ std::optional<ObsType> Astrea::computeObservation(){
     this->astreaMinDelay = std::min(this->astreaMinDelay, this->astreaSRTT);
     obs[2] = state->srtt.dbl()/this->astreaMinDelay;
     obs[3] = this->astreaMinDelay;
-    localState->delay = obs[2];
-    localState->minDelay = obs[3];
+    localState->latency = this->astreaSRTT;
+    localState->minLatency = obs[3];
 
     // CWND: How does our current cwnd compare to the observed BDP
     obs[4] = state->snd_cwnd/(this->astreaMaxThroughput*this->astreaMinDelay);
-    localState->cwnd = obs[4];
+    localState->cwnd = state->snd_cwnd;
+    localState->cwndRatio = obs[4];
 
     // Lossrate: What percentage of bytes sent this interval were retransmissions
     this->astreaLossRate = delta_rexmit_count/this->astreaIntervalDuration;
     obs[5] = this->astreaLossRate/this->astreaMaxThroughput;
-    localState->lossRate = obs[5];
+    localState->lossRate = this->astreaLossRate;
+    localState->lossRateRatio = obs[5];
 
     // in-flight: How many bytes are currently sent but not ACKed
     double inflight = state->snd_max - state->snd_una;
     obs[6] = inflight/state->snd_cwnd;
-    localState->inflight = obs[6];
+    localState->inflight = inflight;
+    localState->inflightRatio = obs[6];
 
     // Pacing rate: How quickly are we sending bytes to the TCP stack
     // obs[7] = state->paceRate / this->astreaMaxThroughput;
@@ -208,17 +212,12 @@ std::optional<ObsType> Astrea::computeObservation(){
 
 RewardType Astrea::computeReward(){
     if (debug) cout << "\tAstrea: computeReward()" << endl;
-    double reward = this->astreaThroughput/this->astreaMaxThroughput*this->astreaDelayMetric;
-    if (debug) cout << "\t" << reward << endl;
 
-    // Emit a placeholder state request signal
+    // Emit a signal requested global state/reward. LocalState here is a placeholder.
     LocalState* dummy = new LocalState();
     conn->emit(this->globalStateRequestSig, dummy, new cString(stringId));
-    
-    // cout << "Global throughput: " << this->globalThroughput << endl;
-    // The output of globalTSateRequestSig is currently globalThroughput, as a placeholder
-    return this->globalThroughput;
-    //return(this->astreaThroughput/state->srtt);
+    if(debug) cout << "\t\tReward: " << this->reward << endl;
+    return this->reward; // Reward is automatically set upon receiving a globalStateResponse from the Observer
 }
 
 // RayNet method: Make a decision based on the policy (alter snd_cwnd)
@@ -228,32 +227,32 @@ void Astrea::decisionMade(ActionType action) {
     // Calculate the newCwnd
     uint32_t newCwnd;
     if (action >= 0) {
-        newCwnd = state->snd_cwnd * (1+responsivenessCoefficient*action);
+        newCwnd = (double) state->snd_cwnd * (1.0+responsivenessCoefficient*action);
     } else {
-        newCwnd = state->snd_cwnd / (1-responsivenessCoefficient*action);
+        newCwnd = (double) state->snd_cwnd / (1.0-responsivenessCoefficient*action);
     }
     newCwnd = max(newCwnd, state->snd_mss);
     double multiplier = (double) newCwnd/state->snd_cwnd; // For debugging/plotting
 
     // Attempt to change cwnd and pacing rate
     if (this->takeActions && newCwnd <= 1000000) {
+        if (debug) cout << "\t\tcwnd changed from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         state->snd_cwnd = newCwnd;
         // TODO: Pacing
         // this->astreaPaceRate = (double) state->snd_cwnd / state->srtt.dbl();  // Bytes/s
         // dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(1/orcaPaceRate); // 1/paceRate = intersendingtime
         owner->emit(actionSignal, multiplier); // Emit action for plotting
-        if (debug) cout << "\t\tcwnd changed from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
     } else {
         // Invalid. Skip this action entirely.
         if (debug) cout << "\t\t" << "NOT CHANGING cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x) NOT CHANGING !!!!!!" << endl;
     }
 
     if (debug) {
-        cout << "\t\t" << (this->takeActions) << endl;
-        // cout << "\t\t" << (this->first_slowstart_complete) << endl;
-        cout << "\t\t" << (this->rttReportCount > 0) << endl;
-        cout << "\t\t" << (newCwnd < 1000000) << endl;
-        cout << "-" << endl;
+        // cout << "\t\t" << (this->takeActions) << endl;
+        // // cout << "\t\t" << (this->first_slowstart_complete) << endl;
+        // cout << "\t\t" << (this->rttReportCount > 0) << endl;
+        // cout << "\t\t" << (newCwnd < 1000000) << endl;
+        // cout << "-" << endl;
     }
 }
 
