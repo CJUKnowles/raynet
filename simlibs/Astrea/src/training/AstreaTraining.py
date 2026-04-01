@@ -90,7 +90,7 @@ class OmnetGymApiEnv(MultiAgentEnv):
         for i in range(100):
             self.possible_agents.append(f"`Astrea`{i}")
             obs_spaces[f"Astrea{i}"] = spaces.Box(low=self.obs_min, high=self.obs_max, dtype=np.float32)
-            action_spaces[f"Astrea{i}"] = spaces.Box(low=-2.0, high=2.0, dtype=np.float32)
+            action_spaces[f"Astrea{i}"] = spaces.Box(low=-1.0, high=1.0, dtype=np.float32)
         
         self.observation_space = spaces.Dict(obs_spaces)
         self.action_space = spaces.Dict(action_spaces)

@@ -224,27 +224,37 @@ RewardType Astrea::computeReward(){
 // RayNet method: Make a decision based on the policy (alter snd_cwnd)
 void Astrea::decisionMade(ActionType action) {
     if (debug) cout << "\tAstrea: decisionMade()" << endl;
-    
-    RLStepsTaken++;
-    if (debug) cout << "\t\tRLSteps taken: " << RLStepsTaken << endl;
-    if (RLStepsTaken >= this->maxRLSteps) {
-            if (debug) cout << "\t\tWE ARE DONE! " << RLStepsTaken << " STEPS TAKEN!" << endl;
-            done = true; // Don't set done yourself. Unsure of the correct way to handle this, but this isn't it.
+
+    // Calculate the newCwnd
+    uint32_t newCwnd;
+    if (action >= 0) {
+        newCwnd = state->snd_cwnd * (1+responsivenessCoefficient*action);
+    } else {
+        newCwnd = state->snd_cwnd / (1-responsivenessCoefficient*action);
+    }
+    newCwnd = max(newCwnd, state->snd_mss);
+    double multiplier = (double) newCwnd/state->snd_cwnd; // For debugging/plotting
+
+    // Attempt to change cwnd and pacing rate
+    if (this->takeActions && newCwnd <= 1000000) {
+        state->snd_cwnd = newCwnd;
+        // TODO: Pacing
+        // this->astreaPaceRate = (double) state->snd_cwnd / state->srtt.dbl();  // Bytes/s
+        // dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(1/orcaPaceRate); // 1/paceRate = intersendingtime
+        owner->emit(actionSignal, multiplier); // Emit action for plotting
+        if (debug) cout << "\t\tcwnd changed from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
+    } else {
+        // Invalid. Skip this action entirely.
+        if (debug) cout << "\t\t" << "NOT CHANGING cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x) NOT CHANGING !!!!!!" << endl;
     }
 
-    double fakeAction = action;
-    uint32_t newCwnd = ceil(std::pow(2.0, fakeAction) * (double) state->snd_cwnd);
-    newCwnd =  max(state->snd_mss, newCwnd); // cwnd should not deflate below 1mss
-    // dont let cwnd inflate to ridiculous values. Learning will take care of this eventually, but large values eventually kill simulations.
-    if (newCwnd < 1000000) {
-        conn->emit(actionSignal, std::pow(2.0, fakeAction));
-        if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << (double)newCwnd/(double)state->snd_cwnd << "x)" << endl;
-        if (takeActions) state->snd_cwnd = newCwnd;
+    if (debug) {
+        cout << "\t\t" << (this->takeActions) << endl;
+        // cout << "\t\t" << (this->first_slowstart_complete) << endl;
+        cout << "\t\t" << (this->rttReportCount > 0) << endl;
+        cout << "\t\t" << (newCwnd < 1000000) << endl;
+        cout << "-" << endl;
     }
-    
-
-    double newIntersendingTime = state->srtt.dbl() / (double) state->snd_cwnd;  // Pace rate expressed as seconds between packets (cwnd/srtt per second)
-
 }
 
 

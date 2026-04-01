@@ -87,9 +87,10 @@ public: // General use
     bool takeActions = true; // Skips Astrea actions if false
 
     // Astrea parameters (Default values here, overridden in astrea.ini)
-    double rewardDelayForgiveness = 1; // Beta term from Astrea paper. Delay only degrades reward if RTT > baseRTT*rewardDelayForgiveness. Larger values emphasize aggressive throughputs by forgiving delay increases.
-    double rewardLossMultiplier = 1;   // Zeta term from Astrea paper. Throughput is substracted by lossRate*rewardLossMultiplier in reward computation.  Larger values emphasize conservative throughputs by punishing loss. 
-    
+    double rewardDelayForgiveness = 1; // 
+    double rewardLossMultiplier = 1;   // 
+    double responsivenessCoefficient = 1; // Alpha term from Astrea paper. Larger values allow larger changes to cwnd.
+
     // Astrea observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
     double astreaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
     double astreaLossRate=0.0;      // The average loss rate of packets over the last interval
