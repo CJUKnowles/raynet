@@ -162,11 +162,11 @@ void Observer::computeGlobalState() {
         // Treat latency as optimal if it falls below the threshold
         globalState->latencyMetric = 0;
     }
-    globalState->reward += this->latencyWeight * globalState->latencyMetric;
+    globalState->reward -= this->latencyWeight * globalState->latencyMetric;
 
     // Loss metric
     globalState->lossMetric = lossRatioSum/numFlows;
-    globalState->reward += this->lossWeight * globalState->lossMetric;
+    globalState->reward -= this->lossWeight * globalState->lossMetric;
     
     // Fairness Metric: 
     double globalAvgThroughput = avgThroughputSum/numFlows; // Average of all average throughputs (kill me)
@@ -178,7 +178,7 @@ void Observer::computeGlobalState() {
     }
     double fairnessDenominator = numFlows * std::pow(avgThroughputSum,2.0);
     globalState->fairnessMetric = std::sqrt(fairnessNumerator/fairnessDenominator);
-    globalState->reward += this->fairnessWeight * globalState->fairnessMetric;
+    globalState->reward -= this->fairnessWeight * globalState->fairnessMetric;
 
     // Stability Metric: average stability of all active astrea flows
     double stabilitySum = 0;
@@ -188,7 +188,7 @@ void Observer::computeGlobalState() {
         }
     }
     globalState->stabilityMetric = stabilitySum/numFlows;
-    globalState->reward += this->stabilityWeight * globalState->stabilityMetric;
+    globalState->reward -= this->stabilityWeight * globalState->stabilityMetric;
 
     // Global state has been updated. Only re-compute if new observations arrive.
     globalState->needsUpdating = false;

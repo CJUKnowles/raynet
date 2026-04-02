@@ -59,7 +59,7 @@ void Astrea::initialize() {
     cObject* simtime = new cSimTime(this->conn->getTcpMain()->par("monitorIntervalDuration"));
     owner->emit(this->registerSig, stringId.c_str(), simtime);
     owner->emit(this->registerAstreaAgentSig, stringId.c_str(), simtime);
-    scheduleNextStep(this->initialStepLength);
+    scheduleNextStep(this->fixedIntervalDuration);
     // Schedule the first RL step
     // RLStep = new cMessage("RLSTEP");
     // conn->scheduleAt(simTime() + RLStepInterval, RLStep);
@@ -97,14 +97,13 @@ std::optional<ObsType> Astrea::computeObservation(){
     double delta_snd_max = state->snd_max - this->last_snd_max;
     double delta_snd_una = state->snd_una - this->last_snd_una;
     double delta_rexmit_count = state->rexmit_count - this->last_rexmit_count;
-    this->astreaIntervalDuration = (simTime() - this->lastIntervalTime).dbl();
 
-    if (delta_snd_una == 0) {
-        // If no acks have been received, this obs is invalid. Schedule another step and skip the current one.
-        scheduleNextStep(this->astreaIntervalDuration); // re-use the last interval duration. Prevents shrinking SRTT during congestion from oversaturing event queue with STEP events.
-        //scheduleNextStep(state->srtt.dbl());
-        return std::nullopt;
-    }
+    // if (delta_snd_una == 0) {
+    //     // If no acks have been received, this obs is invalid. Schedule another step and skip the current one.
+    //     scheduleNextStep(this->fixedIntervalDuration); // re-use the last interval duration. Prevents shrinking SRTT during congestion from oversaturing event queue with STEP events.
+    //     //scheduleNextStep(state->srtt.dbl());
+    //     return std::nullopt;
+    // }
 
     // Begin preparing a local state report to send to the Observer
     LocalState* localState = new LocalState();
@@ -113,9 +112,13 @@ std::optional<ObsType> Astrea::computeObservation(){
     double obs[7] = {0,0,0,0,0,0,};
 
     // Throughput: How many bytes were DELIVERED this interval (basically goodput?)
-    this->astreaThroughput = delta_snd_una / this->astreaIntervalDuration;
+    this->astreaThroughput = delta_snd_una / this->fixedIntervalDuration;
     this->astreaMaxThroughput = std::max(this->astreaMaxThroughput, this->astreaThroughput);
-    obs[0] = this->astreaThroughput / this->astreaMaxThroughput;
+    if (this->astreaMaxThroughput == 0) {
+        obs[0] = 0;
+    } else {
+        obs[0] = this->astreaThroughput / this->astreaMaxThroughput;
+    }
     obs[1] = this->astreaMaxThroughput;
     localState->throughput = this->astreaThroughput;
     localState->throughputRatio = obs[0];
@@ -123,39 +126,45 @@ std::optional<ObsType> Astrea::computeObservation(){
 
     // Latency: What is our RTT relative to the minimum observed
     this->astreaSRTT = state->srtt.dbl();
-    this->astreaMinDelay = std::min(this->astreaMinDelay, this->astreaSRTT);
+    if (this->astreaSRTT != 0) {
+        this->astreaMinDelay = std::min(this->astreaMinDelay, this->astreaSRTT);
+    }
     obs[2] = state->srtt.dbl()/this->astreaMinDelay;
     obs[3] = this->astreaMinDelay;
     localState->latency = this->astreaSRTT;
     localState->minLatency = obs[3];
 
     // CWND: How does our current cwnd compare to the observed BDP
-    obs[4] = state->snd_cwnd/(this->astreaMaxThroughput*this->astreaMinDelay);
+    if (this->astreaMaxThroughput*this->astreaMinDelay == 0) {
+        obs[4] = 0;
+    } else {
+        obs[4] = state->snd_cwnd/(this->astreaMaxThroughput*this->astreaMinDelay);
+    }
     localState->cwnd = state->snd_cwnd;
     localState->cwndRatio = obs[4];
 
     // Lossrate: What percentage of bytes sent this interval were retransmissions
-    this->astreaLossRate = delta_rexmit_count/this->astreaIntervalDuration;
-    obs[5] = this->astreaLossRate/this->astreaMaxThroughput;
+    this->astreaLossRate = delta_rexmit_count/this->fixedIntervalDuration;
+    if (this->astreaMaxThroughput == 0) {
+        obs[5] = 0;
+    } else {
+        obs[5] = this->astreaLossRate/this->astreaMaxThroughput;
+    }
     localState->lossRate = this->astreaLossRate;
     localState->lossRateRatio = obs[5];
 
     // in-flight: How many bytes are currently sent but not ACKed
     double inflight = state->snd_max - state->snd_una;
-    obs[6] = inflight/state->snd_cwnd;
+    if (state->snd_cwnd == 0) {
+        obs[6] = 0;
+    } else {
+        obs[6] = inflight/state->snd_cwnd;
+    }
     localState->inflight = inflight;
     localState->inflightRatio = obs[6];
 
     // Pacing rate: How quickly are we sending bytes to the TCP stack
     // obs[7] = state->paceRate / this->astreaMaxThroughput;
-
-
-    // Delay Metric: The delay metric is treated as optimal if within the forgiveness window. Otherwise, have it slowly decrease as delay inflates.
-    // this->astreaDelayMetric = 1.0; 
-    // if (this->astreaSRTT > this->astreaMinDelay * this->rewardDelayForgiveness) {                                   
-    //     this->astreaDelayMetric = this->astreaMinDelay * this->rewardDelayForgiveness / this->astreaSRTT;
-    // }
-
 
     if(debug) {
         cout << "-" << endl;
@@ -182,13 +191,11 @@ std::optional<ObsType> Astrea::computeObservation(){
     conn->emit(throughputSignal, this->astreaThroughput);
     conn->emit(srttSignal, state->srtt);
     conn->emit(cwndSignal, state->snd_cwnd);
-    conn->emit(intervalDurationSignal, this->astreaIntervalDuration);
 
     // Send data to Observer before returning
-    
     conn->emit(this->astreaStateReportSig, (cObject*) localState, new cString(stringId));
 
-    scheduleNextStep(state->srtt.dbl());
+    scheduleNextStep(fixedIntervalDuration);
     return ObsType{
             obs[0],     // Normalized throughput (thr/thr_max)
             obs[1],     // max throughput (raw)
@@ -199,15 +206,6 @@ std::optional<ObsType> Astrea::computeObservation(){
             obs[6],                                           // in-flight bytes (pkt_flight/cwnd)
             //obs[7],                          // pacing rate (prate/thr_max, will require tcpPaced and currently doesn't work)
         };
-
-    // return {delta_snd_una,                      // Throughput (number of bytes acked)
-    //         this->astreaMaxThroughput,      // Max observed throughtput (number of bytes acked)   
-    //         state->snd_cwnd,                    // Current cwnd
-    //         this->maxCwnd,                      // Max observed cwnd
-    //         state->srtt.dbl(),                  // current srtt
-    //         this->astreaMinDelay,           // Min SRTT observed 
-    //         this->astreaIntervalDuration,   // Monitor interval duration
-    //     };
 }
 
 RewardType Astrea::computeReward(){
@@ -227,14 +225,14 @@ void Astrea::decisionMade(ActionType action) {
     // Calculate the newCwnd
     uint32_t newCwnd;
     if (action >= 0) {
-        newCwnd = (double) state->snd_cwnd * (1.0+responsivenessCoefficient*action);
+        newCwnd = (double) state->snd_cwnd * (1.0+actionControlCoeff*action);
     } else {
-        newCwnd = (double) state->snd_cwnd / (1.0-responsivenessCoefficient*action);
+        newCwnd = (double) state->snd_cwnd / (1.0-actionControlCoeff*action);
     }
     newCwnd = max(newCwnd, state->snd_mss);
     double multiplier = (double) newCwnd/state->snd_cwnd; // For debugging/plotting
 
-    // Attempt to change cwnd and pacing rate
+    // Attempt to change cwnd and pacing rate (hard upper cwnd limit to prevent simulation slowdown during early training)
     if (this->takeActions && newCwnd <= 1000000) {
         if (debug) cout << "\t\tcwnd changed from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         state->snd_cwnd = newCwnd;
@@ -245,14 +243,6 @@ void Astrea::decisionMade(ActionType action) {
     } else {
         // Invalid. Skip this action entirely.
         if (debug) cout << "\t\t" << "NOT CHANGING cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x) NOT CHANGING !!!!!!" << endl;
-    }
-
-    if (debug) {
-        // cout << "\t\t" << (this->takeActions) << endl;
-        // // cout << "\t\t" << (this->first_slowstart_complete) << endl;
-        // cout << "\t\t" << (this->rttReportCount > 0) << endl;
-        // cout << "\t\t" << (newCwnd < 1000000) << endl;
-        // cout << "-" << endl;
     }
 }
 

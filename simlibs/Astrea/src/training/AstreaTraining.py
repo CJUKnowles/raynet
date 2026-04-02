@@ -61,6 +61,7 @@ class OmnetGymApiEnv(MultiAgentEnv):
         self.base_rtt = self.env_config["minimum_rtt_range"][1]
         self.buffer_size = self.env_config["bottleneck_buffer_range"][0]
         self.max_steps_range = self.env_config["max_steps_range"][1]
+        self.num_flows_range = self.env_config["max_steps_range"][0]
         self.has_reset = False
         
         self.obs_size = 7   # How many values are in a given obs
@@ -87,7 +88,7 @@ class OmnetGymApiEnv(MultiAgentEnv):
         obs_spaces = {}
         action_spaces = {}
         self.possible_agents = []
-        for i in range(100):
+        for i in range(1000):
             self.possible_agents.append(f"`Astrea`{i}")
             obs_spaces[f"Astrea{i}"] = spaces.Box(low=self.obs_min, high=self.obs_max, dtype=np.float32)
             action_spaces[f"Astrea{i}"] = spaces.Box(low=-1.0, high=1.0, dtype=np.float32)
@@ -113,12 +114,14 @@ class OmnetGymApiEnv(MultiAgentEnv):
         base_rtt_range = self.env_config["minimum_rtt_range"]
         bottleneck_buffer_range = self.env_config["bottleneck_buffer_range"]
         max_steps_range = self.env_config["max_steps_range"]
+        num_flows_range = self.env_config["num_flows_range"]
         
         # Randomize environment parameters. Save them for obs normalization later.
         self.bw = round(np.random.uniform(low=bottleneck_bw_range[0], high=bottleneck_bw_range[1]))
         self.base_rtt = round(np.random.uniform(low=base_rtt_range[0], high=base_rtt_range[1]),2)
         self.buffer_size = round(np.random.uniform(low=bottleneck_buffer_range[0], high=bottleneck_buffer_range[1]))
         self.max_steps = round(np.random.uniform(low=max_steps_range[0], high=max_steps_range[1]))
+        self.num_flows = round(np.random.uniform(low=num_flows_range[0], high=num_flows_range[1]))
 
         # print("ORCA_BOTTLENECK_BW: ", f"{self.bw}Mbps")
         # print("ORCA_BASE_RTT: ", f"{self.base_rtt}ms")
@@ -131,10 +134,11 @@ class OmnetGymApiEnv(MultiAgentEnv):
         with open(original_ini_file, 'r') as fin:
             ini_string = fin.read()
         ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
-        ini_string = ini_string.replace("ORCA_BOTTLENECK_BW", f"{self.bw}Mbps")
-        ini_string = ini_string.replace("ORCA_BASE_RTT", f"{self.base_rtt/2.0}ms")  # Delay goes both ways, divide by two
-        ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")
+        ini_string = ini_string.replace("BOTTLENECK_BW", f"{self.bw}Mbps")
+        ini_string = ini_string.replace("BASE_RTT", f"{self.base_rtt/2.0}ms")  # Delay goes both ways, divide by two
+        ini_string = ini_string.replace("BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")
         ini_string = ini_string.replace("MAX_RL_STEPS", f"{self.max_steps}")
+        ini_string = ini_string.replace("NUM_FLOWS", f"{self.num_flows}")
         # TODO: Include these strings in the .ini somewhere that actually makes them alter the experiment
         with open(ini_variants_base + f".worker{os.getpid()}", 'w') as fout:
             fout.write(ini_string)
@@ -198,6 +202,7 @@ if __name__ == '__main__':
     bottleneck_bandwidth_range = (6, 6)            
     minimum_rtt_range = (5, 5)
     bottleneck_buffer_range = (5280000, 5280000) 
+    num_flows_range = (2, 5)
     load_from_checkpoint = False
     checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_OmnetGymApiEnv_2026-03-10_01-19-546lihpmj1/checkpoints/checkpoint_22"
     steps_to_train = 20000000
@@ -207,6 +212,7 @@ if __name__ == '__main__':
                   "minimum_rtt_range": minimum_rtt_range,
                   "bottleneck_buffer_range": bottleneck_buffer_range,
                   "max_steps_range": max_steps_range,
+                  "num_flows_range": num_flows_range,
                   "stacking": stacking} # how many observations to keep in an obs_history
     random.seed(seed)
     np.random.seed(seed)

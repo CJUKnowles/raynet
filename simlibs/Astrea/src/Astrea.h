@@ -54,7 +54,7 @@ public: // General use
     {
       std::string agentId = ((cString*) details)->str;
       if (agentId != this->stringId) {
-        if (debug) cout << "\t\t" << stringId << " recieved signal meant for " << agentId << ", ignoring" << endl;
+        //if (debug) cout << "\t\t" << stringId << " recieved signal meant for " << agentId << ", ignoring" << endl;
         return;
       }
 
@@ -90,13 +90,13 @@ public: // General use
     // Astrea parameters (Default values here, overridden in astrea.ini)
     double rewardDelayForgiveness = 1; // 
     double rewardLossMultiplier = 1;   // 
-    double responsivenessCoefficient = 1; // Alpha term from Astrea paper. Larger values allow larger changes to cwnd.
+    double actionControlCoeff = .025; // Alpha term from Astrea paper. Larger values allow larger changes to cwnd.
+    double fixedIntervalDuration=0.03;  // Seconds between steps
 
     // Astrea observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
     double astreaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
     double astreaLossRate=0.0;      // The average loss rate of packets over the last interval
     double astreaACKTotal=0.0;      // The number of valid acknowledgements over the last interval
-    double astreaIntervalDuration=0.0;  // The simtime elapsed over the last interval
     double astreaSRTT=0.0;          // The smoothed RTT of (all?) packets so far
     double astreaCwnd=0.0;          // The current congestion window (don't really need a new variable here, this is just useful for reference. Just use conn->snd_cwnd)
     double astreaMaxThroughput=.000001; // The maximum delivery rate so far
@@ -121,7 +121,6 @@ public: // General use
     double maxACKTotal=1.0; // The max ACK total observed in an interval
     double retransmissionRate; // The most recent measurement of bytes retransmitted.
     bool first_slowstart_complete = false; // Do not take astrea actions until the first slow start phase has completed. This allows the initial state (max througphut and min delay) to form naturally and prevents deadlocks.
-  
     simsignal_t registerAstreaAgentSig = owner->registerSignal("registerAstreaAgent");
     simsignal_t astreaStateReportSig = owner->registerSignal("astreaStateReport");
     simsignal_t globalStateRequestSig = owner->registerSignal("globalStateRequest");
