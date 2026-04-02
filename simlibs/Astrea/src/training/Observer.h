@@ -26,11 +26,6 @@ class GlobalState : public cObject, noncopyable
     double lossRatio;       // Average current loss ratio of all flows
     double numFlows;        // Current number of flows (agents)
 
-    // Ground truth (network parameters) // TODO: Set these dynamically
-    double LINK_DELAY = .02;
-    double BUFFER_SIZE = 1024;
-    double BANDWIDTH = 6000;
-
     // Reward metrics
     double throughputMetric;
     double latencyMetric;
@@ -98,6 +93,7 @@ struct StateHistory {
   std::deque<LocalState*> history;           // This agent's past n reported observations
   size_t max_history_length = 3;             // n, how many state entries should be stored for a given agent (just an unsigned int)
   double avgThroughput = 0;                  // Average throughput over entire history
+  double stability = 0;                      // This flow's stability (variance of throughput over time)
   // Constructor - Maybe unnecessary
   StateHistory() {
 
@@ -123,7 +119,7 @@ struct StateHistory {
   }
 
   // Returns the average throughput of a given flow's entire history
-  double getAverageThroughput() const {
+  double getAverageThroughput() {
     if (history.empty()) {
         return 0.0;
     }
@@ -133,7 +129,26 @@ struct StateHistory {
         throughputSum += entry->throughput;
     }
 
-    return throughputSum / static_cast<double>(history.size());
+    this->avgThroughput = throughputSum / static_cast<double>(history.size());
+    return avgThroughput;
+  }
+
+  // Returns the throughput stability of this flow's history (assumes avgThroughput is already computed and up-to-date)
+  double getStability() {
+    if (history.empty()) {
+        return 0.0;
+    }
+
+    double stabilityNumerator = 0.0;
+    double entryCount = 0;
+    for (const LocalState* entry : history) {
+        stabilityNumerator += std::pow(entry->throughput - this->avgThroughput, 2.0);
+        entryCount++;
+    }
+    double stabilityDenominator = entryCount * std::pow(this->avgThroughput, 2.0);
+
+    this->stability = std::sqrt(stabilityNumerator/stabilityDenominator);
+    return this->stability;
   }
 };
 
@@ -148,9 +163,13 @@ protected:
   // State
   GlobalState* globalState; // The most recently computed global state
   std::unordered_map<std::string, StateHistory> astreaAgents; // Map of all Astrea agents. <agent_id, agent_current_info>
-  
-  // Params
   double delayCoeff = 1.5; // Delays below minDelay*delayCoeff will be treated as optimal
+  bool debug = false;
+
+  // Ground truth network params
+  double LINK_DELAY = -1; // One-way delay in seconds (converted from ms)
+  double BUFFER_SIZE = -1; // Bottleneck buffer size in bytes (converted from bits)
+  double BANDWIDTH = -1;   // Bottleneck bandwidth in bytes/s (converted from Mbps)
 
   // Reward weights // TODO: Allow default weights to be overridden by the config.ini
   double throughputWeight = 0.1;

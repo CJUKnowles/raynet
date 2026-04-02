@@ -194,7 +194,7 @@ if __name__ == '__main__':
     # bottleneck_bandwidth_range = (6, 192)            # Orca: 6Mbps-192Mbps
     # minimum_rtt_range = (4, 400)                     # Orca: 4ms-400ms
     # bottleneck_buffer_range = (3000, 96000000)       # Orca: 3KB-96MB, expressed in terms of bits
-    max_steps_range = (5000, 5000)                   # Custom: Randomize ending time slightly so threads desync, to make log outputs less sparse
+    max_steps_range = (5000, 5000)
     bottleneck_bandwidth_range = (6, 6)            
     minimum_rtt_range = (5, 5)
     bottleneck_buffer_range = (5280000, 5280000) 

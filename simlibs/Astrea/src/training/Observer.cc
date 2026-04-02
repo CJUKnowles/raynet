@@ -7,11 +7,26 @@ Define_Module(Observer);
 // Called at start of simulation
 void Observer::initialize()
 {
+    this->debug = par("printDebugMessages");
+    this->LINK_DELAY = par("astreaBottleneckDelay");
+    this->LINK_DELAY *= .001; // ms to s
+    this->BUFFER_SIZE = par("astreaDataCapacity");
+    this->BUFFER_SIZE /= 8.0; // bits to bytes
+    this->BANDWIDTH = par("astreaBottleneckDatarate");
+    this->BANDWIDTH *= 125000; // Megabits/s to bytes/s
     this->globalState = new GlobalState();
+
     getSimulation()->getSystemModule()->subscribe("registerAstreaAgent", this);     // used to register Astrea agents
     getSimulation()->getSystemModule()->subscribe("unregisterAstreaAgent", this);   // used to unregister Astrea agents
     getSimulation()->getSystemModule()->subscribe("astreaStateReport", this);       // used to report a given agent's current state
     getSimulation()->getSystemModule()->subscribe("globalStateRequest", this);      // used to request global state info (rewards) from the Observer
+    
+    if (debug) {
+        cout << "\tObserver using following network parameters: " << endl;
+        cout << "\t\t" << "BANDWIDTH: " << this->BANDWIDTH << endl;
+        cout << "\t\t" << "LINK_DELAY: " << this->LINK_DELAY << endl;
+        cout << "\t\t" << "BUFFER_SIZE: " << this->BUFFER_SIZE << endl;
+    }
 }
 
 // Called at end of simulation
@@ -38,7 +53,7 @@ void Observer::receiveSignal(cComponent *source, simsignal_t signalID, const cha
         EV_TRACE << "Registering new agent with Observer..." << std::endl;
         std::string id(value);
         EV_TRACE << "Agent ID: " << id << std::endl;
-        cout << "OBSERVER: Registering " << id << endl;
+        if (debug) cout << "OBSERVER: Registering " << id << endl;
         
         // Insert this agent into the Observer's agent list, with an empty history to populate later
         StateHistory newHistory;
@@ -49,7 +64,7 @@ void Observer::receiveSignal(cComponent *source, simsignal_t signalID, const cha
         EV_TRACE << "Deregistering new agent with Observer..." << std::endl;
         std::string id(value);
         EV_TRACE << "Agent ID: " << id << std::endl;
-        cout << "OBSERVER: Deregistering " << id << endl;
+        if (debug) cout << "OBSERVER: Deregistering " << id << endl;
         astreaAgents.erase(id);
     }
 }
@@ -136,11 +151,11 @@ void Observer::computeGlobalState() {
     globalState->reward = 0.0;
 
     // Throughput metric
-    globalState->throughputMetric = globalState->ovrThroughput/globalState->BANDWIDTH;
+    globalState->throughputMetric = globalState->ovrThroughput/this->BANDWIDTH;
     globalState->reward += this->throughputWeight * globalState->throughputMetric;
 
     // Latency Metric
-    double latencyThreshold = (1.0 + delayCoeff)*globalState->LINK_DELAY;
+    double latencyThreshold = (1.0 + delayCoeff)*this->LINK_DELAY;
     if(globalState->avgLatency > latencyThreshold) {
         globalState->latencyMetric = (globalState->avgLatency - latencyThreshold) * 1; // TODO: Multiply by the paceRate
     } else {
@@ -153,7 +168,7 @@ void Observer::computeGlobalState() {
     globalState->lossMetric = lossRatioSum/numFlows;
     globalState->reward += this->lossWeight * globalState->lossMetric;
     
-    // Fairness Metric
+    // Fairness Metric: 
     double globalAvgThroughput = avgThroughputSum/numFlows; // Average of all average throughputs (kill me)
     double fairnessNumerator = 0;
     for (auto& [agentId, stateHistory] : astreaAgents) {
@@ -165,12 +180,18 @@ void Observer::computeGlobalState() {
     globalState->fairnessMetric = std::sqrt(fairnessNumerator/fairnessDenominator);
     globalState->reward += this->fairnessWeight * globalState->fairnessMetric;
 
-    // TODO: Stability Metric
-    globalState->stabilityMetric = 1.0;
+    // Stability Metric: average stability of all active astrea flows
+    double stabilitySum = 0;
+    for (auto& [agentId, stateHistory] : astreaAgents) {
+        if (!stateHistory.history.empty()) {
+            stabilitySum += stateHistory.getStability();
+        }
+    }
+    globalState->stabilityMetric = stabilitySum/numFlows;
     globalState->reward += this->stabilityWeight * globalState->stabilityMetric;
 
     // Global state has been updated. Only re-compute if new observations arrive.
     globalState->needsUpdating = false;
 
-    globalState->printSummary();
+    if (debug) globalState->printSummary();
 }
