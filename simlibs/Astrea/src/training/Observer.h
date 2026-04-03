@@ -33,6 +33,7 @@ class GlobalState : public cObject, noncopyable
     double fairnessMetric;
     double stabilityMetric;
     double reward;
+    double minReward = 999; // Just for debugging!
     // etc..
 
     // Meta
@@ -58,6 +59,7 @@ class GlobalState : public cObject, noncopyable
       cout << "\t\t" << "fairnessMetric: " << fairnessMetric << endl;
       cout << "\t\t" << "stabilityMetric: " << stabilityMetric << endl;
       cout << "\t\t" << "Reward: " << reward << endl;
+      cout << "\t\t" << "MinReward: " << minReward << endl;
     }
   };
 
@@ -91,7 +93,7 @@ class LocalState : public cObject, noncopyable
 // A deque of the past n states reported by a given agent
 struct StateHistory {
   std::deque<LocalState*> history;           // This agent's past n reported observations
-  size_t max_history_length = 3;             // n, how many state entries should be stored for a given agent (just an unsigned int)
+  size_t max_history_length = 5;             // n, how many state entries should be stored for a given agent (just an unsigned int)
   double avgThroughput = 0;                  // Average throughput over entire history
   double stability = 0;                      // This flow's stability (variance of throughput over time)
   // Constructor - Maybe unnecessary
@@ -125,11 +127,17 @@ struct StateHistory {
     }
 
     double throughputSum = 0.0;
+    double count = 0;
     for (const LocalState* entry : history) {
         throughputSum += entry->throughput;
+        count++;
     }
 
-    this->avgThroughput = throughputSum / static_cast<double>(history.size());
+    if (count > 0) {
+      this->avgThroughput = throughputSum / count;
+    } else {
+      this->avgThroughput = 0;
+    }
     return avgThroughput;
   }
 
@@ -146,8 +154,11 @@ struct StateHistory {
         entryCount++;
     }
     double stabilityDenominator = entryCount * std::pow(this->avgThroughput, 2.0);
-
-    this->stability = std::sqrt(stabilityNumerator/stabilityDenominator);
+    if (stabilityDenominator == 0) {
+      this->stability = 0.0;
+    } else {
+      this->stability = std::sqrt(stabilityNumerator/stabilityDenominator);
+    }
     return this->stability;
   }
 };

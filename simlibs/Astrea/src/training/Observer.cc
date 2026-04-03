@@ -1,4 +1,5 @@
 #include "Observer.h"
+#include <algorithm>
 #include <cmath>
 #include <cobjects.h>
 
@@ -177,7 +178,11 @@ void Observer::computeGlobalState() {
         }
     }
     double fairnessDenominator = numFlows * std::pow(avgThroughputSum,2.0);
-    globalState->fairnessMetric = std::sqrt(fairnessNumerator/fairnessDenominator);
+    if (fairnessDenominator == 0) {
+        globalState->fairnessMetric = 0;
+    } else {
+        globalState->fairnessMetric = std::sqrt(fairnessNumerator/fairnessDenominator);
+    }
     globalState->reward -= this->fairnessWeight * globalState->fairnessMetric;
 
     // Stability Metric: average stability of all active astrea flows
@@ -190,8 +195,11 @@ void Observer::computeGlobalState() {
     globalState->stabilityMetric = stabilitySum/numFlows;
     globalState->reward -= this->stabilityWeight * globalState->stabilityMetric;
 
+    // Use the throughtputWeight to bound the reward value, as it defines the upper limit
+    globalState->reward = max(-this->throughputWeight, min(this->throughputWeight, globalState->reward));
+    globalState->minReward = std::min(globalState->minReward, globalState->reward);
+    if (debug) globalState->printSummary();
+
     // Global state has been updated. Only re-compute if new observations arrive.
     globalState->needsUpdating = false;
-
-    if (debug) globalState->printSummary();
 }

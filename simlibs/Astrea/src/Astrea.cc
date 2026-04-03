@@ -1,5 +1,6 @@
 #include "omnetpp/ccomponent.h"
 #include "omnetpp/cobject.h"
+#include "omnetpp/simtime.h"
 #include "omnetpp/simtime_t.h"
 #include "transportlayer/tcp/TcpPacedConnection.h"
 #include "inet/transportlayer/tcp/flavours/TcpNoCongestionControl.h"
@@ -98,13 +99,6 @@ std::optional<ObsType> Astrea::computeObservation(){
     double delta_snd_una = state->snd_una - this->last_snd_una;
     double delta_rexmit_count = state->rexmit_count - this->last_rexmit_count;
 
-    // if (delta_snd_una == 0) {
-    //     // If no acks have been received, this obs is invalid. Schedule another step and skip the current one.
-    //     scheduleNextStep(this->fixedIntervalDuration); // re-use the last interval duration. Prevents shrinking SRTT during congestion from oversaturing event queue with STEP events.
-    //     //scheduleNextStep(state->srtt.dbl());
-    //     return std::nullopt;
-    // }
-
     // Begin preparing a local state report to send to the Observer
     LocalState* localState = new LocalState();
 
@@ -169,7 +163,8 @@ std::optional<ObsType> Astrea::computeObservation(){
     if(debug) {
         cout << "-" << endl;
         cout << "-" << endl;
-        cout << "\t" << stringId << " State:" << endl;
+        cout << "\t" << stringId << " step #" << this->RLStepsTaken << ":" << endl;
+            cout << "\t\tsimtime: " << simTime().dbl() << endl;
             cout << "\t\tsnd_una: " << state->snd_una << endl;
             cout << "\t\tdelta_snd_una: " << delta_snd_una << endl;
             cout << "\t\tcwnd: " << state->snd_cwnd << endl;
@@ -195,7 +190,15 @@ std::optional<ObsType> Astrea::computeObservation(){
     // Send data to Observer before returning
     conn->emit(this->astreaStateReportSig, (cObject*) localState, new cString(stringId));
 
-    scheduleNextStep(fixedIntervalDuration);
+    // Update step count, and check if the step limit has been reached
+    RLStepsTaken++;
+    if (RLStepsTaken >= this->maxRLSteps) {
+        done = true;
+        cout << "\t" << stringId << " IS DONE AT STEP " << this->RLStepsTaken << endl;
+    } else {
+        // Finally, schedule the next step (will be automatically cancelled if done)
+        scheduleNextStep(this->fixedIntervalDuration);
+    }
     return ObsType{
             obs[0],     // Normalized throughput (thr/thr_max)
             obs[1],     // max throughput (raw)
@@ -250,9 +253,6 @@ void Astrea::decisionMade(ActionType action) {
 void Astrea::resetStepVariables()
 {
     if (debug) cout << "\tAstrea: resetStepVariables()" << endl;
-    if (state->srtt.dbl() == 0) {
-        return; // Skipping a step, dont reset step variables
-    }
     this->last_snd_max = state->snd_max;
     this->last_snd_una = state->snd_una;
     this->last_rexmit_count = state->rexmit_count;

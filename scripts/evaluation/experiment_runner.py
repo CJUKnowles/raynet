@@ -12,6 +12,7 @@ experiment_paths = {
 runner_paths = {
     "Orca": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/OrcaEval.py",
     "Cubic": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/CubicEval.py",
+    "Astrea": f"{os.getenv('HOME')}/raynet/simlibs/Astrea/src/AstreaEval.py",
 }
 
 
@@ -36,9 +37,9 @@ def run_experiments(experiments_dict, create_output_csv=True):
 if __name__ == "__main__":
     
     experiments_to_run = {
-        "single-flow": ["Orca"],
-        "double-flow-dumbbell": ["Orca"],
-        "responsiveness": ["Orca"],
+        #"single-flow": ["Astrea"],
+        "double-flow-dumbbell": ["Astrea"],
+        #"responsiveness": ["Astrea"],
     }
     
     run_experiments(experiments_to_run)

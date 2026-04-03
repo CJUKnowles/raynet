@@ -25,22 +25,6 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 
 class OmnetGymApiEnv(MultiAgentEnv):
     
-    # def get_observation_space(self, agent_id):
-    #     if agent_id.startswith("Astrea"):
-    #         return spaces.Box(
-    #             low=self.obs_min, 
-    #             high=self.obs_max,
-    #             dtype=np.float32) # A 4-dimensional array, each feature is a float value with its own bounds
-    #     else:
-    #         raise ValueError(f"bad agent id: {agent_id}!")
-    
-    # def get_action_space(self, agent_id):
-    #     print("HI HI HELLO HI")
-    #     if agent_id.startswith("Astrea"):
-    #         return gym.spaces.Box(low=np.array(-2.0, dtype=np.float32), high=np.array(2.0, dtype=np.float32), dtype=np.float32)
-    #     else:
-    #         raise ValueError(f"bad agent id: {agent_id}!")
-    
     def __init__(self,env_config):
         """
         Initialize the training environment configuration
@@ -54,14 +38,7 @@ class OmnetGymApiEnv(MultiAgentEnv):
         self.env_config = env_config
         self.step_count = 0 # just for debugging
         self.stacking = self.env_config["stacking"]
-        self.random_seed = os.getpid() # Ensures each ray worker generates different parameters
-        random.seed(self.random_seed)
-        # Initialize env parameters to some reasonable defaults (these should be quickly overwritten in reset())
-        self.bw = self.env_config["bottleneck_bw_range"][0]
-        self.base_rtt = self.env_config["minimum_rtt_range"][1]
-        self.buffer_size = self.env_config["bottleneck_buffer_range"][0]
-        self.max_steps = self.env_config["max_steps_range"][1]
-        self.num_flows = self.env_config["num_flows_range"][0]
+        
         self.has_reset = False
         
         self.obs_size = 7   # How many values are in a given obs
@@ -109,42 +86,18 @@ class OmnetGymApiEnv(MultiAgentEnv):
             )
         )
         
-        # Grab environment parameter ranges
-        bottleneck_bw_range = self.env_config["bottleneck_bw_range"]
-        base_rtt_range = self.env_config["minimum_rtt_range"]
-        bottleneck_buffer_range = self.env_config["bottleneck_buffer_range"]
-        max_steps_range = self.env_config["max_steps_range"]
-        num_flows_range = self.env_config["num_flows_range"]
-        
-        # Randomize environment parameters. Save them for obs normalization later.
-        self.bw = round(np.random.uniform(low=bottleneck_bw_range[0], high=bottleneck_bw_range[1]))
-        self.base_rtt = round(np.random.uniform(low=base_rtt_range[0], high=base_rtt_range[1]),2)
-        self.buffer_size = round(np.random.uniform(low=bottleneck_buffer_range[0], high=bottleneck_buffer_range[1]))
-        self.max_steps = round(np.random.uniform(low=max_steps_range[0], high=max_steps_range[1]))
-        self.num_flows = round(np.random.uniform(low=num_flows_range[0], high=num_flows_range[1]))
-
-        # print("ORCA_BOTTLENECK_BW: ", f"{self.bw}Mbps")
-        # print("ORCA_BASE_RTT: ", f"{self.base_rtt}ms")
-        # print("ORCA_BOTTLENECK_BUFFER_SIZE: ", f"{self.buffer_size}b")
-        # print("MAX_RL_STEPS: ", f"{self.max_steps}")
-        
-        # Modify the base config .ini with a proper home directory and the random environment parameters
+        # Dynamically generate new simulation config
         original_ini_file = self.env_config["iniPath"]
         ini_variants_base = f"{self.env_config["iniPath"].rsplit("/", 1)[0]}/ini_variants/{self.env_config["iniPath"].rsplit("/", 1)[1]}"
         with open(original_ini_file, 'r') as fin:
             ini_string = fin.read()
         ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
-        ini_string = ini_string.replace("BOTTLENECK_BW", f"{self.bw}Mbps")
-        ini_string = ini_string.replace("BASE_RTT", f"{self.base_rtt/2.0}ms")  # Delay goes both ways, divide by two
-        ini_string = ini_string.replace("BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")
-        ini_string = ini_string.replace("MAX_RL_STEPS", f"{self.max_steps}")
-        ini_string = ini_string.replace("NUM_FLOWS", f"{self.num_flows}")
         # TODO: Include these strings in the .ini somewhere that actually makes them alter the experiment
         with open(ini_variants_base + f".worker{os.getpid()}", 'w') as fout:
             fout.write(ini_string)
         
         # Start a new simulation runner on the modified ini file
-        self.runner.initialise(ini_variants_base + f".worker{os.getpid()}", "General")
+        self.runner.initialise(ini_variants_base + f".worker{os.getpid()}", "Astrea")
         obs = self.runner.reset()
         
         # Append the most recent observations to their agents' histories. Store the updated histories in obs and return.
@@ -170,15 +123,16 @@ class OmnetGymApiEnv(MultiAgentEnv):
             self.obs_history[agent].append(np.asarray(agent_obs, dtype=np.float32))
             obs[agent] = np.concatenate(self.obs_history[agent])
         
+        print(info_)
         # Shutdown if ANY agent reports as done (lazy but works for this use case)
         if True in terminateds.values():      # TERMINATED - The RLAgent has reported itself as done (within the context of the MDP.) End the simulation.
             print("An Astrea agent has repoted as done, shutting down.")
             self.runner.shutdown()
             self.runner.cleanup()
-        if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
-            print("Simulation reported as complete, shutting down")
-            self.runner.shutdown()
-            self.runner.cleanup()  
+        # if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
+        #     print("Simulation reported as complete, shutting down")
+        #     self.runner.shutdown()
+        #     self.runner.cleanup()  
         
         # TODO: Implement trucation. This was simple with single-agent, harder with multiple. Maybe use a copy of terminateds and replace the values.
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
@@ -192,29 +146,14 @@ def omnetgymapienv_creator(env_config):
 
 
 if __name__ == '__main__':
-    env_name = "Astrea-1.1"
+    env_name = "Astrea-inference"
     register_env(env_name, omnetgymapienv_creator)
-    num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
-    seed = 91456211
-    
-    max_steps_range = (5000, 5000)
-    bottleneck_bandwidth_range = (5, 20)
-    minimum_rtt_range = (5, 100)
-    bottleneck_buffer_range = (25000, 2000000)
-    num_flows_range = (1, 5)
     load_from_checkpoint = False
     checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Astrea-1.0/PPO_Astrea-1.0_2026-04-02_21-58-40jrwrh5ro/checkpoints/checkpoint_2"
-    steps_to_train = 1000
+    steps_to_train = 20000000
     stacking = 5
-    env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Astrea/src/training/AstreaTraining.ini",
-                  "bottleneck_bw_range": bottleneck_bandwidth_range,
-                  "minimum_rtt_range": minimum_rtt_range,
-                  "bottleneck_buffer_range": bottleneck_buffer_range,
-                  "max_steps_range": max_steps_range,
-                  "num_flows_range": num_flows_range,
+    env_config = {"iniPath": sys.argv[1],
                   "stacking": stacking} # how many observations to keep in an obs_history
-    random.seed(seed)
-    np.random.seed(seed)
     gpus = GPUtil.getGPUs()
     print("GPUs Available:", gpus)
     
@@ -236,51 +175,93 @@ if __name__ == '__main__':
                     1,                            # Loss rate
                     1                             # Inflight
                     ], dtype=np.float32), stacking)
-        
-    ray.init(num_cpus=16, num_gpus=len(gpus))
+    
+    ray.init(local_mode=True)
     config = (
-            PPOConfig()
-            .resources(num_gpus=len(gpus))
-            .env_runners(num_env_runners=num_workers) #, rollout_fragment_length=1000
-            .learners(num_learners=1, num_gpus_per_learner=len(gpus), num_cpus_per_learner=1)
-            .environment(env_name, env_config=env_config, disable_env_checking=True) # "OmnetGymApiEnv
-            .multi_agent(
-                policies={
-                    "shared_policy": (
-                        None,
-                        spaces.Box(low=obs_min, high=obs_max, dtype=np.float32),    # Obs space
-                        spaces.Box(low=-2, high=.8, shape=(1,), dtype=np.float32),  # action space
-                        {}
-                    ),
-                },
-                policy_mapping_fn=lambda agent_id, episode, **kwargs: "shared_policy"
-            )
-            )
+        PPOConfig()
+        # .env_runners(explore=False)
+        .environment(env_name, env_config=env_config)   # "OmnetGymApiEnv
+        #.training(num_steps_sampled_before_learning_starts=9999999)
+        .multi_agent(
+            policies={
+                "shared_policy": (
+                    None,
+                    spaces.Box(low=obs_min, high=obs_max, dtype=np.float32),    # Obs space
+                    spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32),  # action space
+                    {}
+                ),
+            },
+            policy_mapping_fn=lambda agent_id, episode, **kwargs: "shared_policy"
+        )
+        )
     print(config.is_multi_agent)
-    
+
     algo = config.build_algo()
-    
-    
+
+
     # Convert betas? (solution found online, fixes a crash when loading a checkpoint)
     def betas_tensor_to_float(learner):
         for param_grp_key in learner._optimizer_parameters.keys():
             param_grp = param_grp_key.param_groups[0]
             param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
     if (load_from_checkpoint):
+        #algo.load_checkpoint(os.getenv('HOME') + "/ray_results/JAMESTEST")
         algo.restore(checkpoint_load_dir)
         algo.learner_group.foreach_learner(betas_tensor_to_float)
-    
-    pprint.pprint(algo.config)
-    # Main training loop!
-    iteration = 0
-    checkpoint = 0
-    iterations_per_checkpoint = 1000
+
+    # Main loop!
+    steps = 0
+    check_in_freq = 100
     while True:
-        result = algo.train()   # Perform a single training iteration (many steps, usually shorter than an episode. Changes depending on training parameters.)
-        iteration += 1
-        print(f"Iteration {iteration} complete")
-        if (iteration % iterations_per_checkpoint == 0):
-            checkpoint_dir = algo.logdir + f"/checkpoints/checkpoint_{checkpoint}"
-            algo.save_checkpoint(checkpoint_dir) # Somehow get the directory from this?
-            print(f"Saved checkpoint to {checkpoint_dir}")
-            checkpoint += 1
+        result = algo.training_step()
+        
+        print(f"Performing step: {steps}")
+        if steps % check_in_freq == 0:
+            print(f"Performing step: {steps}")
+        steps += 1
+    
+    # config = (
+    #         PPOConfig()
+    #         .resources(num_gpus=len(gpus))
+    #         .env_runners(num_env_runners=1) #, rollout_fragment_length=1000
+    #         .environment(env_name, env_config=env_config, disable_env_checking=True) # "OmnetGymApiEnv
+    #         .multi_agent(
+    #             policies={
+    #                 "shared_policy": (
+    #                     None,
+    #                     spaces.Box(low=obs_min, high=obs_max, dtype=np.float32),    # Obs space
+    #                     spaces.Box(low=-2, high=.8, shape=(1,), dtype=np.float32),  # action space
+    #                     {}
+    #                 ),
+    #             },
+    #             policy_mapping_fn=lambda agent_id, episode, **kwargs: "shared_policy"
+    #         )
+    #         )
+    # print(config.is_multi_agent)
+    
+    # algo = config.build_algo()
+    
+    
+    # # Convert betas? (solution found online, fixes a crash when loading a checkpoint)
+    # def betas_tensor_to_float(learner):
+    #     for param_grp_key in learner._optimizer_parameters.keys():
+    #         param_grp = param_grp_key.param_groups[0]
+    #         param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
+    # if (load_from_checkpoint):
+    #     algo.restore(checkpoint_load_dir)
+    #     algo.learner_group.foreach_learner(betas_tensor_to_float)
+    
+    # pprint.pprint(algo.config)
+    # # Main training loop!
+    # iteration = 0
+    # checkpoint = 0
+    # iterations_per_checkpoint = 1000
+    # while True:
+    #     result = algo.train()   # Perform a single training iteration (many steps, usually shorter than an episode. Changes depending on training parameters.)
+    #     iteration += 1
+    #     print(f"Iteration {iteration} complete")
+    #     if (iteration % iterations_per_checkpoint == 0):
+    #         checkpoint_dir = algo.logdir + f"/checkpoints/checkpoint_{checkpoint}"
+    #         algo.save_checkpoint(checkpoint_dir) # Somehow get the directory from this?
+    #         print(f"Saved checkpoint to {checkpoint_dir}")
+    #         checkpoint += 1
