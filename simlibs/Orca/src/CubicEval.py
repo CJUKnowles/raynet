@@ -120,7 +120,9 @@ class OmnetGymApiEnv(gym.Env):
             print(terminateds)
             self.runner.shutdown()
             self.runner.cleanup()
+        print(info_)
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
+            print("Simulation time limit reached!")
             sim_truncated = True
         
         # Debug

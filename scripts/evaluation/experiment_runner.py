@@ -37,8 +37,8 @@ def run_experiments(experiments_dict, create_output_csv=True):
 if __name__ == "__main__":
     
     experiments_to_run = {
-        #"single-flow": ["Astrea"],
-        "double-flow-dumbbell": ["Astrea"],
+        "single-flow": ["Astrea"],
+        #"double-flow-dumbbell": ["Astrea"],
         #"responsiveness": ["Astrea"],
     }
     

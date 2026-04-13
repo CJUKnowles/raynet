@@ -96,11 +96,12 @@ void RLInterface::initialise()
 }
 
 void RLInterface::terminate(){
+    cout << stringId.c_str() << " terminating!" << endl;
     if(rlInitialised){
-    owner->emit(unregisterSig, stringId.c_str());
-    getSimulation()->getSystemModule()->unsubscribe("performAction", (cListener*) this);
-    getSimulation()->getSystemModule()->unsubscribe("obsRequest", (cListener*) this);
-    rlInitialised = false;
+        owner->emit(unregisterSig, stringId.c_str());
+        getSimulation()->getSystemModule()->unsubscribe("performAction", (cListener*) this);
+        getSimulation()->getSystemModule()->unsubscribe("obsRequest", (cListener*) this);
+        rlInitialised = false;
     }
 }
 

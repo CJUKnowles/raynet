@@ -123,12 +123,15 @@ class OmnetGymApiEnv(MultiAgentEnv):
             self.obs_history[agent].append(np.asarray(agent_obs, dtype=np.float32))
             obs[agent] = np.concatenate(self.obs_history[agent])
         
-        print(info_)
         # Shutdown if ANY agent reports as done (lazy but works for this use case)
         if True in terminateds.values():      # TERMINATED - The RLAgent has reported itself as done (within the context of the MDP.) End the simulation.
-            print("An Astrea agent has repoted as done, shutting down.")
+            for agent in terminateds:
+                # Set all agents to done so the trainer knows we are finished.
+                terminateds[agent] = True
+            print("An Astrea agent has reported as done, shutting down.")
             self.runner.shutdown()
             self.runner.cleanup()
+        print(info_)
         # if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
         #     print("Simulation reported as complete, shutting down")
         #     self.runner.shutdown()
@@ -148,8 +151,8 @@ def omnetgymapienv_creator(env_config):
 if __name__ == '__main__':
     env_name = "Astrea-inference"
     register_env(env_name, omnetgymapienv_creator)
-    load_from_checkpoint = False
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Astrea-1.0/PPO_Astrea-1.0_2026-04-02_21-58-40jrwrh5ro/checkpoints/checkpoint_2"
+    load_from_checkpoint = True
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/PPO_Astrea-1.1_2026-04-04_00-32-37t5e_me7v/checkpoints/checkpoint_95"
     steps_to_train = 20000000
     stacking = 5
     env_config = {"iniPath": sys.argv[1],
@@ -177,9 +180,10 @@ if __name__ == '__main__':
                     ], dtype=np.float32), stacking)
     
     ray.init(local_mode=True)
+    #ray.init(num_cpus=16, num_gpus=len(gpus))
     config = (
         PPOConfig()
-        # .env_runners(explore=False)
+        .env_runners(explore=False)
         .environment(env_name, env_config=env_config)   # "OmnetGymApiEnv
         #.training(num_steps_sampled_before_learning_starts=9999999)
         .multi_agent(
@@ -205,7 +209,6 @@ if __name__ == '__main__':
             param_grp = param_grp_key.param_groups[0]
             param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
     if (load_from_checkpoint):
-        #algo.load_checkpoint(os.getenv('HOME') + "/ray_results/JAMESTEST")
         algo.restore(checkpoint_load_dir)
         algo.learner_group.foreach_learner(betas_tensor_to_float)
 

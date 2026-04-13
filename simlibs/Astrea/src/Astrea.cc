@@ -28,7 +28,6 @@ Astrea::~Astrea() {
     if (debug) cout << "\tAstrea: Destructor method called. Goodbye.";
     getSimulation()->getSystemModule()->unsubscribe(stringId.c_str(), (cListener*) this);
     getSimulation()->getSystemModule()->unsubscribe("performAction", (cListener*) this);
-    
 }
 
 

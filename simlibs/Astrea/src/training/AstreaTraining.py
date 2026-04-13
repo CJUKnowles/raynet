@@ -14,7 +14,7 @@ from ray.tune import Tuner
 from ray.air import CheckpointConfig
 import random
 import math
-from ray.rllib.algorithms.ppo.ppo import PPOConfig
+from ray.rllib.algorithms.sac.sac import SACConfig
 import os
 import time
 from random import randint
@@ -83,7 +83,8 @@ class OmnetGymApiEnv(MultiAgentEnv):
                     1,                            # Loss rate
                     1                             # Inflight
                     ], dtype=np.float32), self.stacking)
-        
+        self.agent_dones = {}
+        self.agent_trucateds = {}
         
         obs_spaces = {}
         action_spaces = {}
@@ -98,9 +99,6 @@ class OmnetGymApiEnv(MultiAgentEnv):
         
        
     def reset(self, *, seed=None, options=None):
-        if self.has_reset:
-            return
-        self.has_reset = True
         # Reset the observation history to empty
         self.obs_history = defaultdict(
             lambda: deque(
@@ -123,10 +121,10 @@ class OmnetGymApiEnv(MultiAgentEnv):
         self.max_steps = round(np.random.uniform(low=max_steps_range[0], high=max_steps_range[1]))
         self.num_flows = round(np.random.uniform(low=num_flows_range[0], high=num_flows_range[1]))
 
-        # print("ORCA_BOTTLENECK_BW: ", f"{self.bw}Mbps")
-        # print("ORCA_BASE_RTT: ", f"{self.base_rtt}ms")
-        # print("ORCA_BOTTLENECK_BUFFER_SIZE: ", f"{self.buffer_size}b")
-        # print("MAX_RL_STEPS: ", f"{self.max_steps}")
+        print("ORCA_BOTTLENECK_BW: ", f"{self.bw}Mbps")
+        print("ORCA_BASE_RTT: ", f"{self.base_rtt}ms")
+        print("ORCA_BOTTLENECK_BUFFER_SIZE: ", f"{self.buffer_size}b")
+        print("MAX_RL_STEPS: ", f"{self.max_steps}")
         
         # Modify the base config .ini with a proper home directory and the random environment parameters
         original_ini_file = self.env_config["iniPath"]
@@ -164,48 +162,61 @@ class OmnetGymApiEnv(MultiAgentEnv):
         for agent_id, action in actions.items():
             actions[agent_id] = float(np.asarray(action).item())
         obs, rewards, terminateds, info_ = self.runner.step(actions)
+
+        
     
         # Append the most recent observations to their agents' histories. Store the updated histories in obs
         for agent, agent_obs in obs.items():
             self.obs_history[agent].append(np.asarray(agent_obs, dtype=np.float32))
             obs[agent] = np.concatenate(self.obs_history[agent])
         
-        # Shutdown if ANY agent reports as done (lazy but works for this use case)
-        if True in terminateds.values():      # TERMINATED - The RLAgent has reported itself as done (within the context of the MDP.) End the simulation.
-            print("An Astrea agent has repoted as done, shutting down.")
+        for agent in terminateds:
+            if agent != "__all__":
+                self.agent_dones[agent] = terminateds[agent]
+        if False not in self.agent_dones.values():
+            print("All agents are done, completing last observation")
+            terminateds["__all__"] = True
             self.runner.shutdown()
             self.runner.cleanup()
+        truncateds = terminateds.copy()
+        for agent in truncateds:
+            truncateds[agent] = False
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
             print("Simulation reported as complete, shutting down")
+            for agent in truncateds:
+                truncateds[agent] = True
             self.runner.shutdown()
             self.runner.cleanup()  
-        
+        if (terminateds["__all__"]):
+            print("Finished shutting down environment. Returning final obs.")
         # TODO: Implement trucation. This was simple with single-agent, harder with multiple. Maybe use a copy of terminateds and replace the values.
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
-        return  obs, rewards, terminateds, terminateds, {}
+        
+        return  obs, rewards, terminateds, truncateds, {}
         
 # Generates the OmnetGymApiEnv for the calling ray worker
 def omnetgymapienv_creator(env_config):
     env = OmnetGymApiEnv(env_config)
     return env  # return an env instance
 
-
-
 if __name__ == '__main__':
-    env_name = "Astrea-1.1"
+    env_name = "Astrea-1.2"
     register_env(env_name, omnetgymapienv_creator)
     num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
     
+    # Environment Params
     max_steps_range = (5000, 5000)
     bottleneck_bandwidth_range = (5, 20)
     minimum_rtt_range = (5, 100)
     bottleneck_buffer_range = (25000, 2000000)
-    num_flows_range = (1, 5)
+    num_flows_range = (2,2)
+    
+    # Training Params
     load_from_checkpoint = False
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Astrea-1.0/PPO_Astrea-1.0_2026-04-02_21-58-40jrwrh5ro/checkpoints/checkpoint_2"
-    steps_to_train = 1000
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/PPO_Astrea-1.1_2026-04-04_00-32-37t5e_me7v/checkpoints/checkpoint_95"
     stacking = 5
+    
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Astrea/src/training/AstreaTraining.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
                   "minimum_rtt_range": minimum_rtt_range,
@@ -239,10 +250,10 @@ if __name__ == '__main__':
         
     ray.init(num_cpus=16, num_gpus=len(gpus))
     config = (
-            PPOConfig()
+            SACConfig()
             .resources(num_gpus=len(gpus))
-            .env_runners(num_env_runners=num_workers) #, rollout_fragment_length=1000
-            .learners(num_learners=1, num_gpus_per_learner=len(gpus), num_cpus_per_learner=1)
+            .env_runners(num_env_runners=num_workers,  batch_mode="complete_episodes") #, rollout_fragment_length=1000
+            .learners(num_learners=1, num_gpus_per_learner=len(gpus))
             .environment(env_name, env_config=env_config, disable_env_checking=True) # "OmnetGymApiEnv
             .multi_agent(
                 policies={
@@ -255,7 +266,15 @@ if __name__ == '__main__':
                 },
                 policy_mapping_fn=lambda agent_id, episode, **kwargs: "shared_policy"
             )
+            .fault_tolerance(restart_failed_sub_environments=True, ignore_env_runner_failures=False)
+            .training(
+              replay_buffer_config={"type": "MultiAgentEpisodeReplayBuffer",
+                                    "replay_sequence_length": 1,
+                                    "replay_burn_in": 0,
+                                    "replay_zero_init_states": True,
+                                    "capacity": max_steps_range[1] * num_workers * 5}
             )
+    )
     print(config.is_multi_agent)
     
     algo = config.build_algo()
@@ -274,7 +293,7 @@ if __name__ == '__main__':
     # Main training loop!
     iteration = 0
     checkpoint = 0
-    iterations_per_checkpoint = 1000
+    iterations_per_checkpoint = 200
     while True:
         result = algo.train()   # Perform a single training iteration (many steps, usually shorter than an episode. Changes depending on training parameters.)
         iteration += 1

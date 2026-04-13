@@ -242,5 +242,6 @@ bool Broker::areAllAgentsDone(){
         if(!it.second.done)
             allDone = false;
      }
+     cout << "Are all agents done: " << allDone << endl;
     return allDone;
 }
