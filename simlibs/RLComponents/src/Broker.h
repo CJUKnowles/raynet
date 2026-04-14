@@ -80,6 +80,7 @@ public:
   std::unordered_map<std::string, bool> getDones();
   bool getAllDone();
   bool areAllAgentsDone();
+  bool areAllObsUncollected();
 
   // Parameters
   enum ObsCollectionMode {

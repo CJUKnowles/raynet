@@ -20,6 +20,7 @@ void Broker::initialize()
     else if (obsModeStr == "GROUPED") obsCollectionMode = GROUPED;
     else if (obsModeStr == "INTERVALED") obsCollectionMode = INTERVALED;
     else throw cRuntimeError("Invalid mode: %s", obsModeStr.c_str());
+    cout << "Broker ObsCollectionMode: " << obsModeStr << endl;
     
     getSimulation()->getSystemModule()->subscribe("registerAgent", this); // used to register stepping agents
     getSimulation()->getSystemModule()->subscribe("unregisterAgent", this);// used to unregister stepping agents
@@ -152,13 +153,14 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, cObject *va
                     this->allAgentsDone = areAllAgentsDone();
                 }
             }
-            // Schedule the end of this step
+
+            // If obs collection mode is IMMEDIATE, then every STEP should immediately trigger observation collection via an EOS event
             if (this->obsCollectionMode == IMMEDIATE) {
-                // TODO: Figure out if I should cancel events when EOS is universal
-                // if(this->EOSmsg->isScheduled()) {
-                //     cancelEvent(EOSmsg);
-                // }
                 scheduleAt(simTime(), this->EOSmsg);
+            } else if (this->obsCollectionMode == GROUPED) {
+                if (this->areAllObsUncollected()) {
+                    scheduleAt(simTime(), this->EOSmsg);
+                }
             }
             EV_TRACE << simTime() <<" Scheduled end of step for " << id << "..." << std::endl;
         }
@@ -261,6 +263,16 @@ bool Broker::areAllAgentsDone(){
      }
      cout << "Are all agents done: " << allDone << endl;
     return allDone;
+}
+
+// Checks if all ACTIVE (not done) agents have uncollected observations
+bool Broker::areAllObsUncollected() {
+    for (auto& it: activeAgents) {
+        if(!it.second.done && !it.second.uncollected) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // Simple getters ---
