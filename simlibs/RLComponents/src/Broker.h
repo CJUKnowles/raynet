@@ -33,7 +33,7 @@ struct BrokerDetails{
   // Agent info
   std::string rlId;     // String ID returned into the dictionary of pthon step() function
   cMessage* STEPmsg;    // Msg used to notify an agent to compute observation/reward and pass it to the broker
-  bool done;
+  bool done = false;
 
   // Most recent obs info
   ObsType observation;        // The observation value itself, usually a tuple of floats or doubles

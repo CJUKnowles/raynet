@@ -183,29 +183,14 @@ class OmnetGymApiEnv(MultiAgentEnv):
             self.obs_history[agent].append(np.asarray(agent_obs, dtype=np.float32))
             obs[agent] = np.concatenate(self.obs_history[agent])
         
-        for agent in terminateds:
-            if agent != "__all__":
-                self.agent_dones[agent] = terminateds[agent]
-        if False not in self.agent_dones.values():
-            print("All agents are done, completing last observation")
-            terminateds["__all__"] = True
+        if terminateds["__all__"] or info_['simDone']:
             self.runner.shutdown()
             self.runner.cleanup()
-        truncateds = terminateds.copy()
-        for agent in truncateds:
-            truncateds[agent] = False
-        if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
-            print("Simulation reported as complete, shutting down")
-            for agent in truncateds:
-                truncateds[agent] = True
-            self.runner.shutdown()
-            self.runner.cleanup()  
         if (terminateds["__all__"]):
             print("Finished shutting down environment. Returning final obs.")
-        # TODO: Implement trucation. This was simple with single-agent, harder with multiple. Maybe use a copy of terminateds and replace the values.
+            
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
-        
-        return  obs, rewards, terminateds, truncateds, {}
+        return  obs, rewards, terminateds, terminateds, {}
         
 # Generates the OmnetGymApiEnv for the calling ray worker
 def omnetgymapienv_creator(env_config):
@@ -226,9 +211,9 @@ if __name__ == '__main__':
     # bottleneck_buffer_range = (25000, 2000000)
     # num_flows_range = (2,5)
     
-    num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     # Environment Params
-    max_steps_range = (10, 10)
+    max_steps_range = (5000, 5000)
     bottleneck_bandwidth_range = (10, 10)
     minimum_rtt_range = (25, 25)
     bottleneck_buffer_range = (2000000, 2000000)
@@ -274,7 +259,12 @@ if __name__ == '__main__':
     config = (
             SACConfig()
             .resources(num_gpus=len(gpus), num_gpus_per_learner_worker=1)
-            .env_runners(num_env_runners=num_workers, num_cpus_per_env_runner=1, num_envs_per_env_runner=1, explore=True, batch_mode="complete_episodes") #, rollout_fragment_length=1000
+            .env_runners(num_env_runners=num_workers, 
+                         num_cpus_per_env_runner=1, 
+                         num_envs_per_env_runner=1, 
+                         explore=True, 
+                         # batch_mode="complete_episodes"
+                         ) #, rollout_fragment_length=1000
             .environment(env_name, env_config=env_config, disable_env_checking=True) # "OmnetGymApiEnv
             .multi_agent(
                 policies={

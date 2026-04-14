@@ -75,8 +75,12 @@ void GymApi::initialise(std::string _iniPath, std::string sectionName){
 
 
         auto obss = target->getObservations();
-        target->invalidateOldStates();
+        int numObservationsCollected = target->invalidateOldStates();
 
+        cout << numObservationsCollected << " states collected and set as OLD" << endl;
+        numObservationsCollected = target->invalidateOldStates();
+        cout << numObservationsCollected << " states collected and set as OLD" << endl;
+        bool simDone = false;
         // Don't do this anymore. getObservations() now returns only new observations. Set Broker.ObsCollectionMode to IMMEDIATE if you only want one obs per dict
         // // Prune any observations not from the agent that triggered this EOS
         // auto it = obss.begin();
