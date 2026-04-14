@@ -79,10 +79,12 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
     if (strcmp(signalName, "registerAgent") == 0) {
         // BROKER PORTION ---------------------------------------------------------------------
         EV_TRACE << "Registering new agent with Broker..." << std::endl;
+
         
         std::string id(value);
 
         EV_TRACE << "Agent ID: " << id << std::endl;
+        cout << "BROKER: Registering " << id << " with the Broker" << endl;
 
         // Creating details for new agent
         BrokerDetails details;
@@ -190,6 +192,7 @@ void Broker::setActionAndMove(std::unordered_map<std::string, std::tuple<ActionT
             data->setReset(false);
         }
         // Forward instructions to the current agent
+        cout << "Broker:setActionAndMove(): Sending action signal to " << it.first << endl;
         emit(this->performActionSig, data, new cString(it.first)); // Also pass the agent name (obj)
         delete data;
     }
@@ -202,13 +205,18 @@ void Broker::setActionAndMove(std::unordered_map<std::string, std::tuple<ActionT
 // Compiles a map of all uncollected observations and returns it
 std::unordered_map<std::string, ObsType> Broker::getObservations(){
     std::unordered_map<std::string, ObsType> observations;
+    int count = 0;
     for (auto& it: activeAgents) {
         std::string id = it.first;              // key
-        BrokerDetails obsDetails = it.second;   // value
-        if (obsDetails.uncollected) {
-            observations.insert({id, obsDetails.observation});
+        if (activeAgents[id].uncollected) {
+            cout << "getObservations collection from " << id << endl; 
+            observations.insert({id, activeAgents[id].observation});
+            count++;
+        } else {
+            cout << "getObservations NOT collecting from " << id << endl; 
         }
     }
+    cout << count << " obs collected " << endl;
     return observations;
 }
 
@@ -247,6 +255,7 @@ int Broker::invalidateOldStates() {
     for (auto& it: activeAgents) {
         std::string id = it.first;              // key
         if (activeAgents[id].uncollected) {
+            cout << "setting " << id << " to collected" << endl;
             activeAgents[id].uncollected = false;
             numStatesUpdated++;
         }
@@ -267,12 +276,17 @@ bool Broker::areAllAgentsDone(){
 
 // Checks if all ACTIVE (not done) agents have uncollected observations
 bool Broker::areAllObsUncollected() {
+    bool allUncollected = true;
     for (auto& it: activeAgents) {
-        if(!it.second.done && !it.second.uncollected) {
-            return false;
+        cout << "areAllObsUncollected() for " << it.first << ": ";
+        std::string id = it.first;
+        if((!activeAgents[id].done) && (!it.second.uncollected)) {
+            cout << "0" << endl;
+            allUncollected = false;
         }
+        cout << "1" << endl;
     }
-    return true;
+    return allUncollected;
 }
 
 // Simple getters ---
