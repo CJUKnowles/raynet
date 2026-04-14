@@ -75,18 +75,20 @@ void GymApi::initialise(std::string _iniPath, std::string sectionName){
 
 
         auto obss = target->getObservations();
+        target->invalidateOldStates();
 
-        auto it = obss.begin();
-
-        while (it != obss.end()) {
-            // Check if key's first character is F
-            if (it->first != id) {
-                // erase() function returns the iterator of the next
-                // to last deleted element.
-                it = obss.erase(it);
-            } else
-                it++;
-        }
+        // Don't do this anymore. getObservations() now returns only new observations. Set Broker.ObsCollectionMode to IMMEDIATE if you only want one obs per dict
+        // // Prune any observations not from the agent that triggered this EOS
+        // auto it = obss.begin();
+        // while (it != obss.end()) {
+        //     // Check if key's first character is F
+        //     if (it->first != id) {
+        //         // erase() function returns the iterator of the next
+        //         // to last deleted element.
+        //         it = obss.erase(it);
+        //     } else
+        //         it++;
+        // }
         return obss;
     }
     else{
@@ -127,14 +129,7 @@ std::tuple< std::unordered_map<std::string, ObsType>,
     //where info is a dict (unordered_map) with a single key,value pair "simDone" to denote whether the simulation has been completed.
     std::tuple<std::unordered_map<std::string, ObsType >, std::unordered_map<std::string, RewardType > , std::unordered_map<std::string,bool > , std::unordered_map<std::string,bool > > returnTuple;
     bool isReset = false;
-
     std::string id = env->step(actions, isReset);
-
-    bool simDone = false;
-
-    if(id == "SIMULATION_END"){
-        simDone = true;
-    }
 
     cModule *mod = getSimulation()->getModuleByPath(( getSimulation()->getSystemModule()->getFullPath()+ string(".broker")).c_str());
     Broker *target = check_and_cast<Broker *>(mod);
@@ -142,47 +137,20 @@ std::tuple< std::unordered_map<std::string, ObsType>,
     auto obss = target->getObservations();
     auto rewards = target->getRewards();
     auto dones = target->getDones();
+    int numObservationsCollected = target->invalidateOldStates();
     bool allDone = target->getAllDone();
-    
-    auto obss_it = obss.begin();
-    while (obss_it != obss.end()) {
-    // Check if key's first character is F
-        if (obss_it->first != id) {
-            // erase() function returns the iterator of the next
-            // to last deleted element.
-            obss_it = obss.erase(obss_it);
-        } else
-            obss_it++;
-    }
-
-    auto rewards_it = rewards.begin();
-     while (rewards_it != rewards.end()) {
-        // Check if key's first character is F
-        if (rewards_it->first != id) {
-            // erase() function returns the iterator of the next
-            // to last deleted element.
-            rewards_it = rewards.erase(rewards_it);
-        } else
-            rewards_it++;
-    }
-
-    auto dones_it = dones.begin();
-        
-    while (dones_it != dones.end()) {
-        // Check if key's first character is F
-        if (dones_it->first != id) {
-            // erase() function returns the iterator of the next
-            // to last deleted element.
-            dones_it = dones.erase(dones_it);
-        } else
-            dones_it++;
-    }
-
-
     dones.insert({"__all__", allDone});
 
-    returnTuple = { obss, rewards, dones, { {"simDone", simDone} } };
+    cout << numObservationsCollected << " states collected and set as OLD" << endl;
+    numObservationsCollected = target->invalidateOldStates();
+    cout << numObservationsCollected << " states collected and set as OLD" << endl;
+    bool simDone = false;
 
+    if(id == "SIMULATION_END"){
+        simDone = true;
+    }
+    
+    returnTuple = { obss, rewards, dones, { {"simDone", simDone} } };
     return returnTuple;
 }
 

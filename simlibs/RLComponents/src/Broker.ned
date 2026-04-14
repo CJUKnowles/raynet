@@ -2,5 +2,7 @@ package RLComponents;
 
 simple Broker
 {
-    @signal[brokerToStepper];	
+    @signal[brokerToStepper];
+
+    string obsCollectionMode @enum("IMMEDIATE", "GROUPED", "INTERVALED") = default("IMMEDIATE");
 }

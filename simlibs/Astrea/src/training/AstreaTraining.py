@@ -144,6 +144,9 @@ class OmnetGymApiEnv(MultiAgentEnv):
         # Start a new simulation runner on the modified ini file
         self.runner.initialise(ini_variants_base + f".worker{os.getpid()}", "General")
         obs = self.runner.reset()
+        print("Reset obs: ")
+        print(obs)
+        print("")
         
         # Append the most recent observations to their agents' histories. Store the updated histories in obs and return.
         for agent, agent_obs in obs.items():
@@ -158,11 +161,21 @@ class OmnetGymApiEnv(MultiAgentEnv):
         - Actions/observations exist in a dictionary to support multi-agent environments.
         - This experiment only support single-agent environments, so observations/rewards are immediately extracted from the dictionary
         """
+        
+        print("Step action: ")
+        print(actions)
         # Convert the policy's action dict(str:np.float32) to dict(str:float) so omnet can use it
         for agent_id, action in actions.items():
             actions[agent_id] = float(np.asarray(action).item())
         obs, rewards, terminateds, info_ = self.runner.step(actions)
 
+        print("Step obs: ")
+        print(obs)
+        print("Step rewards:")
+        print(rewards)
+        print("Step dones:")
+        print(terminateds)
+        print("")
         
     
         # Append the most recent observations to their agents' histories. Store the updated histories in obs
@@ -215,11 +228,11 @@ if __name__ == '__main__':
     
     num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     # Environment Params
-    max_steps_range = (6000, 6000)
+    max_steps_range = (10, 10)
     bottleneck_bandwidth_range = (10, 10)
     minimum_rtt_range = (25, 25)
     bottleneck_buffer_range = (2000000, 2000000)
-    num_flows_range = (1,1)
+    num_flows_range = (2,2)
     
     # Training Params
     load_from_checkpoint = False

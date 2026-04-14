@@ -9,11 +9,18 @@
  */
 
 #include "Broker.h"
+#include "typedefs.h"
 
 Define_Module(Broker);
 
 void Broker::initialize()
 {
+    std::string obsModeStr = par("obsCollectionMode").stringValue();
+    if (obsModeStr == "IMMEDIATE") obsCollectionMode = IMMEDIATE;
+    else if (obsModeStr == "GROUPED") obsCollectionMode = GROUPED;
+    else if (obsModeStr == "INTERVALED") obsCollectionMode = INTERVALED;
+    else throw cRuntimeError("Invalid mode: %s", obsModeStr.c_str());
+    
     getSimulation()->getSystemModule()->subscribe("registerAgent", this); // used to register stepping agents
     getSimulation()->getSystemModule()->subscribe("unregisterAgent", this);// used to unregister stepping agents
     getSimulation()->getSystemModule()->subscribe("obsResponse", this); //suscribe to the broker's signal
@@ -24,16 +31,19 @@ void Broker::initialize()
 void Broker::finish(){
     // Cancel and delete any remaining STEP or EOS events
     for (auto& it: activeAgents) {
-        if (it.second.stepMsg->isScheduled()) {
-            cancelEvent(it.second.stepMsg);
-            take(it.second.stepMsg);
+        if (it.second.STEPmsg->isScheduled()) {
+            cancelEvent(it.second.STEPmsg);
+            take(it.second.STEPmsg);
         }
-        if (it.second.endOfStep->isScheduled()) {
-            cancelEvent(it.second.endOfStep);
-        }
-        delete it.second.stepMsg;
-        delete it.second.endOfStep;
+    
+        delete it.second.STEPmsg;
     }
+
+    if (EOSmsg->isScheduled()) {
+        cancelEvent(EOSmsg);
+    }
+    delete EOSmsg;
+
     getSimulation()->getSystemModule()->unsubscribe("registerAgent", this); // used to register stepping agents
     getSimulation()->getSystemModule()->unsubscribe("unregisterAgent", this);// used to unregister stepping agents
     getSimulation()->getSystemModule()->unsubscribe("obsResponse", this); //suscribe to the broker's signal
@@ -51,9 +61,8 @@ void Broker::handleMessage(cMessage *msg)
     if (messageName.find("STEP-") != std::string::npos) {
         std::string agentID = messageName.substr(messageName.find("-")+1);
         emit(this->obsRequestSig, agentID.c_str()); 
-    } else if (messageName.find("EOS-") != std::string::npos) {
-        std::string agentID = messageName.substr(messageName.find("-")+1);
-        EV_TRACE << "EOS event detected, doing nothing. "<< agentID << std::endl;
+    } else if (messageName.find("EOS") != std::string::npos) {
+        EV_TRACE << "EOS event detected, doing nothing. " << std::endl;
     }
 }
 
@@ -78,8 +87,7 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
         BrokerDetails details;
         details.rlId = id;
         details.isReset = true;
-        details.endOfStep = new cMessage((std::string("EOS-") + id).c_str()); // Name of the message should match EOS-<ID>
-        details.stepMsg = new cMessage((std::string("STEP-") + id).c_str()); // Name of the message should match STEP-<ID>
+        details.STEPmsg = new cMessage((std::string("STEP-") + id).c_str()); // Name of the message should match STEP-<ID>
 
         //Inserting new agent details into map (but do not schedule it yet!)
         activeAgents.insert({id,details});
@@ -91,16 +99,15 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
         //Set done for agent to true and step right away
         activeAgents[id].done = true;
         
-        if(activeAgents[id].endOfStep->isScheduled()) {
-            cancelEvent(activeAgents[id].endOfStep);
+        if (activeAgents[id].STEPmsg->isScheduled()){
+            cancelEvent(activeAgents[id].STEPmsg);
+            take(activeAgents[id].STEPmsg);
         }
-        if (activeAgents[id].stepMsg->isScheduled()){
-            cancelEvent(activeAgents[id].stepMsg);
-            take(activeAgents[id].stepMsg);
-        }
-        delete activeAgents[id].stepMsg;
+        delete activeAgents[id].STEPmsg;
         // Schedule an EOS message for the specific agent.
-        scheduleAt(simTime(), activeAgents[id].endOfStep);
+        if (this->obsCollectionMode == IMMEDIATE) {
+            scheduleAt(simTime(), this->EOSmsg);
+        }
         activeAgents.erase(id);
         //Check if all agents are done and store in variable for SimulationRunner
         this->allAgentsDone = areAllAgentsDone();
@@ -109,11 +116,11 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
         //Get id
         std::string id(value);
 
-        if(activeAgents[id].stepMsg->isScheduled()){
-            cancelEvent(activeAgents[id].stepMsg);
-            take(activeAgents[id].stepMsg);
+        if(activeAgents[id].STEPmsg->isScheduled()){
+            cancelEvent(activeAgents[id].STEPmsg);
+            take(activeAgents[id].STEPmsg);
         }
-        scheduleAt(simTime() + ((cSimTime*) obj)->simtime, activeAgents[id].stepMsg);
+        scheduleAt(simTime() + ((cSimTime*) obj)->simtime, activeAgents[id].STEPmsg);
     }
 }
 
@@ -137,16 +144,23 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, cObject *va
         if(agentData->isValid()) {
             // Collect and store the agent's data
             activeAgents[id].observation = agentData->getObs();
+            activeAgents[id].uncollected = true;    // This obs is now new an so far uncollected by RayNet
             if (!agentData->isReset()) {
                 activeAgents[id].reward = agentData->getReward();
                 activeAgents[id].done = agentData->getDone();
+                if (agentData->getDone()) {
+                    this->allAgentsDone = areAllAgentsDone();
+                }
             }
             // Schedule the end of this step
-            if(activeAgents[id].endOfStep->isScheduled()) { 
-                cancelEvent(activeAgents[id].endOfStep); // cancel any existing EOS for this agent, just in case
+            if (this->obsCollectionMode == IMMEDIATE) {
+                // TODO: Figure out if I should cancel events when EOS is universal
+                // if(this->EOSmsg->isScheduled()) {
+                //     cancelEvent(EOSmsg);
+                // }
+                scheduleAt(simTime(), this->EOSmsg);
             }
-            scheduleAt(simTime(), activeAgents[id].endOfStep);
-            EV_TRACE <<  simTime() <<" Scheduled end of step for " << id << "..." << std::endl;
+            EV_TRACE << simTime() <<" Scheduled end of step for " << id << "..." << std::endl;
         }
         
         // Cleanup
@@ -180,62 +194,65 @@ void Broker::setActionAndMove(std::unordered_map<std::string, std::tuple<ActionT
 }
 
 
-// MARK: Getters
+// MARK: Getters and state management
 // --------------------------------------------------------------------------------------------------------------------------------
 
-// Observations
-ObsType Broker::getObservation(std::string id){
-    return activeAgents[id].observation;
-}
-
+// Compiles a map of all uncollected observations and returns it
 std::unordered_map<std::string, ObsType> Broker::getObservations(){
     std::unordered_map<std::string, ObsType> observations;
     for (auto& it: activeAgents) {
-        // Get agent id
-        std::string id = it.first;
-        auto observation = it.second.observation;
-        observations.insert({id, observation});
+        std::string id = it.first;              // key
+        BrokerDetails obsDetails = it.second;   // value
+        if (obsDetails.uncollected) {
+            observations.insert({id, obsDetails.observation});
+        }
     }
     return observations;
 }
 
-// Rewards
-RewardType Broker::getReward(std::string id){
-    return activeAgents[id].reward;
-}
 
+
+// Compiles a map of all uncollected rewards and returns it
 std::unordered_map<std::string, RewardType> Broker::getRewards(){
-    std::unordered_map<std::string,RewardType> rewards;
+    std::unordered_map<std::string, RewardType> rewards;
     for (auto& it: activeAgents) {
-        // Get agent id
-        std::string id = it.first;
-        auto reward = it.second.reward;
-        rewards.insert({id, reward});
+        std::string id = it.first;              // key
+        BrokerDetails obsDetails = it.second;   // value
+        if (obsDetails.uncollected) {
+            rewards.insert({id, obsDetails.reward});
+        }
     }
     return rewards;
 }
 
-// Dones
-bool Broker::getDone(std::string id)
-{
-    return activeAgents[id].done;
-}
 
+// Compiles a map of all uncollected dones and returns it
 std::unordered_map<std::string, bool> Broker::getDones(){
     std::unordered_map<std::string, bool> dones;
     for (auto& it: activeAgents) {
-        // Get agent id
-        std::string id = it.first;
-        auto done = it.second.done;
-        dones.insert({id, done});
+        std::string id = it.first;              // key
+        BrokerDetails obsDetails = it.second;   // value
+        if (obsDetails.uncollected) {
+            dones.insert({id, obsDetails.done});
+        }
     }
     return dones;
 }
 
-bool Broker::getAllDone(){
-    return allAgentsDone;
+// Sets every agent to uncollected=false. Should be used after gathering all relevant state and returning it to the trainer.
+int Broker::invalidateOldStates() {
+    int numStatesUpdated = 0;
+    for (auto& it: activeAgents) {
+        std::string id = it.first;              // key
+        if (activeAgents[id].uncollected) {
+            activeAgents[id].uncollected = false;
+            numStatesUpdated++;
+        }
+    }
+    return numStatesUpdated;
 }
 
+// Checks if ALL agents are done, regardless of how new/old their current state is
 bool Broker::areAllAgentsDone(){
     bool allDone = true;
     for (auto& it: activeAgents) {
@@ -245,3 +262,23 @@ bool Broker::areAllAgentsDone(){
      cout << "Are all agents done: " << allDone << endl;
     return allDone;
 }
+
+// Simple getters ---
+
+ObsType Broker::getObservation(std::string id){
+    return activeAgents[id].observation;
+}
+
+RewardType Broker::getReward(std::string id){
+    return activeAgents[id].reward;
+}
+
+bool Broker::getDone(std::string id)
+{
+    return activeAgents[id].done;
+}
+
+bool Broker::getAllDone(){
+    return allAgentsDone;
+}
+
