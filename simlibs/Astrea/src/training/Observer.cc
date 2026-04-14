@@ -158,7 +158,7 @@ void Observer::computeGlobalState() {
     // Latency Metric
     double latencyThreshold = (1.0 + delayCoeff)*this->LINK_DELAY;
     if(globalState->avgLatency > latencyThreshold) {
-        globalState->latencyMetric = (globalState->avgLatency - latencyThreshold) * 1; // TODO: Multiply by the paceRate
+        globalState->latencyMetric = (globalState->avgLatency - latencyThreshold) * 100; // TODO: Multiply by the paceRate, 100 is placeholder
     } else {
         // Treat latency as optimal if it falls below the threshold
         globalState->latencyMetric = 0;
@@ -183,7 +183,7 @@ void Observer::computeGlobalState() {
     } else {
         globalState->fairnessMetric = std::sqrt(fairnessNumerator/fairnessDenominator);
     }
-    globalState->reward -= this->fairnessWeight * globalState->fairnessMetric;
+   // globalState->reward -= this->fairnessWeight * globalState->fairnessMetric;
 
     // Stability Metric: average stability of all active astrea flows
     double stabilitySum = 0;
@@ -193,7 +193,7 @@ void Observer::computeGlobalState() {
         }
     }
     globalState->stabilityMetric = stabilitySum/numFlows;
-    globalState->reward -= this->stabilityWeight * globalState->stabilityMetric;
+    //globalState->reward -= this->stabilityWeight * globalState->stabilityMetric;
 
     // Use the throughtputWeight to bound the reward value, as it defines the upper limit
     globalState->reward = max(-this->throughputWeight, min(this->throughputWeight, globalState->reward));

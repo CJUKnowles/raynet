@@ -35,8 +35,6 @@ protected:
     // am I running on active open (client) or passive open connection (server)
     bool isActive;
 
-    // utility object that keeps track of Monitor Intervals and relevant calculations
-    MonitorIntervalsHandler miHandler;
     //Signals for result recording
     simsignal_t throughputSignal;
     simsignal_t actionSignal;

@@ -202,19 +202,28 @@ def omnetgymapienv_creator(env_config):
 if __name__ == '__main__':
     env_name = "Astrea-1.2"
     register_env(env_name, omnetgymapienv_creator)
-    num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
     
+    
+    # num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    # # Environment Params
+    # max_steps_range = (2000, 2000)
+    # bottleneck_bandwidth_range = (5, 20)
+    # minimum_rtt_range = (5, 100)
+    # bottleneck_buffer_range = (25000, 2000000)
+    # num_flows_range = (2,5)
+    
+    num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     # Environment Params
-    max_steps_range = (5000, 5000)
-    bottleneck_bandwidth_range = (5, 20)
-    minimum_rtt_range = (5, 100)
-    bottleneck_buffer_range = (25000, 2000000)
-    num_flows_range = (2,2)
+    max_steps_range = (6000, 6000)
+    bottleneck_bandwidth_range = (10, 10)
+    minimum_rtt_range = (25, 25)
+    bottleneck_buffer_range = (2000000, 2000000)
+    num_flows_range = (1,1)
     
     # Training Params
     load_from_checkpoint = False
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/PPO_Astrea-1.1_2026-04-04_00-32-37t5e_me7v/checkpoints/checkpoint_95"
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_Astrea-1.2_2026-04-14_01-12-53pspebvlh/checkpoints/checkpoint_3"
     stacking = 5
     
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Astrea/src/training/AstreaTraining.ini",
@@ -251,33 +260,37 @@ if __name__ == '__main__':
     ray.init(num_cpus=16, num_gpus=len(gpus))
     config = (
             SACConfig()
-            .resources(num_gpus=len(gpus))
-            .env_runners(num_env_runners=num_workers,  batch_mode="complete_episodes") #, rollout_fragment_length=1000
-            .learners(num_learners=1, num_gpus_per_learner=len(gpus))
+            .resources(num_gpus=len(gpus), num_gpus_per_learner_worker=1)
+            .env_runners(num_env_runners=num_workers, num_cpus_per_env_runner=1, num_envs_per_env_runner=1, explore=True, batch_mode="complete_episodes") #, rollout_fragment_length=1000
             .environment(env_name, env_config=env_config, disable_env_checking=True) # "OmnetGymApiEnv
             .multi_agent(
                 policies={
                     "shared_policy": (
                         None,
                         spaces.Box(low=obs_min, high=obs_max, dtype=np.float32),    # Obs space
-                        spaces.Box(low=-2, high=.8, shape=(1,), dtype=np.float32),  # action space
+                        spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32),  # action space
                         {}
                     ),
                 },
                 policy_mapping_fn=lambda agent_id, episode, **kwargs: "shared_policy"
             )
-            .fault_tolerance(restart_failed_sub_environments=True, ignore_env_runner_failures=False)
+            #.fault_tolerance(restart_failed_sub_environments=True, ignore_env_runner_failures=False)
             .training(
               replay_buffer_config={"type": "MultiAgentEpisodeReplayBuffer",
                                     "replay_sequence_length": 1,
                                     "replay_burn_in": 0,
                                     "replay_zero_init_states": True,
-                                    "capacity": max_steps_range[1] * num_workers * 5}
+                                    "capacity": max_steps_range[1] * num_workers * 5},
+              store_buffer_in_checkpoints=True,
+              gamma=0.98,
+              tau=0.005,
+              actor_lr=0.00005,
+              critic_lr=0.001,
             )
     )
     print(config.is_multi_agent)
     
-    algo = config.build_algo()
+    algo = config.build()
     
     
     # Convert betas? (solution found online, fixes a crash when loading a checkpoint)
