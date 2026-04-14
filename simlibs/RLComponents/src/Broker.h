@@ -19,6 +19,9 @@
 #include "cobjects.h"
 #include "typedefs.h"
 
+#include "omnetpp/cobject.h"
+#include "omnetpp/csimulation.h"
+
 using namespace omnetpp;
 using namespace std;
 
@@ -27,16 +30,16 @@ using namespace std;
   Mostly passed between the agent (RLInterface instance) and broker to facilitate communication.
 */
 struct BrokerDetails{
-  // Unique IDs and event names for this agent
+  // Agent info
   std::string rlId;     // String ID returned into the dictionary of pthon step() function
-  cMessage* endOfStep;  // Msg used to notify end of step
-  cMessage* stepMsg;    // Msg used to notify end of step
-
-  // Current state
-  bool isReset;         // Whether the next step is used as a RESET step, rather than normal step
-  ObsType observation;
-  float reward;
+  cMessage* STEPmsg;    // Msg used to notify an agent to compute observation/reward and pass it to the broker
   bool done;
+
+  // Most recent obs info
+  ObsType observation;        // The observation value itself, usually a tuple of floats or doubles
+  bool isReset;               // Whether the next step is used as a RESET step, rather than normal step
+  float reward;               // The reward value itself
+  bool uncollected = false;   // True if current state (obs/reward/done) is new but not yet collected by trainer. Set to false with invalidateOldStates().
 };
 
 /*
@@ -57,7 +60,8 @@ protected:
   bool allAgentsDone = false;
 
   // Omnet signalling/scheduling stuff
-  virtual void handleMessage(cMessage *msg) override; // Intercepts STEP events to request agent observations
+  cMessage* EOSmsg = new cMessage((std::string("EOS")).c_str());    // Event message signal an end-of-step, in which RayNet collects uncollected observations from the Broker.
+  virtual void handleMessage(cMessage *msg) override;                       // Intercepts STEP events to request agent observations
   simsignal_t obsRequestSig = registerSignal("obsRequest");           // Signal used to request observations from agents
   simsignal_t performActionSig = registerSignal("performAction");     // Signal used to forward actions to agents
   void receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *obj) override;
@@ -71,10 +75,19 @@ public:
   std::unordered_map<std::string, ObsType> getObservations();
   RewardType getReward(std::string id);
   std::unordered_map<std::string, RewardType> getRewards();
+  int invalidateOldStates();
   bool getDone(std::string id);
   std::unordered_map<std::string, bool> getDones();
   bool getAllDone();
   bool areAllAgentsDone();
+
+  // Parameters
+  enum ObsCollectionMode {
+    IMMEDIATE,    // EOS events are scheduled immediately after every STEP event. Each step returns a single-entry observation dict like: {agent27: <1.1, 1.2, 3.1, 4>}
+    GROUPED,      // EOS events are scheduled only when all activeAgents have fresh observations. Good for agents that step simultaneously. Each observation dict contains entries for ALL active agents.
+    INTERVALED    // EOS events are scheduled at a configurable time interval. TODO: implement this lol
+  };
+  enum ObsCollectionMode obsCollectionMode;
 };
 
 #endif
