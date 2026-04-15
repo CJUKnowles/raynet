@@ -67,7 +67,7 @@ void Astrea::established(bool active) {
         this->isActive = active;
         cout << "ID: " << std::to_string(owner->getId()) << endl;
         // Set the RL ID of this component (for use by the training script). Ensure this is unique for multi-agent environments.
-        std::string s("Astrea" + std::to_string(owner->getId()));
+        std::string s("Astrea" + std::to_string(this->numAgents + 1));
         setStringId(s);
         
         // Register this agent with RayNet

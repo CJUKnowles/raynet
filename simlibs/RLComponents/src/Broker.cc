@@ -84,7 +84,6 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
         std::string id(value);
 
         EV_TRACE << "Agent ID: " << id << std::endl;
-        cout << "BROKER: Registering " << id << " with the Broker" << endl;
 
         // Creating details for new agent
         BrokerDetails details;
@@ -94,6 +93,7 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
 
         //Inserting new agent details into map (but do not schedule it yet!)
         activeAgents.insert({id,details});
+        emit(this->numAgentsSig, (uintval_t) this->activeAgents.size(), obj); // Emit the new total number of agents, so the agents can keep track and name themselves
     } else if (strcmp(signalName, "unregisterAgent") == 0){
         //Get id
         std::string id(value);
@@ -114,6 +114,7 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
         activeAgents.erase(id);
         //Check if all agents are done and store in variable for SimulationRunner
         this->allAgentsDone = areAllAgentsDone();
+        emit(this->numAgentsSig, (uintval_t) this->activeAgents.size(), obj); // Emit the new total number of agents, so the agents can keep track and name themselves
     } else if (strcmp(signalName, "modifyStepSize") == 0) {
         // STEPPER: schedule a new step event
         //Get id
@@ -192,7 +193,6 @@ void Broker::setActionAndMove(std::unordered_map<std::string, std::tuple<ActionT
             data->setReset(false);
         }
         // Forward instructions to the current agent
-        cout << "Broker:setActionAndMove(): Sending action signal to " << it.first << endl;
         emit(this->performActionSig, data, new cString(it.first)); // Also pass the agent name (obj)
         delete data;
     }
@@ -209,14 +209,10 @@ std::unordered_map<std::string, ObsType> Broker::getObservations(){
     for (auto& it: activeAgents) {
         std::string id = it.first;              // key
         if (activeAgents[id].uncollected) {
-            cout << "getObservations collection from " << id << endl; 
             observations.insert({id, activeAgents[id].observation});
             count++;
-        } else {
-            cout << "getObservations NOT collecting from " << id << endl; 
         }
     }
-    cout << count << " obs collected " << endl;
     return observations;
 }
 
@@ -255,7 +251,6 @@ int Broker::invalidateOldStates() {
     for (auto& it: activeAgents) {
         std::string id = it.first;              // key
         if (activeAgents[id].uncollected) {
-            cout << "setting " << id << " to collected" << endl;
             activeAgents[id].uncollected = false;
             numStatesUpdated++;
         }
@@ -270,7 +265,6 @@ bool Broker::areAllAgentsDone(){
         if(!it.second.done)
             allDone = false;
      }
-     cout << "Are all agents done: " << allDone << endl;
     return allDone;
 }
 
@@ -278,13 +272,10 @@ bool Broker::areAllAgentsDone(){
 bool Broker::areAllObsUncollected() {
     bool allUncollected = true;
     for (auto& it: activeAgents) {
-        cout << "areAllObsUncollected() for " << it.first << ": ";
         std::string id = it.first;
         if((!activeAgents[id].done) && (!it.second.uncollected)) {
-            cout << "0" << endl;
             allUncollected = false;
         }
-        cout << "1" << endl;
     }
     return allUncollected;
 }

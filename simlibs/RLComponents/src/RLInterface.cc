@@ -69,6 +69,7 @@ void RLInterface::initialize(int stateSize, int maxObsSize)
     modifyStepSizeSig = owner->registerSignal("modifyStepSize");
     
     getSimulation()->getSystemModule()->subscribe("performAction", (cListener*) this);
+    
 
     done = false;
     isReset = false;
@@ -86,6 +87,7 @@ void RLInterface::initialise()
 
     getSimulation()->getSystemModule()->subscribe("performAction", (cListener*) this);
     getSimulation()->getSystemModule()->subscribe("obsRequest", (cListener*) this);
+    getSimulation()->getSystemModule()->subscribe("numAgents", (cListener*) this);
     
 
     done = false;
@@ -101,6 +103,7 @@ void RLInterface::terminate(){
         owner->emit(unregisterSig, stringId.c_str());
         getSimulation()->getSystemModule()->unsubscribe("performAction", (cListener*) this);
         getSimulation()->getSystemModule()->unsubscribe("obsRequest", (cListener*) this);
+        getSimulation()->getSystemModule()->unsubscribe("numAgents", (cListener*) this);
         rlInitialised = false;
     }
 }
@@ -196,10 +199,21 @@ void RLInterface::receiveSignal(cComponent *source, simsignal_t id, const char *
     }
 }
 
+// Signal handler used to receive the number of active agents from the broker. Should be receieved every time a new agent is registered.
+void RLInterface::receiveSignal(cComponent *source, simsignal_t signalID, uintval_t i, cObject *details) {
+    const char *signalName = owner->getSignalName(signalID);
+
+    if (strcmp(signalName, "numAgents") == 0)
+    {
+        this->numAgents = i; // All we have to do is maintain this variable, so that user (agent) can trust that it's always accurate.
+    }
+}
+
 void RLInterface::scheduleNextStep(double stepSize) {
     EV_TRACE << "Scheduling next step!" << std::endl;
     cObject* newStepSize = new cSimTime(stepSize);
     owner->emit(this->modifyStepSizeSig, stringId.c_str(), newStepSize); 
 }
+
 
 } // namespace learning

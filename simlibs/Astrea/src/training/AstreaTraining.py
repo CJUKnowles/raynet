@@ -89,7 +89,7 @@ class OmnetGymApiEnv(MultiAgentEnv):
         obs_spaces = {}
         action_spaces = {}
         self.possible_agents = []
-        for i in range(1000):
+        for i in range(self.env_config["num_flows_range"][1]):
             self.possible_agents.append(f"`Astrea`{i}")
             obs_spaces[f"Astrea{i}"] = spaces.Box(low=self.obs_min, high=self.obs_max, dtype=np.float32)
             action_spaces[f"Astrea{i}"] = spaces.Box(low=-1.0, high=1.0, dtype=np.float32)
@@ -161,21 +161,11 @@ class OmnetGymApiEnv(MultiAgentEnv):
         - Actions/observations exist in a dictionary to support multi-agent environments.
         - This experiment only support single-agent environments, so observations/rewards are immediately extracted from the dictionary
         """
-        
-        print("Step action: ")
-        print(actions)
+
         # Convert the policy's action dict(str:np.float32) to dict(str:float) so omnet can use it
         for agent_id, action in actions.items():
             actions[agent_id] = float(np.asarray(action).item())
         obs, rewards, terminateds, info_ = self.runner.step(actions)
-
-        print("Step obs: ")
-        print(obs)
-        print("Step rewards:")
-        print(rewards)
-        print("Step dones:")
-        print(terminateds)
-        print("")
         
     
         # Append the most recent observations to their agents' histories. Store the updated histories in obs
@@ -184,10 +174,9 @@ class OmnetGymApiEnv(MultiAgentEnv):
             obs[agent] = np.concatenate(self.obs_history[agent])
         
         if terminateds["__all__"] or info_['simDone']:
+            print("Episode complete, shutting down simulation env")
             self.runner.shutdown()
             self.runner.cleanup()
-        if (terminateds["__all__"]):
-            print("Finished shutting down environment. Returning final obs.")
             
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
         return  obs, rewards, terminateds, terminateds, {}
@@ -198,26 +187,26 @@ def omnetgymapienv_creator(env_config):
     return env  # return an env instance
 
 if __name__ == '__main__':
-    env_name = "Astrea-1.2"
+    env_name = "Astrea-1.3"
     register_env(env_name, omnetgymapienv_creator)
     seed = 91456211
     
     
-    # num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
-    # # Environment Params
-    # max_steps_range = (2000, 2000)
-    # bottleneck_bandwidth_range = (5, 20)
-    # minimum_rtt_range = (5, 100)
-    # bottleneck_buffer_range = (25000, 2000000)
-    # num_flows_range = (2,5)
-    
     num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     # Environment Params
-    max_steps_range = (5000, 5000)
-    bottleneck_bandwidth_range = (10, 10)
-    minimum_rtt_range = (25, 25)
-    bottleneck_buffer_range = (2000000, 2000000)
-    num_flows_range = (2,2)
+    max_steps_range = (2000, 2000)
+    bottleneck_bandwidth_range = (5, 20)
+    minimum_rtt_range = (5, 100)
+    bottleneck_buffer_range = (25000, 2000000)
+    num_flows_range = (2,5)
+    
+    # num_workers = 2 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    # # Environment Params
+    # max_steps_range = (5000, 5000)
+    # bottleneck_bandwidth_range = (10, 10)
+    # minimum_rtt_range = (25, 25)
+    # bottleneck_buffer_range = (2000000, 2000000)
+    # num_flows_range = (2,2)
     
     # Training Params
     load_from_checkpoint = False
@@ -280,9 +269,7 @@ if __name__ == '__main__':
             #.fault_tolerance(restart_failed_sub_environments=True, ignore_env_runner_failures=False)
             .training(
               replay_buffer_config={"type": "MultiAgentEpisodeReplayBuffer",
-                                    "replay_sequence_length": 1,
-                                    "replay_burn_in": 0,
-                                    "replay_zero_init_states": True,
+                                    "replay_sequence_length": 1, # Observations are already stacked, so only look at one obs when sampling from the buffer.
                                     "capacity": max_steps_range[1] * num_workers * 5},
               store_buffer_in_checkpoints=True,
               gamma=0.98,

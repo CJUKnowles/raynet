@@ -63,6 +63,7 @@ protected:
     bool rlInitialised = false;
     bool done; //Whether this agent's episode terminated
     bool isReset; //Whether the environemt is being reset right now
+    uintval_t numAgents = 0; // How many agents have been registered with the broker. Updated upon every registration.
 
 public:
 // ------------------------------------------- LEGACY CODE -------------------------------------------------
@@ -84,7 +85,7 @@ public:
 
     virtual void receiveSignal(cComponent *source, simsignal_t signalID, cObject *obj, cObject *details) override; // callback for receiving action response
     virtual void receiveSignal(cComponent *source, simsignal_t signalID, const char *value, cObject *details) override; // callback for receiving action response
-
+    virtual void receiveSignal(cComponent *source, simsignal_t signalID, uintval_t i, cObject *details) override; // callback for receiving number of registered agents
     // ------------ VIRTUAL FUNCTIONS -------------------
     virtual void cleanup() = 0;
     virtual void decisionMade(ActionType action) = 0; // defines what to do when decision is made

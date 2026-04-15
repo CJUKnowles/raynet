@@ -119,6 +119,8 @@ public: // General use
     double maxACKTotal=1.0; // The max ACK total observed in an interval
     double retransmissionRate; // The most recent measurement of bytes retransmitted.
     bool first_slowstart_complete = false; // Do not take astrea actions until the first slow start phase has completed. This allows the initial state (max througphut and min delay) to form naturally and prevents deadlocks.
+    
+    // Observer signals
     simsignal_t registerAstreaAgentSig = owner->registerSignal("registerAstreaAgent");
     simsignal_t astreaStateReportSig = owner->registerSignal("astreaStateReport");
     simsignal_t globalStateRequestSig = owner->registerSignal("globalStateRequest");
