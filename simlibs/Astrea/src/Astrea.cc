@@ -61,7 +61,7 @@ void Astrea::initialize() {
 void Astrea::established(bool active) {
     if (debug) cout << "\tAstrea: established()" << endl;
     TcpNoCongestionControl::established(active);
-    state->snd_cwnd = 9000;
+    state->snd_cwnd = 9000; // Set initial cwnd fairly low to start
 
     if (active) {
         this->isActive = active;

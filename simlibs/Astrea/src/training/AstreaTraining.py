@@ -47,6 +47,7 @@ class OmnetGymApiEnv(MultiAgentEnv):
         - This mostly involves setting spcaes (bounds, shapes, types) for actions and observations.
         - These bounds are needed for RL algorithms provided by RLlib- They limit the problem space and are also used for normalization.
         """
+        super().__init__()
         sys.path.insert(0, os.path.join(os.getenv('HOME'), "raynet", "build"))
         from omnetbind import OmnetGymApi
         self.runner = OmnetGymApi()
@@ -89,7 +90,7 @@ class OmnetGymApiEnv(MultiAgentEnv):
         obs_spaces = {}
         action_spaces = {}
         self.possible_agents = []
-        for i in range(self.env_config["num_flows_range"][1]):
+        for i in range(self.env_config["num_flows_range"][1] + 1):
             self.possible_agents.append(f"`Astrea`{i}")
             obs_spaces[f"Astrea{i}"] = spaces.Box(low=self.obs_min, high=self.obs_max, dtype=np.float32)
             action_spaces[f"Astrea{i}"] = spaces.Box(low=-1.0, high=1.0, dtype=np.float32)
@@ -192,7 +193,7 @@ if __name__ == '__main__':
     seed = 91456211
     
     
-    num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    num_workers = 12 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     # Environment Params
     max_steps_range = (2000, 2000)
     bottleneck_bandwidth_range = (5, 20)
@@ -210,7 +211,7 @@ if __name__ == '__main__':
     
     # Training Params
     load_from_checkpoint = False
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_Astrea-1.2_2026-04-14_01-12-53pspebvlh/checkpoints/checkpoint_3"
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_Astrea-1.3_2026-04-16_00-24-31uf6tvzht/checkpoints/checkpoint_11"
     stacking = 5
     
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Astrea/src/training/AstreaTraining.ini",
@@ -244,7 +245,10 @@ if __name__ == '__main__':
                     1                             # Inflight
                     ], dtype=np.float32), stacking)
         
-    ray.init(num_cpus=16, num_gpus=len(gpus))
+    ray.init(
+        num_cpus=16,
+        num_gpus=len(gpus),
+    )
     config = (
             SACConfig()
             .resources(num_gpus=len(gpus), num_gpus_per_learner_worker=1)
@@ -254,7 +258,7 @@ if __name__ == '__main__':
                          explore=True, 
                          # batch_mode="complete_episodes"
                          ) #, rollout_fragment_length=1000
-            .environment(env_name, env_config=env_config, disable_env_checking=True) # "OmnetGymApiEnv
+            .environment(env_name, env_config=env_config) # "OmnetGymApiEnv
             .multi_agent(
                 policies={
                     "shared_policy": (
@@ -270,7 +274,7 @@ if __name__ == '__main__':
             .training(
               replay_buffer_config={"type": "MultiAgentEpisodeReplayBuffer",
                                     "replay_sequence_length": 1, # Observations are already stacked, so only look at one obs when sampling from the buffer.
-                                    "capacity": max_steps_range[1] * num_workers * 5},
+                                    "capacity": max_steps_range[1] * num_workers * 2},
               store_buffer_in_checkpoints=True,
               gamma=0.98,
               tau=0.005,

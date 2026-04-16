@@ -97,7 +97,7 @@ public: // General use
     double astreaACKTotal=0.0;      // The number of valid acknowledgements over the last interval
     double astreaSRTT=0.0;          // The smoothed RTT of (all?) packets so far
     double astreaCwnd=0.0;          // The current congestion window (don't really need a new variable here, this is just useful for reference. Just use conn->snd_cwnd)
-    double astreaMaxThroughput=.000001; // The maximum delivery rate so far
+    double astreaMaxThroughput=0; // The maximum delivery rate so far
     double astreaMinDelay=9999;      // The minimum packet delay so far. Initialize to large value so the minimum is guaranteed to update.
     double astreaPaceRate=1;        // Bytes sent per second. Usually smaller than cwnd.
     double astreaDelayMetric=1;     // A measure of how close the currenty delay is to optimal. Will be 1 as long as the delay is within the forgiveness window.
