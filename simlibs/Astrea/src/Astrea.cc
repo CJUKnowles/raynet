@@ -2,10 +2,6 @@
 #include "omnetpp/cobject.h"
 #include "omnetpp/simtime.h"
 #include "omnetpp/simtime_t.h"
-#include "transportlayer/tcp/TcpPacedConnection.h"
-#include "inet/transportlayer/tcp/flavours/TcpNoCongestionControl.h"
-#include "transportlayer/tcp/flavours/TcpPacedFamily.h"
-#include <numeric>
 #include <optional>
 #ifdef ASTREA
 #include "Astrea.h"
@@ -20,7 +16,7 @@ using namespace learning;
 Register_Class(Astrea); // Lets omnet see and use this class
 
 Astrea::Astrea():
-    TcpNoCongestionControl(), RLInterface() {
+    TcpPacedNoCC(), RLInterface() {
     if (debug) cout << "\tAstrea: Constructor called!";
 }
 
@@ -46,7 +42,7 @@ void Astrea::initialize() {
     
     // Initalize parent classes
     RLInterface::initialise();
-    TcpNoCongestionControl::initialize();
+    TcpPacedNoCC::initialize();
 
     // Signals
     throughputSignal = conn->registerSignal("throughput");
@@ -60,8 +56,7 @@ void Astrea::initialize() {
 // OMNet Method? Called after component initialization is complete?
 void Astrea::established(bool active) {
     if (debug) cout << "\tAstrea: established()" << endl;
-    TcpNoCongestionControl::established(active);
-    state->snd_cwnd = 9000; // Set initial cwnd fairly low to start
+    TcpPacedNoCC::established(active);
 
     if (active) {
         this->isActive = active;
@@ -97,7 +92,7 @@ std::optional<ObsType> Astrea::computeObservation(){
     LocalState* localState = new LocalState();
 
     // Initialize empty obs to populate as we go
-    double obs[7] = {0,0,0,0,0,0,};
+    double obs[8] = {0,0,0,0,0,0, 0};
 
     // Throughput: How many bytes were DELIVERED this interval (basically goodput?)
     this->astreaThroughput = delta_snd_una / this->fixedIntervalDuration;
@@ -152,7 +147,14 @@ std::optional<ObsType> Astrea::computeObservation(){
     localState->inflightRatio = obs[6];
 
     // Pacing rate: How quickly are we sending bytes to the TCP stack
-    // obs[7] = state->paceRate / this->astreaMaxThroughput;
+    double prate;
+    if (dynamic_cast<TcpPacedConnection*>(conn)->intersendingTime.dbl() != 0) {
+        prate = (1.0/dynamic_cast<TcpPacedConnection*>(conn)->intersendingTime.dbl()); // segments sent per sec
+    } else {
+        prate = 8192; // Arbitrarily large value. Pacerate is virtually infinite until it is set.
+    }
+    obs[7] = (prate * state->snd_mss) / this->astreaMaxThroughput; // convert prate to bytes/s, matching maxthruput's units
+    localState->prate = prate; // Observer only uses prate as a multiplier for latency penalty. Use segments/s.
 
     if(debug) {
         cout << "-" << endl;
@@ -164,6 +166,10 @@ std::optional<ObsType> Astrea::computeObservation(){
             cout << "\t\tcwnd: " << state->snd_cwnd << endl;
             cout << "\t\tsnd_max: " << state->snd_max << endl;
             cout << "\t\tSRTT: " << state->srtt << endl;
+            cout << "\t\tIntersending Time (segments): " << dynamic_cast<TcpPacedConnection*>(conn)->intersendingTime.dbl();
+            cout << "\t\tPacerate (segments): " << prate << endl;
+            cout << "\t\tIntersending Time (bytes): " << dynamic_cast<TcpPacedConnection*>(conn)->intersendingTime.dbl() / state->snd_mss;
+            cout << "\t\tPacerate (bytes): " << prate * state->snd_mss << endl;
         cout << "\tObservations:" << endl;
             cout << "\t\tThroughput ratio: \t" << obs[0] << endl;
             cout << "\t\tMax Throughput: \t" << obs[1] << endl;
@@ -172,7 +178,7 @@ std::optional<ObsType> Astrea::computeObservation(){
             cout << "\t\tRelative cwnd: \t\t"  << obs[4]  << endl;
             cout << "\t\tLossrate: \t\t"       << obs[5]  << endl;
             cout << "\t\tInflight bytes: \t" << obs[6] << endl;
-            // cout << "\t\tPacerate: \t"       << obs[7]  << endl;
+            cout << "\t\tPacerate: \t"       << obs[7]  << endl;
         cout << "-" << endl;
         cout << "-" << endl;
     } 
@@ -201,7 +207,7 @@ std::optional<ObsType> Astrea::computeObservation(){
             obs[4],   // relative cwnd (cwnd/(thr_max)*(lat_min))
             obs[5],                     // loss (lossrate/thr_max)
             obs[6],                                           // in-flight bytes (pkt_flight/cwnd)
-            //obs[7],                          // pacing rate (prate/thr_max, will require tcpPaced and currently doesn't work)
+            obs[7],                          // pacing rate (prate/thr_max, will require tcpPaced and currently doesn't work)
         };
 }
 
@@ -231,12 +237,20 @@ void Astrea::decisionMade(ActionType action) {
 
     // Attempt to change cwnd and pacing rate (hard upper cwnd limit to prevent simulation slowdown during early training)
     if (this->takeActions && newCwnd <= 1000000) {
+        // Action
+        if (debug) cout << "\t\traw action: " << action << endl;
         if (debug) cout << "\t\tcwnd changed from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         state->snd_cwnd = newCwnd;
-        // TODO: Pacing
-        // this->astreaPaceRate = (double) state->snd_cwnd / state->srtt.dbl();  // Bytes/s
-        // dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(1/orcaPaceRate); // 1/paceRate = intersendingtime
         owner->emit(actionSignal, multiplier); // Emit action for plotting
+
+        // Pacing
+        if (state->srtt.dbl() != 0) {
+            this->astreaPaceRate = ((double) state->snd_cwnd / (double) state->snd_mss) / state->srtt.dbl();  // segments/s
+            dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime((double) 1.0/astreaPaceRate); // seconds between each segment sent
+            if (debug) cout << "\t\tprate set to " << this->astreaPaceRate << " (" << dynamic_cast<TcpPacedConnection*>(conn)->intersendingTime.dbl() << ")" << endl;
+        } else {
+            if (debug) cout << "\t\tno ACKS yet received, not setting pacerate" << endl;
+        }
     } else {
         // Invalid. Skip this action entirely.
         if (debug) cout << "\t\t" << "NOT CHANGING cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x) NOT CHANGING !!!!!!" << endl;

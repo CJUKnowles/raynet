@@ -24,23 +24,6 @@ from collections import deque, defaultdict
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 
 class OmnetGymApiEnv(MultiAgentEnv):
-    
-    # def get_observation_space(self, agent_id):
-    #     if agent_id.startswith("Astrea"):
-    #         return spaces.Box(
-    #             low=self.obs_min, 
-    #             high=self.obs_max,
-    #             dtype=np.float32) # A 4-dimensional array, each feature is a float value with its own bounds
-    #     else:
-    #         raise ValueError(f"bad agent id: {agent_id}!")
-    
-    # def get_action_space(self, agent_id):
-    #     print("HI HI HELLO HI")
-    #     if agent_id.startswith("Astrea"):
-    #         return gym.spaces.Box(low=np.array(-2.0, dtype=np.float32), high=np.array(2.0, dtype=np.float32), dtype=np.float32)
-    #     else:
-    #         raise ValueError(f"bad agent id: {agent_id}!")
-    
     def __init__(self,env_config):
         """
         Initialize the training environment configuration
@@ -65,7 +48,7 @@ class OmnetGymApiEnv(MultiAgentEnv):
         self.num_flows = self.env_config["num_flows_range"][0]
         self.has_reset = False
         
-        self.obs_size = 7   # How many values are in a given obs
+        self.obs_size = 8   # How many values are in a given obs
         self.obs_min = np.tile(np.array(
                      [0,                            # Throughput
                       0,                            # number of acks
@@ -74,6 +57,7 @@ class OmnetGymApiEnv(MultiAgentEnv):
                       0,                             # Delay metric
                       0,
                       0,
+                      0
                       ], dtype=np.float32), self.stacking)
         self.obs_max = np.tile(np.array(
                     [1,                           # Throughput
@@ -82,19 +66,18 @@ class OmnetGymApiEnv(MultiAgentEnv):
                     1,                            # Min Latency
                     10,                            # relative cwnd
                     1,                            # Loss rate
-                    1                             # Inflight
+                    1,                             # Inflight
+                    10000000000                    # pacerate
                     ], dtype=np.float32), self.stacking)
-        self.agent_dones = {}
-        self.agent_trucateds = {}
         
+        # Set action and observation spaces for all agents
         obs_spaces = {}
         action_spaces = {}
         self.possible_agents = []
         for i in range(self.env_config["num_flows_range"][1] + 1):
-            self.possible_agents.append(f"`Astrea`{i}")
+            self.possible_agents.append(f"Astrea{i}")
             obs_spaces[f"Astrea{i}"] = spaces.Box(low=self.obs_min, high=self.obs_max, dtype=np.float32)
             action_spaces[f"Astrea{i}"] = spaces.Box(low=-1.0, high=1.0, dtype=np.float32)
-        
         self.observation_space = spaces.Dict(obs_spaces)
         self.action_space = spaces.Dict(action_spaces)
         
@@ -145,9 +128,10 @@ class OmnetGymApiEnv(MultiAgentEnv):
         # Start a new simulation runner on the modified ini file
         self.runner.initialise(ini_variants_base + f".worker{os.getpid()}", "General")
         obs = self.runner.reset()
-        print("Reset obs: ")
-        print(obs)
-        print("")
+        for agentID in obs:
+            if agentID != "__all__":
+                self.agents.append(agentID)
+        print(f"Initial obs received. Agents in this env: {self.agents}")
         
         # Append the most recent observations to their agents' histories. Store the updated histories in obs and return.
         for agent, agent_obs in obs.items():
@@ -199,7 +183,7 @@ if __name__ == '__main__':
     bottleneck_bandwidth_range = (5, 20)
     minimum_rtt_range = (5, 100)
     bottleneck_buffer_range = (25000, 2000000)
-    num_flows_range = (2,5)
+    num_flows_range = (1,1)
     
     # num_workers = 2 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     # # Environment Params
@@ -211,7 +195,7 @@ if __name__ == '__main__':
     
     # Training Params
     load_from_checkpoint = False
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_Astrea-1.3_2026-04-16_00-24-31uf6tvzht/checkpoints/checkpoint_11"
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_Astrea-1.3_2026-04-16_11-06-44iqflmq07/checkpoints/checkpoint_57"
     stacking = 5
     
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Astrea/src/training/AstreaTraining.ini",
@@ -233,6 +217,7 @@ if __name__ == '__main__':
                       0,                            
                       0,                            
                       0,
+                      0,
                       0
                       ], dtype=np.float32), stacking)
     obs_max = np.tile(np.array(
@@ -242,7 +227,8 @@ if __name__ == '__main__':
                     1,                            # Min Latency
                     10,                            # relative cwnd
                     1,                            # Loss rate
-                    1                             # Inflight
+                    1,                             # Inflight
+                    10000000000                    #pacerate
                     ], dtype=np.float32), stacking)
         
     ray.init(

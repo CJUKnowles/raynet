@@ -48,7 +48,7 @@ class OmnetGymApiEnv(MultiAgentEnv):
         self.num_flows = self.env_config["num_flows_range"][0]
         self.has_reset = False
         
-        self.obs_size = 7   # How many values are in a given obs
+        self.obs_size = 8   # How many values are in a given obs
         self.obs_min = np.tile(np.array(
                      [0,                            # Throughput
                       0,                            # number of acks
@@ -57,6 +57,7 @@ class OmnetGymApiEnv(MultiAgentEnv):
                       0,                             # Delay metric
                       0,
                       0,
+                      0
                       ], dtype=np.float32), self.stacking)
         self.obs_max = np.tile(np.array(
                     [1,                           # Throughput
@@ -65,19 +66,18 @@ class OmnetGymApiEnv(MultiAgentEnv):
                     1,                            # Min Latency
                     10,                            # relative cwnd
                     1,                            # Loss rate
-                    1                             # Inflight
+                    1,                             # Inflight
+                    10000000000                    # pacerate
                     ], dtype=np.float32), self.stacking)
-        self.agent_dones = {}
-        self.agent_trucateds = {}
         
+        # Set action and observation spaces for all agents
         obs_spaces = {}
         action_spaces = {}
         self.possible_agents = []
         for i in range(self.env_config["num_flows_range"][1] + 1):
-            self.possible_agents.append(f"`Astrea`{i}")
+            self.possible_agents.append(f"Astrea{i}")
             obs_spaces[f"Astrea{i}"] = spaces.Box(low=self.obs_min, high=self.obs_max, dtype=np.float32)
             action_spaces[f"Astrea{i}"] = spaces.Box(low=-1.0, high=1.0, dtype=np.float32)
-        
         self.observation_space = spaces.Dict(obs_spaces)
         self.action_space = spaces.Dict(action_spaces)
         
@@ -103,6 +103,10 @@ class OmnetGymApiEnv(MultiAgentEnv):
         # Start a new simulation runner on the modified ini file
         self.runner.initialise(ini_variants_base + f".worker{os.getpid()}", "Astrea")
         obs = self.runner.reset()
+        for agentID in obs:
+            if agentID != "__all__":
+                self.agents.append(agentID)
+        print(f"Initial obs received. Agents in this env: {self.agents}")
         
         # Append the most recent observations to their agents' histories. Store the updated histories in obs and return.
         for agent, agent_obs in obs.items():
@@ -165,8 +169,8 @@ if __name__ == '__main__':
     # num_flows_range = (2,2)
     
     # Training Params
-    load_from_checkpoint = True
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_Astrea-1.3_2026-04-16_00-24-31uf6tvzht/checkpoints/checkpoint_11"
+    load_from_checkpoint = False
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_Astrea-1.3_2026-04-16_11-06-44iqflmq07/checkpoints/checkpoint_57"
     stacking = 5
     
     env_config = {"iniPath": sys.argv[1],
@@ -184,6 +188,7 @@ if __name__ == '__main__':
                       0,                            
                       0,                            
                       0,
+                      0,
                       0
                       ], dtype=np.float32), stacking)
     obs_max = np.tile(np.array(
@@ -193,13 +198,15 @@ if __name__ == '__main__':
                     1,                            # Min Latency
                     10,                            # relative cwnd
                     1,                            # Loss rate
-                    1                             # Inflight
+                    1,                             # Inflight
+                    10000000000                    #pacerate
                     ], dtype=np.float32), stacking)
         
     ray.init(local_mode=True)
     config = (
             SACConfig()
             .environment(env_name, env_config=env_config) # "OmnetGymApiEnv
+            .env_runners(explore=True)
             .multi_agent(
                 policies={
                     "shared_policy": (

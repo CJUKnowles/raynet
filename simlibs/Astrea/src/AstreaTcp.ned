@@ -1,7 +1,7 @@
 package Astrea;
-import inet.transportlayer.tcp.Tcp;
+import tcppaced.transportlayer.tcp.TcpPaced;
 
-simple AstreaTcp extends Tcp
+simple AstreaTcp extends TcpPaced
 {
     parameters:
         @class(AstreaTcp);

@@ -20,16 +20,14 @@
 #include "inet/transportlayer/tcp/flavours/TcpNewReno.h"
 #include <inet/transportlayer/tcp/Tcp.h>
 #include <inet/transportlayer/tcp/TcpConnection.h>
-#include <inet/transportlayer/tcp/flavours/DumbTcp.h>
-#include <inet/transportlayer/tcp/flavours/TcpNoCongestionControl.h>
-#include <transportlayer/tcp/flavours/TcpCubic.h>
+#include <transportlayer/tcp/flavours/TcpPacedNoCC.h>
 
 using namespace omnetpp;
 using namespace inet::tcp;
 using namespace inet;
 using namespace learning;
 
-class Astrea : public TcpNoCongestionControl, public RLInterface
+class Astrea : public TcpPacedNoCC, public RLInterface
 {
 protected:
     // am I running on active open (client) or passive open connection (server)

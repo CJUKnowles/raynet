@@ -47,7 +47,7 @@ typedef float ActionType;
 #endif
 
 #ifdef ASTREA
-typedef std::tuple<double, double, double, double, double, double, double> ObsType;
+typedef std::tuple<double, double, double, double, double, double, double, double> ObsType;
 typedef float RewardType;
 typedef float ActionType;
 #endif

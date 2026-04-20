@@ -126,7 +126,7 @@ std::optional<ObsType> Orca::computeObservation(){
         obs[0] = this->orcaThroughput / this->orcaMaxThroughput;
 
         // Pacerate
-        this->orcaPaceRate = 1.0/dynamic_cast<TcpPacedConnection*>(conn)->intersendingTime.dbl();
+        this->orcaPaceRate = (1.0/dynamic_cast<TcpPacedConnection*>(conn)->intersendingTime.dbl()) * (double) state->snd_mss;
         obs[1] = this->orcaPaceRate / this->orcaMaxThroughput;
 
         // Lossrate: What percentage of bytes sent this interval were retransmissions
@@ -244,7 +244,7 @@ void Orca::decisionMade(ActionType action) {
     if (this->takeActions && this->rttReportCount > 0 && newCwnd <= 1000000) {
         if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         state->snd_cwnd = newCwnd;
-        this->orcaPaceRate = (double) state->snd_cwnd / state->srtt.dbl();  // Bytes/s
+        this->orcaPaceRate = ((double) state->snd_cwnd / (double) state->snd_mss) / state->srtt.dbl(); ;  // Bytes/s
         dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(1/orcaPaceRate); // 1/paceRate = intersendingtime
         owner->emit(actionSignal, multiplier); // Emit action for plotting
     } else {

@@ -109,6 +109,7 @@ void Observer::computeGlobalState() {
     double lossSum = 0;         // Total number of lost bytes
     double lossRatioSum = 0;    // Sum of loss ratios (loss rate relative to current throughput, NOT max)
     double avgThroughputSum = 0; // Sum of all average throughputs (avg over each agent's entire state history)
+    double pacerateSum = 0;         // Sum all of pacing rates
     int numFlows = 0;
 
     for (auto& [agentId, stateHistory] : astreaAgents) {
@@ -134,6 +135,8 @@ void Observer::computeGlobalState() {
                 lossRatioSum += (localState->lossRate/localState->throughput);
             }
 
+            pacerateSum += localState->prate;
+
             numFlows++;
         }
     }
@@ -147,6 +150,7 @@ void Observer::computeGlobalState() {
     globalState->avgLatency = latencySum/numFlows;
     globalState->avgCwnd = cwndSum/numFlows;
     globalState->lossRatio = lossSum/numFlows;
+    globalState->avgPacerate = pacerateSum/numFlows;
 
     // REWARD METRICS ======
     globalState->reward = 0.0;
@@ -158,7 +162,7 @@ void Observer::computeGlobalState() {
     // Latency Metric
     double latencyThreshold = (1.0 + delayCoeff)*this->LINK_DELAY;
     if(globalState->avgLatency > latencyThreshold) {
-        globalState->latencyMetric = (globalState->avgLatency - latencyThreshold) * 10; // TODO: Multiply by the paceRate, 10 is placeholder
+        globalState->latencyMetric = (globalState->avgLatency - latencyThreshold) * globalState->avgPacerate; // TODO: Multiply by the paceRate. The average? Or does each flow get its own latency reward?
     } else {
         // Treat latency as optimal if it falls below the threshold
         globalState->latencyMetric = 0;

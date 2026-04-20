@@ -32,13 +32,13 @@ def run_experiments(experiments_dict, create_output_csv=True):
             
             # Generate output.csv and individual vector csvs for all tracked vectors of agiven experiment
             exp_results_dir = os.getenv('HOME') + f"/raynet/_experiments/{experiment_name}/ini_variants/results"
-            eval_tools.generate_exp_csvs(exp_results_dir, protocol_name, do_dumb_plots=False)
+            eval_tools.generate_exp_csvs(exp_results_dir, protocol_name, do_dumb_plots=True)
         
 if __name__ == "__main__":
     
     experiments_to_run = {
-        #"single-flow": ["Astrea"],
-        "responsiveness": ["Astrea"],
+        "single-flow": ["Astrea"],
+        #"responsiveness": ["Astrea"],
         #"double-flow-dumbbell": ["Astrea"],
     }
     

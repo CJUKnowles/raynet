@@ -23,6 +23,7 @@ class GlobalState : public cObject, noncopyable
     double minCwnd;         // Minimum current cwnd of all flows
     double maxCwnd;         // Maximum current cwnd of all flows
     double avgCwnd;         // Average current cwnd of all flows
+    double avgPacerate;     // Average prate of all flows (do I even need this?)
     double lossRatio;       // Average current loss ratio of all flows
     double numFlows;        // Current number of flows (agents)
 
@@ -75,6 +76,7 @@ class LocalState : public cObject, noncopyable
     double cwnd;
     double lossRate;
     double inflight;
+    double prate;
 
     // Observation values (mostly normalized, aside fomr the max/mins)
     double throughputRatio;
