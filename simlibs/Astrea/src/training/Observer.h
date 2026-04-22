@@ -176,7 +176,7 @@ protected:
   // State
   GlobalState* globalState; // The most recently computed global state
   std::unordered_map<std::string, StateHistory> astreaAgents; // Map of all Astrea agents. <agent_id, agent_current_info>
-  double delayCoeff = 1.5; // Delays below minDelay*delayCoeff will be treated as optimal
+  double delayCoeff = .5; // Delays below minDelay*delayCoeff will be treated as optimal
   bool debug = false;
 
   // Ground truth network params

@@ -121,13 +121,13 @@ class OmnetGymApiEnv(MultiAgentEnv):
         ini_string = ini_string.replace("BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")
         ini_string = ini_string.replace("MAX_RL_STEPS", f"{self.max_steps}")
         ini_string = ini_string.replace("NUM_FLOWS", f"{self.num_flows}")
-        # TODO: Include these strings in the .ini somewhere that actually makes them alter the experiment
         with open(ini_variants_base + f".worker{os.getpid()}", 'w') as fout:
             fout.write(ini_string)
         
         # Start a new simulation runner on the modified ini file
         self.runner.initialise(ini_variants_base + f".worker{os.getpid()}", "General")
         obs = self.runner.reset()
+        self.agents = []
         for agentID in obs:
             if agentID != "__all__":
                 self.agents.append(agentID)
@@ -172,18 +172,18 @@ def omnetgymapienv_creator(env_config):
     return env  # return an env instance
 
 if __name__ == '__main__':
-    env_name = "Astrea-1.3"
+    env_name = "Astrea-1.4"
     register_env(env_name, omnetgymapienv_creator)
     seed = 91456211
     
     
-    num_workers = 12 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     # Environment Params
     max_steps_range = (2000, 2000)
     bottleneck_bandwidth_range = (5, 20)
     minimum_rtt_range = (5, 100)
     bottleneck_buffer_range = (25000, 2000000)
-    num_flows_range = (1,1)
+    num_flows_range = (2,5)
     
     # num_workers = 2 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     # # Environment Params
@@ -259,10 +259,9 @@ if __name__ == '__main__':
             #.fault_tolerance(restart_failed_sub_environments=True, ignore_env_runner_failures=False)
             .training(
               replay_buffer_config={"type": "MultiAgentEpisodeReplayBuffer",
-                                    "replay_sequence_length": 1, # Observations are already stacked, so only look at one obs when sampling from the buffer.
                                     "capacity": max_steps_range[1] * num_workers * 2},
               store_buffer_in_checkpoints=True,
-              gamma=0.98,
+              gamma=0.995,
               tau=0.005,
               actor_lr=0.00005,
               critic_lr=0.001,
@@ -286,7 +285,7 @@ if __name__ == '__main__':
     # Main training loop!
     iteration = 0
     checkpoint = 0
-    iterations_per_checkpoint = 200
+    iterations_per_checkpoint = 500
     while True:
         result = algo.train()   # Perform a single training iteration (many steps, usually shorter than an episode. Changes depending on training parameters.)
         iteration += 1

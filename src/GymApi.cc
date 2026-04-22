@@ -47,15 +47,18 @@ void GymApi::initialise(std::string _iniPath, std::string sectionName){
     bootconfigptr->setConfigurationReader(inifilePtr);
     //bootconfigptr->setActiveSection(sectionName.c_str());
     
+    // Copy lifecycle listeners from the static environment to the simulation environment. Prevents missing INITSTAGE errors.
     for (auto l : getEnvir()->getLifecycleListeners()) {
-        // Idea: rather than calling the staticEnvir that initially loads up, you may be calling the previous environment
-        env->addLifecycleListener(l); // Called "app" in omnetpp's original code. This is a reference to cmdenv, qtenv, or in this case, cmrlenv.
+        env->addLifecycleListener(l); 
     }
-    
+
+    // Set the simulation environment to be the active environment (instead of the static environment).
     simulationPtr = new cSimulation("simulation", env);
     cSimulation::setActiveSimulation(simulationPtr);
-    
+
+    // Finally, initialize the simulation environment and its components.
     env->initialiseEnvironment(cstrings.size(), &cstrings[0],bootconfigptr, sectionName);
+    
 }
 
 

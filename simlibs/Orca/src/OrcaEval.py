@@ -90,7 +90,10 @@ class OmnetGymApiEnv(gym.Env):
             fout.write(ini_string)
         
         # Start a new simulation runner on the modified ini file
+        
         self.runner.initialise(ini_variants_base + f".worker{os.getpid()}", "Orca")
+        
+        
         obs = self.runner.reset()
         
         # Pull the initial observation and store return it to the trainer
@@ -155,7 +158,7 @@ if __name__ == '__main__':
     register_env(env_name, omnetgymapienv_creator)
     
     load_from_checkpoint = True
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.3/SAC_Orca-1.2_2026-03-29_21-38-407tn0om0b/checkpoints/checkpoint_80"
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.5/SAC_Orca-1.5_2026-04-22_02-03-16ebgrsgyg/checkpoints/checkpoint_46"
     env_config = {"iniPath": sys.argv[1],
                   "stacking": 10}
     
@@ -166,7 +169,7 @@ if __name__ == '__main__':
             .env_runners(explore=False) #, rollout_fragment_length=1000
             .environment(env_name, env_config=env_config) # "OmnetGymApiEnv
             )
-    algo = config.build()
+    algo = config.build_algo()
     
     # Convert betas? (solution found online, fixes a crash when loading a checkpoint)
     def betas_tensor_to_float(learner):

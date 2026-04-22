@@ -86,7 +86,7 @@ public: // General use
     // Astrea parameters (Default values here, overridden in astrea.ini)
     double rewardDelayForgiveness = 1; // 
     double rewardLossMultiplier = 1;   // 
-    double actionControlCoeff = .025; // Alpha term from Astrea paper. Larger values allow larger changes to cwnd.
+    double actionControlCoeff = .6; // Alpha term from Astrea paper. Larger values allow larger changes to cwnd.
     double fixedIntervalDuration=0.03;  // Seconds between steps
 
     // Astrea observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)

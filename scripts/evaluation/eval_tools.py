@@ -18,6 +18,13 @@ import numpy as np
 from tabulate import tabulate
 from matplotlib.backends.backend_pdf import PdfPages
 
+protocol_colors = {
+    "Cubic": "#1f77b4",
+    "CleanSlate": "#ff7f0e",
+    "Orca": "#2ca02c",
+    "Astrea": "#d62728",
+}
+
 def parse_if_number(s):
     try: return float(s)
     except: return True if s=="true" else False if s=="false" else s if s else None
@@ -167,7 +174,7 @@ def plot_summary(experiment:str, protocols:list, metrics:list=None, results_dir:
     for metric in metrics:
         print()
 
-def plot_pacerate_timeseries(csv_df, ax=None):
+def plot_pacerate_timeseries(csv_df, ax=None, show_competition=True):
     """
     Overlays results from several experiments to create a single pacerate plot for comparison.
     - Expects a single experiment's dataframe as input
@@ -175,7 +182,6 @@ def plot_pacerate_timeseries(csv_df, ax=None):
     """
 
     csv_df = csv_df[csv_df["module_type"].str.contains("client")]
-    csv_df = csv_df[csv_df["module"].str.contains("0")]
     csv_df = csv_df[csv_df["module"].str.contains("conn")]
     csv_df = csv_df[csv_df["metric"].str.contains("paceRate")]
 
@@ -194,21 +200,21 @@ def plot_pacerate_timeseries(csv_df, ax=None):
     all_y_values = []
     for _, row in csv_df.iterrows():
         data = pd.read_csv(row["csv_path"])
-        
-        x = data["time"]
-        y = data["paceRate"]
-        
-        # Rolling stats
-        rolling_mean = y.rolling(window, center=True).mean()
-        rolling_std = y.rolling(window, center=True).std()
+        is_primary_flow = "0" in row["module"]
+        if(show_competition or is_primary_flow):
+            x = data["time"]
+            y = data["paceRate"]
+            
+            # Rolling stats
+            rolling_mean = y.rolling(window, center=True).mean()
+            rolling_std = y.rolling(window, center=True).std()
 
-        # Raw data
-        line, = ax.plot(x, y, alpha=0.2, linewidth=0.8)
-        color = line.get_color()
+            # Raw data
+            ax.plot(x, y, alpha=0.2, linewidth=0.8, color=protocol_colors[row["protocol"]])
 
-        # Smoothed mean
-        ax.plot(x, rolling_mean, linewidth=2, label=row["protocol"], color=color)
-        all_y_values.extend(data["paceRate"].values)
+            # Smoothed mean
+            ax.plot(x, rolling_mean, linewidth=2, label=row["protocol"], color=protocol_colors[row["protocol"]], linestyle='-' if is_primary_flow else '--')
+            all_y_values.extend(data["paceRate"].values)
 
     
     ax.set_xlabel("Time")
@@ -245,8 +251,7 @@ def plot_qsize_timeseries(csv_df, ax=None):
     all_y_values = []
     for _, row in csv_df.iterrows():
         data = pd.read_csv(row["csv_path"])
-        
-        x = data["time"]
+        x = data["time"]    
         y = data["queueBitLength"]
         
         # Rolling stats
@@ -254,11 +259,10 @@ def plot_qsize_timeseries(csv_df, ax=None):
         rolling_std = y.rolling(window, center=True).std()
 
         # Raw data
-        line, = ax.plot(x, y, alpha=0.2, linewidth=0.8)
-        color = line.get_color()
+        line, = ax.plot(x, y, alpha=0.2, linewidth=0.8, color=protocol_colors[row["protocol"]])
 
         # Smoothed mean
-        ax.plot(x, rolling_mean, linewidth=2, label=row["protocol"], color=color)
+        ax.plot(x, rolling_mean, linewidth=2, label=row["protocol"], color=protocol_colors[row["protocol"]])
 
     ax.set_xlabel("Time")
     ax.set_ylabel("Queue Size (bits)")
@@ -271,7 +275,7 @@ def plot_qsize_timeseries(csv_df, ax=None):
 
     return ax
         
-def plot_cwnd_timeseries(csv_df, ax=None):
+def plot_cwnd_timeseries(csv_df, ax=None, show_competition=True):
     """
     Overlays results from several experiments to create a single cwnd plot for comparison.
     - Expects a single experiment's dataframe as input
@@ -279,7 +283,6 @@ def plot_cwnd_timeseries(csv_df, ax=None):
     """
 
     csv_df = csv_df[csv_df["module_type"].str.contains("client")]
-    csv_df = csv_df[csv_df["module"].str.contains("0")]
     csv_df = csv_df[csv_df["module"].str.contains("conn")]
     csv_df = csv_df[csv_df["metric"].str.contains("cwnd")]
 
@@ -294,33 +297,24 @@ def plot_cwnd_timeseries(csv_df, ax=None):
     for _, row in csv_df.iterrows():
         data = pd.read_csv(row["csv_path"])
     
-    window = 1
+    window = 50
     all_y_values = []
     for _, row in csv_df.iterrows():
         data = pd.read_csv(row["csv_path"])
-        
-        x = data["time"]
-        y = data["cwnd"]
-        
-        # Rolling stats
-        rolling_mean = y.rolling(window, center=True).mean()
-        rolling_std = y.rolling(window, center=True).std()
+        is_primary_flow = "0" in row["module"]
+        if(show_competition or is_primary_flow):
+            x = data["time"]
+            y = data["cwnd"]
+            
+            # Rolling stats
+            rolling_mean = y.rolling(window, center=True).mean()
+            rolling_std = y.rolling(window, center=True).std()
 
-        # Raw data
-        line, = ax.plot(x, y, alpha=0.2, linewidth=0.8)
-        color = line.get_color()
+            # Raw data
+            line, = ax.plot(x, y, alpha=0.2, linewidth=0.8, color=protocol_colors[row["protocol"]])
 
-        # Smoothed mean
-        ax.plot(x, rolling_mean, linewidth=2, label=row["protocol"], color=color)
-
-        # Variance band
-        ax.fill_between(
-            x,
-            rolling_mean - rolling_std,
-            rolling_mean + rolling_std,
-            alpha=0.2,
-            color=color
-        )
+            # Smoothed mean
+            ax.plot(x, rolling_mean, linewidth=2, label=row["protocol"], color=protocol_colors[row["protocol"]], linestyle='-' if is_primary_flow else '--')
 
     ax.set_xlabel("Time")
     ax.set_ylabel("cwnd (bytes)")
@@ -333,7 +327,7 @@ def plot_cwnd_timeseries(csv_df, ax=None):
 
     return ax
 
-def plot_srtt_timeseries(csv_df, ax=None):
+def plot_srtt_timeseries(csv_df, ax=None, show_competition=True):
     """
     Overlays results from several experiments to create a single srtt plot for comparison.
     - Expects a single experiment's dataframe as input
@@ -341,7 +335,6 @@ def plot_srtt_timeseries(csv_df, ax=None):
     """
 
     csv_df = csv_df[csv_df["module_type"].str.contains("client")]
-    csv_df = csv_df[csv_df["module"].str.contains("0")]
     csv_df = csv_df[csv_df["module"].str.contains("conn")]
     csv_df = csv_df[csv_df["metric"].str.contains("srtt")]
 
@@ -355,12 +348,16 @@ def plot_srtt_timeseries(csv_df, ax=None):
     all_y_values = []
     for _, row in csv_df.iterrows():
         data = pd.read_csv(row["csv_path"])
-        ax.plot(
-            data["time"],
-            data["srtt"],
-            label=row["protocol"]
-        )
-        all_y_values.extend(data["srtt"].values)
+        is_primary_flow = "0" in row["module"]
+        if(show_competition or is_primary_flow):
+            ax.plot(
+                data["time"],
+                data["srtt"],
+                label=row["protocol"], 
+                color=protocol_colors[row["protocol"]],
+                linestyle='-' if is_primary_flow else '--'
+            )
+            all_y_values.extend(data["srtt"].values)
 
     ax.set_xlabel("Time")
     ax.set_ylabel("sRTT (ms)")
@@ -373,7 +370,7 @@ def plot_srtt_timeseries(csv_df, ax=None):
 
     return ax
 
-def plot_throughput_timeseries(csv_df, ax=None):
+def plot_throughput_timeseries(csv_df, ax=None, show_competition=True):
     """
     Overlays results from several experiments to create a single throughput plot for comparison.
     - Expects a single experiment's dataframe as input
@@ -381,7 +378,6 @@ def plot_throughput_timeseries(csv_df, ax=None):
     """
 
     csv_df = csv_df[csv_df["module_type"].str.contains("server")]
-    csv_df = csv_df[csv_df["module"].str.contains("0")]
     csv_df = csv_df[csv_df["module"].str.contains("conn")]
     csv_df = csv_df[csv_df["metric"].str.contains("throughput")]
 
@@ -392,16 +388,21 @@ def plot_throughput_timeseries(csv_df, ax=None):
     print("Plotting throughput timeseries for:")
     print(tabulate(csv_df, headers='keys'))
     
+    colors = {}
     all_y_values = []
     for _, row in csv_df.iterrows():
         data = pd.read_csv(row["csv_path"])
-        
-        ax.plot(
-            data["time"],
-            data["throughput"],
-            label=row["protocol"]
-        )
-        all_y_values.extend(data["throughput"].values)
+        is_primary_flow = "0" in row["module"]
+        if(show_competition or is_primary_flow):
+            line = ax.plot(
+                data["time"],
+                data["throughput"],
+                label=row["protocol"],
+                color=protocol_colors[row["protocol"]],
+                linestyle='-' if is_primary_flow else '--'
+            )
+            all_y_values.extend(data["throughput"].values)
+            
 
     ax.set_xlabel("Time")
     ax.set_ylabel("Throughput (Mbps)")
@@ -428,13 +429,14 @@ if __name__ == "__main__":
     experiments = ["single-flow", "responsiveness", "double-flow-dumbbell"]
     for exp in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == exp]
+        exp_df = exp_df[exp_df["protocol"] != "Astrea"]
         fig, axs = plt.subplots(20, 1, figsize=(15, 100))
         
         
         plot_throughput_timeseries(exp_df, axs[0])
-        plot_cwnd_timeseries(exp_df, axs[1])
-        plot_pacerate_timeseries(exp_df, axs[2])
-        plot_srtt_timeseries(exp_df, axs[3])
+        plot_srtt_timeseries(exp_df, axs[1])
+        plot_cwnd_timeseries(exp_df, axs[2])
+        plot_pacerate_timeseries(exp_df, axs[3])
         plot_qsize_timeseries(exp_df, axs[4])
         
         fig.tight_layout()

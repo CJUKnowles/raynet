@@ -228,9 +228,9 @@ void Astrea::decisionMade(ActionType action) {
     // Calculate the newCwnd
     uint32_t newCwnd;
     if (action >= 0) {
-        newCwnd = (double) state->snd_cwnd * (1.0+actionControlCoeff*action);
+        newCwnd = (double) state->snd_cwnd * (1.0+this->actionControlCoeff*action);
     } else {
-        newCwnd = (double) state->snd_cwnd / (1.0-actionControlCoeff*action);
+        newCwnd = (double) state->snd_cwnd / (1.0-this->actionControlCoeff*action);
     }
     newCwnd = max(newCwnd, state->snd_mss);
     double multiplier = (double) newCwnd/state->snd_cwnd; // For debugging/plotting

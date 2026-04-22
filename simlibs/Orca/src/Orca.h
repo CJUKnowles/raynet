@@ -36,11 +36,7 @@ public:
     //Signals for result recording
     simsignal_t throughputSignal;
     simsignal_t actionSignal;
-    simsignal_t srttSignal;
-    simsignal_t pacerateSignal;
-    simsignal_t intervalDurationSignal;
-    simsignal_t cwndSignal;
-    uint32_t dupAcks;
+
 public: // General use
     Orca();
     virtual ~Orca();
@@ -56,9 +52,10 @@ public: // General use
     }
 
     // TcpCubic Overrides (These are mostly unchanged, and just used to gather statistic or disable automatic pacing)
+    virtual void rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) override;  // Used to track rtt-related stats for observations
     virtual void receivedDataAck(uint32_t firstSeqAcked) override;
     virtual void established(bool active) override; // Called when the TCP CONNECTION is established (some time AFTER startup!)
-    virtual void rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) override;  // Overridden so we can track 
+    virtual void receivedDuplicateAck() override; // Remove pacing rate change
 
     // RLInterface Overrides (Required by the RL agent)
     virtual void initialize() override; // This also overrides the TcpNewReno initialize(). Be sure to super() both of them.

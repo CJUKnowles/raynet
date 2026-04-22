@@ -72,7 +72,7 @@ class OmnetGymApiEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=self.obs_min, 
             high=self.obs_max, 
-            dtype=np.float32) # A 4-dimensional array, each feature is a float value with its own bounds
+            dtype=np.float32)
         
         # Create empty observation history deque
         self.num_observations = 7
@@ -122,12 +122,16 @@ class OmnetGymApiEnv(gym.Env):
         # Start a new simulation runner on the modified ini file
         self.runner.initialise(ini_variants_base + f".worker{os.getpid()}", "General")
         obs = self.runner.reset()
+        # print("Reset obs:")
+        # print(obs)
         
         obs = obs['Orca']
         for i in range(self.stacking):
             self.obs_history.extend(obs)    # Reset only - fill the obs_history with copies of first obs instead of 0's
         self.obs_history.extend(obs)
         return_obs_history = np.asarray(list(self.obs_history),dtype=np.float32)
+        # print("Reset return obs:")
+        # print(return_obs_history)
         return  return_obs_history, {}
 
     def step(self, actions):
@@ -142,6 +146,8 @@ class OmnetGymApiEnv(gym.Env):
         action = {'Orca': actions}
         obs, rewards, terminateds, info_ = self.runner.step(action)
         self.obs_history.extend(obs['Orca'])
+        # print("Step obs:")
+        # print(obs)
         
         # Extra the relevant obs/rewards from the environment info (only the info relevent to our single-agent)
         obs = np.asarray(list(obs['Orca']), dtype=np.float32)    # also formats the RLAgent's obs so RLlib can understand it
@@ -166,29 +172,8 @@ class OmnetGymApiEnv(gym.Env):
             self.runner.cleanup()
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
             sim_truncated = True
-        
-        printFreq = 1
-        if self.step_count % printFreq == -1:
-            print("-")
-            print(f"{printFreq} step(s) completed (Agent total: {self.step_count}):")
-            print("\tObservations:")
-            print(f"\t\tThroughput: {obs[0]:.2f}%             \t\t(Normalized, per interval)")
-            print(f"\t\tPacing Rate: {obs[1]:.2f}%        \t\t(Normalized, per interval)")
-            print(f"\t\tLoss Rate: {obs[2]:.2f}%          \t\t(Normalized, per interval)")
-            print(f"\t\tACKs: {obs[3]:.2f}x              \t\t(Multiplier of cwnd, per interval)") #? Identical to goodput(throughput) if normalized. 
-            print(f"\t\tInterval time: {obs[4]:.2f}s      \t\t(Raw, per interval)") #? Identical to delay if normalized?
-            print(f"\t\tSRTT: {obs[5]:.2f}%                   \t\t(Normalized, current)") #? Basically same as delay? slightly longer time horizon
-            print(f"\t\tDelay: {obs[6]:.2f}%                    \t\t(Log, current)") #? Maybe normalize?
-            
-            print(f"\tRewards:")
-            print(f"\t\tREWARD: {reward:.5f}                  \t(Raw, per interval)")
-        self.step_count += 1
+    
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
-        
-        # print(f"history: {[format(x, ".3f") for x in return_obs_history[0:7]]}")
-        # print(f"history: {[format(x, ".3f") for x in return_obs_history[7:14]]}")
-        # print(f"history: {[format(x, ".3f") for x in return_obs_history[14:21]]}")
-        # print(f"len: {len(return_obs_history)}")
         return  return_obs_history, reward, terminateds['Orca'], sim_truncated, {}
         
 # Generates the OmnetGymApiEnv for the calling ray worker
@@ -198,26 +183,26 @@ def omnetgymapienv_creator(env_config):
 register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
-    env_name = "Orca-test"
+    env_name = "Orca-1.5"
     register_env(env_name, omnetgymapienv_creator)
-    num_workers = 16 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
-    max_steps_range = (1000, 1000)
+    max_steps_range = (2000, 2000)
     # bottleneck_bandwidth_range = (6, 6)            
     # minimum_rtt_range = (5, 5)
     # bottleneck_buffer_range = (5280000, 5280000) 
     
     # Original run training params
-    bottleneck_bandwidth_range = (5, 20)            # Orca: 6Mbps-192Mbps
-    minimum_rtt_range = (5, 100)                      # Orca: 4ms-400ms
-    bottleneck_buffer_range = (25000, 2000000)    # Orca: 3KB-96MB, expressed in terms of bits
+    bottleneck_bandwidth_range = (5, 20)            # Megabits
+    minimum_rtt_range = (5, 100)                      # ms
+    bottleneck_buffer_range = (25000, 4000000)    # Bits. 1x min BDP to 2x max BDP
     
     # Second run training params (further explore larger BDPs and smaller queue sizes)
     
 
     
-    load_from_checkpoint = False
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.3/SAC_Orca-1.2_2026-03-29_21-38-407tn0om0b/checkpoints/checkpoint_134"
+    load_from_checkpoint = True
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.5/SAC_Orca-1.5_2026-04-22_02-03-16ebgrsgyg/checkpoints/checkpoint_46"
     steps_to_train = 1000000
     
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Orca/src/training/OrcaTraining.ini",
@@ -233,11 +218,18 @@ if __name__ == '__main__':
     ray.init(num_cpus=16, num_gpus=len(gpus))
     config = (
             SACConfig()
-            .resources(num_gpus=len(gpus), num_gpus_per_learner_worker=1)
-            .env_runners(num_env_runners=num_workers, num_cpus_per_env_runner=1, num_envs_per_env_runner=1, explore=True) #, rollout_fragment_length=1000
-            .environment(env_name, env_config=env_config, disable_env_checking=True) # "OmnetGymApiEnv
+            .resources(num_gpus=len(gpus))
+            .learners(num_learners=1, num_gpus_per_learner=1)
+            .env_runners(num_env_runners=num_workers, 
+                         num_cpus_per_env_runner=1,
+                         num_envs_per_env_runner=1,
+                         #rollout_fragment_length=200,
+                         explore=True) #, rollout_fragment_length=1000
+            .environment(env_name, env_config=env_config) # "OmnetGymApiEnv
             .training(
                 store_buffer_in_checkpoints=True,
+                # train_batch_size=4096,
+                # replay_buffer_config={"capacity": 10000000},
                 gamma=.995,
                 tau=.001,
                 actor_lr=.0001,
@@ -250,7 +242,7 @@ if __name__ == '__main__':
             #.training(training_intensity=1000)  # num_steps_sampled_before_learning_starts=0 training_intensity=1000
             # .build_algo()
             )
-    algo = config.build()
+    algo = config.build_algo()
     
     # Convert betas? (solution found online, fixes a crash when loading a checkpoint)
     def betas_tensor_to_float(learner):
@@ -267,7 +259,7 @@ if __name__ == '__main__':
     # Main training loop!
     iteration = 0
     checkpoint = 0
-    iterations_per_checkpoint = 1000
+    iterations_per_checkpoint = 500
     while True:
         result = algo.train()   # Perform a single training iteration (many steps, usually shorter than an episode. Changes depending on training parameters.)
         iteration += 1

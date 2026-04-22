@@ -4,6 +4,7 @@
 #include "transportlayer/tcp/TcpPacedConnection.h"
 #include "transportlayer/tcp/TcpPaced.h"
 #include "transportlayer/tcp/flavours/TcpCubic.h"
+#include <algorithm>
 #include <numeric>
 #include <ostream>
 #ifdef ORCA
@@ -29,31 +30,6 @@ Orca::~Orca() {
     
 }
 
-// Override to track bytes delivered
-void Orca::receivedDataAck(uint32_t firstSeqAcked) {
-    TcpCubic::receivedDataAck(firstSeqAcked);
-
-    if(!this->first_slowstart_complete && state->snd_cwnd >= state->ssthresh) {
-        this->first_slowstart_complete=true;
-    }
-
-    this->bytesDelivered += state->snd_mss; // Number of bytes sent so far this interval
-}
-
-// Called upon an ACK. Store the RTT info for averaging at the end of the interval.
-void Orca::rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) {
-    TcpCubic::rttMeasurementComplete(tSent, tAcked);
-    double packetRTT = (tAcked-tSent).dbl();
-    this->orcaDelaySum += packetRTT;
-    this->rttReportCount += 1;
-
-    
-    this->orcaMinDelay = std::min(this->orcaMinDelay, packetRTT);
-}
-
-
-
-
 // Called during sim initialization
 void Orca::initialize() {
     if (debug) cout << "\tOrca initialize()" << endl;
@@ -72,17 +48,12 @@ void Orca::initialize() {
     RLInterface::initialise();
     TcpCubic::initialize();
 
-    
-
     // Register metric signals (for plotting)
     throughputSignal = owner->registerSignal("throughput");
-    intervalDurationSignal = owner->registerSignal("intervalDuration");
     actionSignal = owner->registerSignal("action");
     // Suscribe to important signals:
     TcpPacedConnection* pacedConn = dynamic_cast<TcpPacedConnection*>(conn);
     pacedConn->subscribe(pacedConn->retransmissionRateSignal, (cListener*) this);
-    // TODO: Other signals from TcpPaced?
-    
 }
 
 // OMNet Method? Called after component initialization is complete?
@@ -104,7 +75,7 @@ void Orca::established(bool active) {
     }
 }
 
-// Return an observation to the trainer, based on the current state
+// Return an observation to the broker, based on the current state
 std::optional<ObsType> Orca::computeObservation(){
     if (debug) cout << "\tOrca: computeObservation()" << endl; 
     double lastIntervalDuration = (simTime() - this->lastIntervalTime).dbl();
@@ -127,7 +98,7 @@ std::optional<ObsType> Orca::computeObservation(){
 
         // Pacerate
         this->orcaPaceRate = (1.0/dynamic_cast<TcpPacedConnection*>(conn)->intersendingTime.dbl()) * (double) state->snd_mss;
-        obs[1] = this->orcaPaceRate / this->orcaMaxThroughput;
+        obs[1] = std::min(10.0, this->orcaPaceRate / this->orcaMaxThroughput); // Clamp to 10 as per paper (paceRate before first action is massive)
 
         // Lossrate: What percentage of bytes sent this interval were retransmissions
         this->orcaLossRate = 0.0;
@@ -148,7 +119,7 @@ std::optional<ObsType> Orca::computeObservation(){
     // Delay: Tracked in overridden method above. Only update the minimum if delay reports were received this interval.
     if (this->rttReportCount == 0 || state->srtt.dbl() == 0.0) {
         // No RTT reports were received this interval. Set all RTT related values to 0 to represent lack of data.
-        this->orcaDelay = 0.0;
+        this->orcaDelay = 0.0; // Deprecated?
         this->orcaDelayMetric = 0.0; // Delay is unobserved, not 0. Do not report as optimal.
         obs[5] = 0.0; // SRTT
         obs[6] = 0.0; // Delay metric
@@ -157,18 +128,16 @@ std::optional<ObsType> Orca::computeObservation(){
         this->orcaDelay = this->orcaDelaySum/this->rttReportCount;
 
         // Compute the delay metric (0.0 is poor, 1.0 is optimal. Report as optimal if within the forgiveness window.)
-        if (this->orcaDelay > this->orcaMinDelay * this->rewardDelayForgiveness) {                                             
+        if (state->srtt > this->orcaMinDelay * this->rewardDelayForgiveness) {                                             
             this->orcaDelayMetric = this->orcaMinDelay * this->rewardDelayForgiveness / state->srtt;
         } else {
             this->orcaDelayMetric = 1.0;
         }
-        obs[5] = this->orcaMinDelay / state->srtt.dbl();
+        obs[5] = this->orcaMinDelay / std::max(state->srtt.dbl(), this->orcaMinDelay); // sRTT is lower than it should be at startup. The max prevents this obs from being > 1 when that happens.
         obs[6] = this->orcaDelayMetric;
     }
     
 
-    
-    
     // Update step count, and check if the step limit has been reached
     RLStepsTaken++;
     if (RLStepsTaken >= this->maxRLSteps) {
@@ -206,7 +175,6 @@ std::optional<ObsType> Orca::computeObservation(){
 
     // Plotting metrics
     owner->emit(throughputSignal, this->orcaThroughput);
-    owner->emit(intervalDurationSignal, lastIntervalDuration);
 
     return ObsType{
             obs[0],     // Normalized throughput
@@ -244,8 +212,8 @@ void Orca::decisionMade(ActionType action) {
     if (this->takeActions && this->rttReportCount > 0 && newCwnd <= 1000000) {
         if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         state->snd_cwnd = newCwnd;
-        this->orcaPaceRate = ((double) state->snd_cwnd / (double) state->snd_mss) / state->srtt.dbl(); ;  // Bytes/s
-        dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(1/orcaPaceRate); // 1/paceRate = intersendingtime
+        this->orcaPaceRate = ((double) state->snd_cwnd / (double) state->snd_mss) / state->srtt.dbl();  // Segments/s
+        dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(1.0/orcaPaceRate); // 1/paceRate = intersendingtime
         owner->emit(actionSignal, multiplier); // Emit action for plotting
     } else {
         // Invalid. Skip this action entirely.
@@ -280,8 +248,6 @@ void Orca::resetStepVariables()
     this->lastIntervalTime = simTime();
 }
 
-
-
 // RayNet method: Called after simulation completion? Unsure how this differs from reset()
 void Orca::cleanup()
 {
@@ -301,6 +267,236 @@ RewardType Orca::getReward(){
 bool Orca::getDone() {
     return done;
     // Deprecated, remove this later (done is just set and checked directly)
+}
+
+// MARK: Cubic Methods
+// ============================================================================
+// These are copied directly from cubic. Any lines that alter the pacing rate were commented out,
+// and a couple lines were added for tracking some extra information for Orca to use.
+// ============================================================================
+
+// Called upon an ACK. Store the RTT info for averaging at the end of the interval.
+void Orca::rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) {
+    TcpCubic::rttMeasurementComplete(tSent, tAcked);
+    double packetRTT = (tAcked-tSent).dbl();
+    this->orcaDelaySum += packetRTT;
+    this->rttReportCount += 1;
+
+    
+    this->orcaMinDelay = std::min(this->orcaMinDelay, packetRTT);
+}
+
+// Override to track bytes delivered
+void Orca::receivedDataAck(uint32_t firstSeqAcked) {
+    TcpTahoeRenoFamily::receivedDataAck(firstSeqAcked);
+    // std::cout << "cwnd:::: " << state->snd_cwnd << endl;
+    // std::cout << "snd_max::::" << state->snd_max << endl;
+    // std::cout << "snd_una::::" << state->snd_una << endl;
+    state->delay_min = state->srtt.inUnit(SIMTIME_US);
+    // Check if recovery phase has ended
+    if (state->sack_enabled && state->lossRecovery) {
+        //dynamic_cast<PacedTcpConnection*>(conn)->changeIntersendingTime(0.000000001);
+        // RFC 3517, page 7: "Once a TCP is in the loss recovery phase the following procedure MUST
+        // be used for each arriving ACK:
+        //
+        // (A) An incoming cumulative ACK for a sequence number greater than
+        // RecoveryPoint signals the end of loss recovery and the loss
+        // recovery phase MUST be terminated.  Any information contained in
+        // the scoreboard for sequence numbers greater than the new value of
+        // HighACK SHOULD NOT be cleared when leaving the loss recovery
+        // phase."
+        if (seqGE(state->snd_una, state->recoveryPoint)) {
+            EV_INFO << "Loss Recovery terminated.\n";
+            state->snd_cwnd = state->ssthresh;
+            state->lossRecovery = false;
+        }
+        else{
+            dynamic_cast<TcpPacedConnection*>(conn)->doRetransmit();
+            //conn->setPipe();
+            //if (((int)state->snd_cwnd - (int)state->pipe) >= (int)state->snd_mss) // Note: Typecast needed to avoid prohibited transmissions
+            //    dynamic_cast<TcpPacedConnection*>(conn)->sendDataDuringLossRecoveryPhase(state->snd_cwnd);
+        }
+        conn->emit(sndUnaSignal, state->snd_una);
+        conn->emit(recoveryPointSignal, state->recoveryPoint);
+    }
+
+    if (state->snd_cwnd < state->ssthresh) {
+        EV_INFO << "cwnd <= ssthresh: Slow Start: increasing cwnd by one SMSS bytes to ";
+
+        // perform Slow Start. RFC 2581: "During slow start, a TCP increments cwnd
+        // by at most SMSS bytes for each ACK received that acknowledges new data."
+        state->snd_cwnd += state->snd_mss;
+        conn->emit(cwndSignal, state->snd_cwnd);
+        conn->emit(ssthreshSignal, state->ssthresh);
+
+        EV_INFO << "cwnd=" << state->snd_cwnd << "\n";
+    }
+    else {
+
+        updateCubicCwnd(1);
+
+        if (state->cwnd_cnt >= state->cnt) {
+            state->snd_cwnd += state->snd_mss;
+            state->cwnd_cnt = 0;
+        }
+        else {
+            state->cwnd_cnt++;
+        }
+        conn->emit(cwndSignal, state->snd_cwnd);
+        conn->emit(ssthreshSignal, state->ssthresh);
+
+
+        EV_INFO << "cwnd > ssthresh: Congestion Avoidance: increasing cwnd linearly, to " << state->snd_cwnd << "\n";
+    }
+
+    if(state->snd_cwnd > 0){
+        double paceFactor;
+        if (state->snd_cwnd < state->ssthresh/2) {
+            paceFactor = 2;
+        }
+        else{
+            paceFactor = 1.2;
+        }
+        uint32_t maxWindow = std::max(state->snd_cwnd, dynamic_cast<TcpPacedConnection*>(conn)->getBytesInFlight());
+        // ORCA: Commented out this pacing rate change!
+        //dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(state->srtt.dbl()/(((double) maxWindow/(double)state->snd_mss)* paceFactor));
+    }
+
+    sendData(false);
+
+    conn->emit(cwndSegSignal, state->snd_cwnd / state->snd_mss);
+
+    if(!this->first_slowstart_complete && state->snd_cwnd >= state->ssthresh) {
+        this->first_slowstart_complete=true;
+    }
+    this->bytesDelivered += state->snd_mss; // Number of bytes sent so far this interval
+}
+
+void Orca::receivedDuplicateAck()
+{
+    //TcpTahoeRenoFamily::receivedDuplicateAck();
+    state->delay_min = state->srtt.inUnit(SIMTIME_US);
+
+    bool isHighRxtLost = dynamic_cast<TcpPacedConnection*>(conn)->checkIsLost(state->snd_una+state->snd_mss);
+    bool rackLoss = dynamic_cast<TcpPacedConnection*>(conn)->checkRackLoss();
+    if ((rackLoss && !state->lossRecovery) || state->dupacks == state->dupthresh || (isHighRxtLost && !state->lossRecovery)) {
+        EV_INFO << "Reno on dupAcks == DUPTHRESH(=" << state->dupthresh << ": perform Fast Retransmit, and enter Fast Recovery:";
+
+        if (state->sack_enabled) {
+            // RFC 3517, page 6: "When a TCP sender receives the duplicate ACK corresponding to
+            // DupThresh ACKs, the scoreboard MUST be updated with the new SACK
+            // information (via Update ()).  If no previous loss event has occurred
+            // on the connection or the cumulative acknowledgment point is beyond
+            // the last value of RecoveryPoint, a loss recovery phase SHOULD be
+            // initiated, per the fast retransmit algorithm outlined in [RFC2581].
+            // The following steps MUST be taken:
+            //
+            // (1) RecoveryPoint = HighData
+            //
+            // When the TCP sender receives a cumulative ACK for this data octet
+            // the loss recovery phase is terminated."
+
+            // RFC 3517, page 8: "If an RTO occurs during loss recovery as specified in this document,
+            // RecoveryPoint MUST be set to HighData.  Further, the new value of
+            // RecoveryPoint MUST be preserved and the loss recovery algorithm
+            // outlined in this document MUST be terminated.  In addition, a new
+            // recovery phase (as described in section 5) MUST NOT be initiated
+            // until HighACK is greater than or equal to the new value of
+            // RecoveryPoint."
+            if (state->recoveryPoint == 0 || seqGE(state->snd_una, state->recoveryPoint)) { // HighACK = snd_una
+                state->recoveryPoint = state->snd_max; // HighData = snd_max
+                dynamic_cast<TcpPacedConnection*>(conn)->setSackedHeadLost();
+                dynamic_cast<TcpPacedConnection*>(conn)->updateInFlight();
+                state->lossRecovery = true;
+
+                recalculateSlowStartThreshold();
+                state->snd_cwnd = state->ssthresh + (3*state->snd_mss); // 20051129 (1)
+                EV_DETAIL << " recoveryPoint=" << state->recoveryPoint;
+
+                dynamic_cast<TcpPacedConnection*>(conn)->doRetransmit();
+            }
+        }
+        // RFC 2581, page 5:
+        // "After the fast retransmit algorithm sends what appears to be the
+        // missing segment, the "fast recovery" algorithm governs the
+        // transmission of new data until a non-duplicate ACK arrives.
+        // (...) the TCP sender can continue to transmit new
+        // segments (although transmission must continue using a reduced cwnd)."
+
+        // enter Fast Recovery
+        // "set cwnd to ssthresh plus 3 * SMSS." (RFC 2581)
+        conn->emit(cwndSignal, state->snd_cwnd);
+
+        EV_DETAIL << " set cwnd=" << state->snd_cwnd << ", ssthresh=" << state->ssthresh << "\n";
+
+        // Fast Retransmission: retransmit missing segment without waiting
+        // for the REXMIT timer to expire
+        // Do not restart REXMIT timer.
+        // Note: Restart of REXMIT timer on retransmission is not part of RFC 2581, however optional in RFC 3517 if sent during recovery.
+        // Resetting the REXMIT timer is discussed in RFC 2582/3782 (NewReno) and RFC 2988.
+
+        // RFC 3517, page 7: "(4) Run SetPipe ()
+        //
+        // Set a "pipe" variable  to the number of outstanding octets
+        // currently "in the pipe"; this is the data which has been sent by
+        // the TCP sender but for which no cumulative or selective
+        // acknowledgment has been received and the data has not been
+        // determined to have been dropped in the network.  It is assumed
+        // that the data is still traversing the network path."
+        //conn->setPipe();
+        // RFC 3517, page 7: "(5) In order to take advantage of potential additional available
+        // cwnd, proceed to step (C) below."
+        if (state->sack_enabled) {
+            if (state->lossRecovery) {
+                EV_INFO << "Retransmission sent during recovery, restarting REXMIT timer.\n";
+                restartRexmitTimer();
+            }
+        }
+
+        // try to transmit new segments (RFC 2581)
+    }
+    else if (state->dupacks > state->dupthresh) {
+        //
+        // Cubic: For each additional duplicate ACK received, increment cwnd by SMSS.
+        // This artificially inflates the congestion window in order to reflect the
+        // additional segment that has left the network
+        //
+        //state->snd_cwnd += state->snd_mss;
+        EV_DETAIL << "Cubic on dupAcks > DUPTHRESH(=" << state->dupthresh << ": Fast Recovery: inflating cwnd by SMSS, new cwnd=" << state->snd_cwnd << "\n";
+
+        //conn->emit(cwndSignal, state->snd_cwnd);
+
+        // Note: Steps (A) - (C) of RFC 3517, page 7 ("Once a TCP is in the loss recovery phase the following procedure MUST be used for each arriving ACK")
+        // should not be used here!
+
+        // RFC 3517, pages 7 and 8: "5.1 Retransmission Timeouts
+        // (...)
+        // If there are segments missing from the receiver's buffer following
+        // processing of the retransmitted segment, the corresponding ACK will
+        // contain SACK information.  In this case, a TCP sender SHOULD use this
+        // SACK information when determining what data should be sent in each
+        // segment of the slow start.  The exact algorithm for this selection is
+        // not specified in this document (specifically NextSeg () is
+        // inappropriate during slow start after an RTO).  A relatively
+        // straightforward approach to "filling in" the sequence space reported
+        // as missing should be a reasonable approach."
+    }
+
+    if(state->snd_cwnd > 0){
+        double paceFactor;
+        if (state->snd_cwnd < state->ssthresh/2) {
+            paceFactor = 2;
+        }
+        else{
+            paceFactor = 1.2;
+        }
+       uint32_t maxWindow = std::max(state->snd_cwnd, dynamic_cast<TcpPacedConnection*>(conn)->getBytesInFlight());
+       double pace = state->srtt.dbl()/((double) (maxWindow*paceFactor)/(double)state->snd_mss);
+       // ORCA: Commented out pacing rate change here!
+       //dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(pace);
+    }
+
+    sendData(false);
 }
 
 
