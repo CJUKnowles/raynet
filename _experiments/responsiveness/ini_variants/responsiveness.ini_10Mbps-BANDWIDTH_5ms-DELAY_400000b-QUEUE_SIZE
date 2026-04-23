@@ -1,9 +1,12 @@
 # Two-minute run, a single isolated flow sending data to a server.
 
+
 [General]
-ned-path = HOME/raynet/_topologies:HOME/inet4.5/examples:HOME/inet4.5/showcases:HOME/inet4.5/src:HOME/inet4.5/tests/validation:HOME/inet4.5/tests/networks:HOME/inet4.5/tutorials:HOME/raynet/simlibs/tcpPaced/src:HOME/raynet/simlibs/cubic/src:HOME/raynet/simlibs/RLComponents/src:HOME/raynet/simlibs/Orca/src:HOME/raynet/simlibs/Astrea/src
+ned-path = /home/james/raynet/_topologies:/home/james/inet4.5/examples:/home/james/inet4.5/showcases:/home/james/inet4.5/src:/home/james/inet4.5/tests/validation:/home/james/inet4.5/tests/networks:/home/james/inet4.5/tutorials:/home/james/raynet/simlibs/tcpPaced/src:/home/james/raynet/simlibs/cubic/src:/home/james/raynet/simlibs/RLComponents/src:/home/james/raynet/simlibs/Orca/src:/home/james/raynet/simlibs/Astrea/src
 # General
-sim-time-limit = 60s
+sim-time-limit = 120s
+**.scenarioManager.script = xmldoc("_scenario.xml") # used to modify bottleneck bandwidth over time.
+# Two-minute run, a single isolated flow sending data to a server.
 
 # Outputs/verbosity
 check-signals = false
@@ -31,9 +34,9 @@ cmdenv-event-banners = false
 # Network parameters
 network = topologies.Dumbbell
 **.numberOfFlows = 1                                                    # Number of client/server pairs. Includes the "main" protocol being tested, client[0]
-**.router1.ppp[0].queue.dataCapacity = QUEUE_SIZE_PLACEHOLDER     # Bottleneck buffer size
-**.bottleneckDatarate = BANDWIDTH_PLACEHOLDER                              # Bottleneck bandwidth
-**.bottleneckDelay = DELAY_PLACEHOLDER                                      # Base RTT
+**.router1.ppp[0].queue.dataCapacity = 400000b     # Bottleneck buffer size
+**.bottleneckDatarate = 5Mbps                             # Bottleneck bandwidth
+**.bottleneckDelay = 5ms                                      # Base RTT
 
 
 # Client settings
@@ -41,8 +44,8 @@ network = topologies.Dumbbell
 **.client[*].app[*].typename  = "TcpSessionApp"
 **.client[*].app[*].active = true
 **.client[*].app[*].connectAddress = "server["+string(parentIndex())+"]"
-**.client[*].app[*].tOpen  = 0s
-**.client[*].app[*].tSend = 0s
+**.client[*].app[*].tOpen  = 0.0s
+**.client[*].app[*].tSend = 0.0s
 **.client[*].app[*].tClose = 0s
 **.client[*].app[*].sendBytes = 2GB
 
@@ -102,6 +105,10 @@ extends = General
 **.client[0].tcp.typename = "OrcaTcp"
 **.client[0].tcp.tcpAlgorithmClass = "Orca"
 
+# Everyone else defaults to standard TCP
+**.client[*].tcp.typename = "TcpPaced"
+**.client[*].tcp.tcpAlgorithmClass = "TcpCubic"
+
 # Servers
 **.server[*].numApps = 1
 **.server[*].app[*].typename = "TcpSinkApp"
@@ -118,6 +125,7 @@ extends = General
 **.fixedIntervalDuration = .02          # Monitor interval duration in seconds. Still used as initial intervalDuration if not using fixed intervals.
 debug-on-errors = true
 
+# Just re-uses some custom signals from Orca for plotting, otherwise standard cubic. Temporary and untested.
 [Config Cubic]
 extends = Orca
 **.takeActions = false
@@ -125,22 +133,26 @@ extends = Orca
 [Config Astrea]
 extends = General
 
-# Client uses Astrea
+# All agents use Astrea
 **.client[0].tcp.typename = "AstreaTcp"
 **.client[0].tcp.tcpAlgorithmClass = "Astrea"
+**.server[0].tcp.typename = "Tcp"
+**.server[0].tcp.tcpAlgorithmClass = "TcpNoCongestionControl"
+
 
 # Servers
 **.server[*].numApps = 1
 **.server[*].app[*].typename = "TcpSinkApp"
-**.server[*].tcp.typename = "TcpPaced"
-**.server[*].tcp.tcpAlgorithmClass = "TcpCubic"
+# **.server[*].tcp.typename = "TcpPaced"
+# **.server[*].tcp.tcpAlgorithmClass = "TcpCubic"
 
 # Astrea Parameters
 **.rewardDelayForgiveness = 1.25        # How much delay increases should be forgiven/ignored in reward calculation
 **.rewardLossMultiplier = 5             # How strongly loss should affect reward calculation
-**.printDebugMessages = true      X     # set to true to print debug messages for the CC algorithm
+**.printDebugMessages = false           # set to true to print debug messages for the CC algorithm
 **.takeActions = true                  # If false, will stop Astrea from performing actions
-**.maxRLSteps = 999999                  # Steps before a given agent's simulation is reset
+**.maxRLSteps = 9999999            # Steps before a given agent's simulation is reset
 **.fixedIntervals = true                # Interval lengths should be fixed
 **.fixedIntervalDuration = .03          # Monitor interval duration in seconds. Still used as initial intervalDuration if not using fixed intervals.
 debug-on-errors = true
+**.broker.obsCollectionMode = "GROUPED"   # GROUPED, IMMEDIATE, INTERVAL

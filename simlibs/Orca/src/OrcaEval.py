@@ -79,19 +79,8 @@ class OmnetGymApiEnv(gym.Env):
         # Reset the observation history to empty
         self.obs_history = deque(np.zeros(self.stacking*self.num_observations),maxlen=self.stacking*self.num_observations)
         
-        # Dynamically generate new simulation config
-        original_ini_file = self.env_config["iniPath"]
-        ini_variants_base = f"{self.env_config["iniPath"].rsplit("/", 1)[0]}/ini_variants/{self.env_config["iniPath"].rsplit("/", 1)[1]}"
-        with open(original_ini_file, 'r') as fin:
-            ini_string = fin.read()
-        ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
-        # TODO: Include these strings in the .ini somewhere that actually makes them alter the experiment
-        with open(ini_variants_base + f".worker{os.getpid()}", 'w') as fout:
-            fout.write(ini_string)
         
-        # Start a new simulation runner on the modified ini file
-        
-        self.runner.initialise(ini_variants_base + f".worker{os.getpid()}", "Orca")
+        self.runner.initialise(self.env_config["iniPath"], "Orca")
         
         
         obs = self.runner.reset()

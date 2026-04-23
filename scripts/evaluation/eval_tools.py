@@ -42,14 +42,19 @@ def create_csv_dict(results_dir:str=None):
                 dir_names = root.split(os.sep)          # Split by "/" or "\\" depending on platform
                 module = dir_names[-1].split('.', 1)[1]   # Module name, excluding the network name prefix
                 module_type = "client" if "client" in module else "server" if "server" in module else "queue" if "queue" in module else "other"
-                protocol = dir_names[-2]
-                experiment = dir_names[-4]
+                run = dir_names[-2]
+                protocol = dir_names[-3]
+                # csvs folder is'[-4]
+                params = dir_names[-5]
+                experiment = dir_names[-6]
                 
                 csv_path = os.path.join(root, filename)
                 
                 csvs.append({
                     "experiment" : experiment,
+                    "params": params,
                     "protocol": protocol,
+                    "run": run,
                     "module": module,
                     "module_type": module_type,
                     "metric": metric,
@@ -321,23 +326,25 @@ if __name__ == "__main__":
     #         generate_exp_csvs(exp_results_dir, protocol, do_dumb_plots=True)
     
     
-    metric_csvs = create_csv_dict()        # dataframe containing [experiment, protocol, module, metric, csv_path] for easy access
-    experiments = ["single-flow", "responsiveness", "double-flow-dumbbell"]
+    metric_csvs = create_csv_dict()        # dataframe containing [experiment, params, protocol, module, metric, csv_path] for easy access
+    print(metric_csvs)
+    experiments = ["competing-flows", "responsiveness", "single-flow"]
     for exp in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == exp]
-        exp_df = exp_df[exp_df["protocol"] != "Astrea"]
-        fig, axs = plt.subplots(20, 1, figsize=(15, 100))
-        
-        
-        plot_throughput_timeseries(exp_df, axs[0])
-        plot_srtt_timeseries(exp_df, axs[1])
-        plot_cwnd_timeseries(exp_df, axs[2])
-        plot_pacerate_timeseries(exp_df, axs[3])
-        plot_qsize_timeseries(exp_df, axs[4])
-        
-        fig.tight_layout()
-        fig.savefig(os.getenv('HOME') + f"/raynet/results/{exp}/summary.pdf")
-        plt.close(fig)
+        for params in exp_df["params"].unique():
+            params_df = exp_df[exp_df["params"] == params]
+            fig, axs = plt.subplots(20, 1, figsize=(15, 100))
+            
+            
+            plot_throughput_timeseries(params_df, axs[0])
+            plot_srtt_timeseries(params_df, axs[1])
+            plot_cwnd_timeseries(params_df, axs[2])
+            plot_pacerate_timeseries(params_df, axs[3])
+            plot_qsize_timeseries(params_df, axs[4])
+            
+            fig.tight_layout()
+            fig.savefig(os.getenv('HOME') + f"/raynet/results/{exp}/{params}/summary.pdf")
+            plt.close(fig)
                 
             
     # metric_csvs = metric_csvs[metric_csvs["module"].str.contains("0")]          # Only grab data from primary flows
