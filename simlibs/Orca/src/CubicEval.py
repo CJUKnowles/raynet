@@ -79,18 +79,8 @@ class OmnetGymApiEnv(gym.Env):
         # Reset the observation history to empty
         self.obs_history = deque(np.zeros(self.stacking*self.num_observations),maxlen=self.stacking*self.num_observations)
         
-        # Dynamically generate new simulation config
-        original_ini_file = self.env_config["iniPath"]
-        ini_variants_base = f"{self.env_config["iniPath"].rsplit("/", 1)[0]}/ini_variants/{self.env_config["iniPath"].rsplit("/", 1)[1]}"
-        with open(original_ini_file, 'r') as fin:
-            ini_string = fin.read()
-        ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
-        # TODO: Include these strings in the .ini somewhere that actually makes them alter the experiment
-        with open(ini_variants_base + f".worker{os.getpid()}", 'w') as fout:
-            fout.write(ini_string)
-        
         # Start a new simulation runner on the modified ini file
-        self.runner.initialise(ini_variants_base + f".worker{os.getpid()}", "Cubic")
+        self.runner.initialise(self.env_config["iniPath"], "Cubic")
         obs = self.runner.reset()
         
         # Pull the initial observation and store return it to the trainer
@@ -120,7 +110,6 @@ class OmnetGymApiEnv(gym.Env):
             print(terminateds)
             self.runner.shutdown()
             self.runner.cleanup()
-        print(info_)
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
             print("Simulation time limit reached!")
             sim_truncated = True
