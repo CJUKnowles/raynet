@@ -15,7 +15,6 @@ import subprocess
 import re
 import time as termTime
 import numpy as np
-from tabulate import tabulate
 from matplotlib.backends.backend_pdf import PdfPages
 
 protocol_colors = {
@@ -49,8 +48,7 @@ def create_csv_dict(results_dir:str=None):
                 experiment = dir_names[-6]
                 
                 csv_path = os.path.join(root, filename)
-                
-                csvs.append({
+                csv_info = {
                     "experiment" : experiment,
                     "params": params,
                     "protocol": protocol,
@@ -59,21 +57,21 @@ def create_csv_dict(results_dir:str=None):
                     "module_type": module_type,
                     "metric": metric,
                     "csv_path": csv_path
-                            })
+                            }
 
+                
+                # Add extra columns for each param (note to self - will likely be different per experiment, so these columns wil be sparsely populated)
+                for param_str in params.split("_")[1:]:
+                    param = param_str.split("-")
+                    if len(param) < 2:
+                        # Param string is not formatted correctly, skip
+                        break
+                    param_value = param[0]
+                    param_name = param[1]
+                    csv_info[param_name] = param_value
+                
+                csvs.append(csv_info)
     return pd.DataFrame(csvs)
-
-def plot_summary(experiment:str, protocols:list, metrics:list=None, results_dir:str=None):
-    """
-    Generates a set of naive timeseries plots from a series of protocols and their associated metrics.
-    Pulls data from the raynet/results directory, and uses the experiment and protocol names provided to locate relevant files.
-    If no metrics are provided, this function will plot anything it can find, and combine/match by metric name.
-    """    
-    if not results_dir:
-        results_dir = os.getenv('HOME') + "/raynet/_experiments/experiment2/results"
-        
-    for metric in metrics:
-        print()
 
 def plot_pacerate_timeseries(csv_df, ax=None, show_competition=True):
     """
@@ -91,7 +89,7 @@ def plot_pacerate_timeseries(csv_df, ax=None, show_competition=True):
         return None
 
     print("Plotting paceRate timeseries for:")
-    print(tabulate(csv_df, headers='keys'))
+    print(csv_df)
 
     all_y_values = []
     for _, row in csv_df.iterrows():
@@ -146,7 +144,7 @@ def plot_qsize_timeseries(csv_df, ax=None):
         return None
 
     print("Plotting qsize timeseries for:")
-    print(tabulate(csv_df, headers='keys'))
+    print(csv_df)
 
     window = 100
     all_y_values = []
@@ -192,7 +190,7 @@ def plot_cwnd_timeseries(csv_df, ax=None, show_competition=True):
         return None
 
     print("Plotting cwnd timeseries for:")
-    print(tabulate(csv_df, headers='keys'))
+    print(csv_df)
 
     all_y_values = []
     for _, row in csv_df.iterrows():
@@ -244,7 +242,7 @@ def plot_srtt_timeseries(csv_df, ax=None, show_competition=True):
         return None
 
     print("Plotting srtt timeseries for:")
-    print(tabulate(csv_df, headers='keys'))
+    print(csv_df)
 
     all_y_values = []
     for _, row in csv_df.iterrows():
@@ -287,7 +285,7 @@ def plot_throughput_timeseries(csv_df, ax=None, show_competition=True):
         return None
 
     print("Plotting throughput timeseries for:")
-    print(tabulate(csv_df, headers='keys'))
+    print(csv_df)
     
     colors = {}
     all_y_values = []
@@ -316,6 +314,53 @@ def plot_throughput_timeseries(csv_df, ax=None, show_competition=True):
 
     return ax
 
+def plot_goodput_ratio_aggregate(csv_df, ax=None, show_competition=True):
+    """
+    Creates an aggregate bar plot that shows that goodput ratio achieved by each protocol at each delay/qsize
+    - Expects entire experiment df as input
+    """
+
+    csv_df = csv_df[csv_df["module_type"].str.contains("server")]
+    csv_df = csv_df[csv_df["module"].str.contains("conn")]
+    csv_df = csv_df[csv_df["module"].str.contains("0")]
+    csv_df = csv_df[csv_df["metric"].str.contains("throughput")]
+
+    if csv_df.empty:
+        print("plot_throughput_timeseries(): CSV dataframe is empty. Returning.")
+        return None
+
+    print("Plotting goodput ratio aggregate for:")
+    print(csv_df)
+    
+    all_y_values = [] # For determining final Y bounds
+    for _, row in csv_df.iterrows():
+        print("row:")
+        print(row["csv_path"])
+        print()
+        data = pd.read_csv(row["csv_path"])
+
+        is_primary_flow = "0" in row["module"]
+        if(show_competition or is_primary_flow):
+            line = ax.bar(
+                row["DELAY"],
+                row["BANDWIDTH"] / data["throughput"].mean(), # Goodput ratio
+                label=row["protocol"],
+                color=protocol_colors[row["protocol"]],
+            )
+            all_y_values.extend(data["throughput"].values)
+            
+
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Throughput (Mbps)")
+    ax.set_title("Throughput over time")
+    ax.legend(fontsize=8)
+    ax.set_ylim(bottom=0, top=np.percentile(all_y_values, 99)*1.1)
+    ax.set_yscale("linear")
+    ax.ticklabel_format(style='plain', axis='y')
+    ax.grid(True)
+
+    return ax
+
 if __name__ == "__main__":
     # experimentNames = ["double-flow-dumbbell", "single-flow", "responsiveness"]
     # protocols = ["Cubic", "Orca"]
@@ -327,10 +372,20 @@ if __name__ == "__main__":
     
     
     metric_csvs = create_csv_dict()        # dataframe containing [experiment, params, protocol, module, metric, csv_path] for easy access
-    print(metric_csvs)
     experiments = ["competing-flows", "responsiveness", "single-flow"]
     for exp in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == exp]
+        
+        # Generate aggregate plots combining all param combinations
+        fig, axs = plt.subplots(20, 1, figsize=(15, 100))
+
+        plot_goodput_ratio_aggregate(exp_df, axs[0])
+
+        fig.tight_layout()
+        fig.savefig(os.getenv('HOME') + f"/raynet/results/{exp}/aggregate_plots.pdf")
+        plt.close(fig)
+
+        # Generate a plot for each unique param combination
         for params in exp_df["params"].unique():
             params_df = exp_df[exp_df["params"] == params]
             fig, axs = plt.subplots(20, 1, figsize=(15, 100))
