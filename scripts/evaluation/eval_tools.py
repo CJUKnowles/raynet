@@ -16,13 +16,34 @@ import re
 import time as termTime
 import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
+import re
+import matplotlib.ticker as ticker
+from matplotlib.ticker import MaxNLocator
 
 protocol_colors = {
-    "Cubic": "#1f77b4",
-    "CleanSlate": "#ff7f0e",
-    "Orca": "#2ca02c",
-    "Astrea": "#d62728",
+    "Cubic": "#ff7f0e",
+    "CleanSlate": "#2ca02c",
+    "Orca": "#1f77b4",
+    "Astrea": "#8736a4",
 }
+
+protocol_markers = {
+    "Cubic": "o",
+    "CleanSlate": "s",
+    "Orca": "P",
+    "Astrea": "^",
+}
+
+
+def parse_numeric(value, as_int=False):
+    match = re.search(r"[-+]?\d*\.?\d+", str(value))
+    if as_int:
+        return int(match.group()) if match else None
+    else:
+        return float(match.group()) if match else None
+
+def is_ax_empty(ax):
+    return not (ax.has_data() or ax.patches or ax.lines or ax.collections)
 
 def create_csv_dict(results_dir:str=None):
     """
@@ -314,52 +335,198 @@ def plot_throughput_timeseries(csv_df, ax=None, show_competition=True):
 
     return ax
 
-def plot_goodput_ratio_aggregate(csv_df, ax=None, show_competition=True):
-    """
-    Creates an aggregate bar plot that shows that goodput ratio achieved by each protocol at each delay/qsize
-    - Expects entire experiment df as input
-    """
+def plot_tcp_friendliness(csv_df, ax=None, show_competition=False):
+    csv_df = csv_df[csv_df["module_type"].str.contains("server")]
+    csv_df = csv_df[csv_df["module"].str.contains("conn")]
+    csv_df = csv_df[csv_df["metric"].str.contains("throughput")]
 
+    if csv_df.empty:
+        print("plot_goodput_ratio_aggregate(): CSV dataframe is empty. Returning.")
+        return None
+
+    qsizes = sorted(csv_df["QSIZE"].unique())
+    print("qsizes")
+    print(qsizes)
+    if ax is None:
+        fig, axes = plt.subplots(1, len(qsizes), figsize=(6 * len(qsizes), 5), layout="constrained", sharex=True)
+        if len(qsizes) == 1:
+            axes = [axes]
+    else:
+        axes = ax if isinstance(ax, (list, np.ndarray)) else [ax]
+
+    empty_axes = [a for a in axes if is_ax_empty(a)]
+    axes_to_use = empty_axes[:len(qsizes)]
+
+    if len(axes_to_use) < len(qsizes):
+        raise ValueError("Not enough empty subplots to draw all queue sizes")
+
+    for ax_i, qsize in zip(axes_to_use, qsizes):
+        df_q = csv_df[csv_df["QSIZE"] == qsize]
+
+        delays = sorted(df_q["DELAY"].unique(), key=parse_numeric)
+        protocols = df_q["protocol"].unique()
+
+        bar_width = 0.8 / len(protocols)
+
+        all_y_values = []
+
+        for i, protocol in enumerate(protocols):
+            proto_df = df_q[df_q["protocol"] == protocol]
+            y_vals = []
+            for delay in delays:
+                row = proto_df[proto_df["DELAY"] == delay]
+                if row.empty:
+                    y_vals.append(0)
+                    continue
+
+                main_flow = row[row["module"].str.contains("0")].iloc[0]
+                main_flow_data = pd.read_csv(main_flow["csv_path"])
+                # print("\n\n-\nmain_flow:")
+                # print(main_flow)
+                # print(f"mean throughput: {main_flow_data["throughput"].mean()}")
+                
+                competing_flow = row[row["module"].str.contains("1")].iloc[0]
+                competing_flow_data = pd.read_csv(competing_flow["csv_path"])
+                # print("\ncompeting_flow:")
+                # print(competing_flow)
+                # print(f"mean throughput: {competing_flow_data["throughput"].mean()}")
+                
+                # print(f"\nratio: {main_flow_data["throughput"].mean() / competing_flow_data["throughput"].mean()}")
+                
+                ratio = main_flow_data["throughput"].mean() / competing_flow_data["throughput"].mean()
+                y_vals.append(ratio)
+                all_y_values.append(ratio)
+
+            ax_i.plot(
+                delays,
+                y_vals,
+                label=protocol,
+                color=protocol_colors[protocol],
+                marker=protocol_markers[protocol],
+                linestyle='-',
+                linewidth=1.5,
+                markersize=10,
+            )
+        
+        ax_i.axhline(
+            y=1.0,
+            linestyle='--',
+            linewidth=1,
+            color='black',
+            alpha=.5,
+            label="Optimal"
+        )
+        
+        ax_i.set_xlabel("Base RTT (ms)")
+        # ax_i.set_xticks(x_positions + bar_width * (len(protocols) - 1) / 2)
+        ax_i.tick_params(direction="inout")
+        # ax_i.set_xticklabels(map(lambda value: parse_numeric(value, as_int=True), delays))
+        ax_i.set_title(f"Buffer Size: {parse_numeric(qsize)}x BDP")
+
+        if ax_i is axes_to_use[0]:
+            ax_i.set_ylabel("Goodput Ratio")
+        ax_i.set_yscale("log")
+        ax_i.set_ylim(0.01, 100)
+        ax_i.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: f"{y:g}"))
+        ax_i.set_yticks([.01, .1, 1, 10, 100])
+            
+    if ax is None:
+        fig.suptitle("TCP Friendliness; Goodput ratio against competing cubic flow", fontsize=20, y=0.02, verticalalignment="bottom")
+        legend_handles, legend_labels = axes_to_use[0].get_legend_handles_labels()
+        fig.legend(
+            legend_handles,
+            legend_labels,
+            loc="upper center",
+            ncol=len(legend_labels),
+            frameon=False, 
+            bbox_to_anchor=(.5, 1),
+            fontsize=12,
+        )
+        fig.set_constrained_layout_pads(
+            w_pad=0.2,
+            h_pad=0.6,
+        )
+        return (fig, axes_to_use)
+    else:
+        axes_to_use[0].legend(fontsize=8)
+        return axes_to_use
+    return axes_to_use
+
+
+def plot_goodput_ratio_aggregate(csv_df, ax=None, show_competition=False):
     csv_df = csv_df[csv_df["module_type"].str.contains("server")]
     csv_df = csv_df[csv_df["module"].str.contains("conn")]
     csv_df = csv_df[csv_df["module"].str.contains("0")]
     csv_df = csv_df[csv_df["metric"].str.contains("throughput")]
 
     if csv_df.empty:
-        print("plot_throughput_timeseries(): CSV dataframe is empty. Returning.")
+        print("plot_goodput_ratio_aggregate(): CSV dataframe is empty. Returning.")
         return None
 
-    print("Plotting goodput ratio aggregate for:")
-    print(csv_df)
-    
-    all_y_values = [] # For determining final Y bounds
-    for _, row in csv_df.iterrows():
-        print("row:")
-        print(row["csv_path"])
-        print()
-        data = pd.read_csv(row["csv_path"])
+    qsizes = sorted(csv_df["QSIZE"].unique())
 
-        is_primary_flow = "0" in row["module"]
-        if(show_competition or is_primary_flow):
-            line = ax.bar(
-                row["DELAY"],
-                row["BANDWIDTH"] / data["throughput"].mean(), # Goodput ratio
-                label=row["protocol"],
-                color=protocol_colors[row["protocol"]],
+    if ax is None:
+        fig, axes = plt.subplots(1, len(qsizes), figsize=(6 * len(qsizes), 5), sharey=True)
+        if len(qsizes) == 1:
+            axes = [axes]
+    else:
+        axes = ax if isinstance(ax, (list, np.ndarray)) else [ax]
+
+    empty_axes = [a for a in axes if is_ax_empty(a)]
+    axes_to_use = empty_axes[:len(qsizes)]
+
+    if len(axes_to_use) < len(qsizes):
+        raise ValueError("Not enough empty subplots to draw all queue sizes")
+
+    for ax_i, qsize in zip(axes_to_use, qsizes):
+        df_q = csv_df[csv_df["QSIZE"] == qsize]
+
+        delays = sorted(df_q["DELAY"].unique())
+        protocols = df_q["protocol"].unique()
+
+        bar_width = 0.8 / len(protocols)
+        x_positions = np.arange(len(delays))
+
+        all_y_values = []
+
+        for i, protocol in enumerate(protocols):
+            proto_df = df_q[df_q["protocol"] == protocol]
+
+            y_vals = []
+            for delay in delays:
+                row = proto_df[proto_df["DELAY"] == delay]
+                if row.empty:
+                    y_vals.append(0)
+                    continue
+
+                row = row.iloc[0]
+                data = pd.read_csv(row["csv_path"])
+
+                ratio = data["throughput"].mean() / parse_numeric(row["BANDWIDTH"])
+                y_vals.append(ratio)
+                all_y_values.append(ratio)
+
+            ax_i.bar(
+                x_positions + i * bar_width,
+                y_vals,
+                width=bar_width,
+                label=protocol,
+                color=protocol_colors[protocol],
             )
-            all_y_values.extend(data["throughput"].values)
-            
 
-    ax.set_xlabel("Time")
-    ax.set_ylabel("Throughput (Mbps)")
-    ax.set_title("Throughput over time")
-    ax.legend(fontsize=8)
-    ax.set_ylim(bottom=0, top=np.percentile(all_y_values, 99)*1.1)
-    ax.set_yscale("linear")
-    ax.ticklabel_format(style='plain', axis='y')
-    ax.grid(True)
+        ax_i.set_xticks(x_positions + bar_width * (len(protocols) - 1) / 2)
+        ax_i.set_xticklabels(delays)
 
-    return ax
+        ax_i.set_title(f"QSIZE = {qsize}")
+        ax_i.set_xlabel("Delay")
+        ax_i.grid(True)
+
+        if ax_i is axes_to_use[0]:
+            ax_i.set_ylabel("Goodput Ratio")
+
+    axes_to_use[0].legend(fontsize=8)
+    
+    return axes_to_use
 
 if __name__ == "__main__":
     # experimentNames = ["double-flow-dumbbell", "single-flow", "responsiveness"]
@@ -372,34 +539,41 @@ if __name__ == "__main__":
     
     
     metric_csvs = create_csv_dict()        # dataframe containing [experiment, params, protocol, module, metric, csv_path] for easy access
-    experiments = ["competing-flows", "responsiveness", "single-flow"]
+    experiments = ["competing-flows"]
     for exp in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == exp]
         
-        # Generate aggregate plots combining all param combinations
-        fig, axs = plt.subplots(20, 1, figsize=(15, 100))
-
-        plot_goodput_ratio_aggregate(exp_df, axs[0])
-
-        fig.tight_layout()
-        fig.savefig(os.getenv('HOME') + f"/raynet/results/{exp}/aggregate_plots.pdf")
-        plt.close(fig)
-
-        # Generate a plot for each unique param combination
-        for params in exp_df["params"].unique():
-            params_df = exp_df[exp_df["params"] == params]
-            fig, axs = plt.subplots(20, 1, figsize=(15, 100))
-            
-            
-            plot_throughput_timeseries(params_df, axs[0])
-            plot_srtt_timeseries(params_df, axs[1])
-            plot_cwnd_timeseries(params_df, axs[2])
-            plot_pacerate_timeseries(params_df, axs[3])
-            plot_qsize_timeseries(params_df, axs[4])
-            
-            fig.tight_layout()
-            fig.savefig(os.getenv('HOME') + f"/raynet/results/{exp}/{params}/summary.pdf")
+        # # Generate aggregate plots combining all param combinations
+        if exp == "competing-flows":
+            fig, axes = plot_tcp_friendliness(exp_df)
+            fig.savefig(os.getenv('HOME') + f"/raynet/results/{exp}/aggregate_plots.pdf")
             plt.close(fig)
+        elif exp == "responsiveness":
+            # TODO: Find a way to plot overall performance of responsiveness experiments. Compare each datapoint against its theoretical max? cant just take a mean.
+            print("not implemented")
+        else:
+            fig, axs = plt.subplots(20, 1, figsize=(15, 100))
+            plot_goodput_ratio_aggregate(exp_df, axs)
+            fig.tight_layout()
+            fig.savefig(os.getenv('HOME') + f"/raynet/results/{exp}/aggregate_plots.pdf")
+            plt.close(fig)
+        
+
+        # # Generate a plot for each unique param combination
+        # for params in exp_df["params"].unique():
+        #     params_df = exp_df[exp_df["params"] == params]
+        #     fig, axs = plt.subplots(20, 1, figsize=(15, 100))
+            
+            
+        #     plot_throughput_timeseries(params_df, axs[0])
+        #     plot_srtt_timeseries(params_df, axs[1])
+        #     plot_cwnd_timeseries(params_df, axs[2])
+        #     plot_pacerate_timeseries(params_df, axs[3])
+        #     plot_qsize_timeseries(params_df, axs[4])
+            
+        #     fig.tight_layout()
+        #     fig.savefig(os.getenv('HOME') + f"/raynet/results/{exp}/{params}/summary.pdf")
+        #     plt.close(fig)
                 
             
     # metric_csvs = metric_csvs[metric_csvs["module"].str.contains("0")]          # Only grab data from primary flows

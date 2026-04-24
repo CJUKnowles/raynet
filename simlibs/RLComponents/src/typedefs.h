@@ -41,7 +41,7 @@ typedef float ActionType;
 
 
 #ifdef CLEANSLATE
-typedef std::tuple<double, double, double, double, double> ObsType;
+typedef std::tuple<double, double, double, double, double, double, double> ObsType;
 typedef float RewardType;
 typedef float ActionType;
 #endif

@@ -24,6 +24,10 @@ runner_paths = {
     "Astrea": f"{os.getenv('HOME')}/raynet/simlibs/Astrea/src/AstreaEval.py",
 }
 
+def parse_numeric(value):
+    match = re.search(r"[-+]?\d*\.?\d+", str(value))
+    return float(match.group()) if match else None
+
 def parse_if_number(s):
     try: return float(s)
     except: return True if s=="true" else False if s=="false" else s if s else None
@@ -74,14 +78,18 @@ def dumb_plot(csv_file:str, output_name:str="plotted"):
     plt.savefig(pdf_path)
 
 
-def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickname=None, do_dumb_plots=False, params_str=None):
+def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickname=None, do_dumb_plots=False, params_str=None, short_params_str=None):
     """
     Uses the .vec file in the included results directory and produces a series of metric CSVs.
     The exp and protocol parameters are used to locate the correct vec file and to organize the output directories.
     do_dumb_plots=True will automatically produce a simple plot.pdf for each metric, for quick debugging.
+    - params_str is used to find the name of the experiment
+    - short_params_str is used to name the csv directory (I use this to remove param names like BANDWIDTH)
     """
     if not params_str:
         params_str = "__default__"
+    if not short_params_str:
+        short_params_str = params_str
     argNum = 0
     vectorsToExtract = ["throughput", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "queueLength", "queueBitLength", "incomingDataRate", "outgoingDataRate"]
     extracted = False
@@ -122,7 +130,7 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
                 subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/" + params_str+ "/csvs/" + protocol_nickname, shell=True).communicate(timeout=40)
                 subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/" + params_str+ "/csvs/" + protocol_nickname + "/runPlaceholder", shell=True).communicate(timeout=40)
                 subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/" + params_str+ "/csvs/" + protocol_nickname + "/runPlaceholder" + "/" + str(modName), shell=True).communicate(timeout=40)
-                csv_path = os.getenv('HOME') + '/raynet/results/'+ exp_nickname + "/" + params_str + '/csvs/' + protocol_nickname + "/runPlaceholder" + "/" + str(modName) + "/" + vec + '.csv'
+                csv_path = os.getenv('HOME') + '/raynet/results/'+ exp_nickname + "/" + short_params_str + '/csvs/' + protocol_nickname + "/runPlaceholder" + "/" + str(modName) + "/" + vec + '.csv'
                 final_list.to_csv(csv_path, index=False)
                 extracted = True
                 if (do_dumb_plots): 
@@ -155,8 +163,18 @@ def run_experiments(experiments_dict, create_output_csv=True):
             ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
             params_suffix = ""
             for param, value in params.items():
+                old_value = value
+                # Convert qmult to BDP in bytes (if applicable)
+                if param == "QSIZE" and "bdp" in value:
+                    value = f"{int(parse_numeric(params["BANDWIDTH"]) * 1000 * parse_numeric(params["DELAY"]) * parse_numeric(value))}b"
+                    print(f"{old_value} changed to {value}")
+                # Convert two-way delay (RTT) to one-way delay (if applicable)
+                if param == "DELAY":
+                    value = f"{parse_numeric(value)/2.0}ms"
+                    print(f"{old_value} changed to {value}")
+                print(f"using {value}")
                 ini_string = ini_string.replace(param + "_PLACEHOLDER",  value)
-                params_suffix = params_suffix + f"_{value}-{param}"
+                params_suffix = params_suffix + f"_{old_value}-{param}"
             modified_ini_file = ini_variants_base + params_suffix
             with open(modified_ini_file, 'w') as fout:
                 fout.write(ini_string)
@@ -167,9 +185,11 @@ def run_experiments(experiments_dict, create_output_csv=True):
             subprocess.Popen(f"source ~/omnetpp/setenv && cd ~/raynet && ./build.sh -f {build_str}", shell=True, executable="/bin/bash").communicate(timeout=40)
             for params in unique_param_combinations: # Looping through a second time separately so I don't have to generate all the files multiple times
                 # Run the experiment for this protocol and param combo
-                params_suffix = ""
+                params_suffix = ""          # used to name the exp.ini and inform column names
+                short_params_suffix = ""    # used to name results directory
                 for param, value in params.items():
                     params_suffix = params_suffix + f"_{value}-{param}"
+                    short_params_suffix = short_params_suffix + f"_{value}-{param}"
                 modified_ini_file = ini_variants_base + params_suffix
                 protocol_runner_path = runner_paths[protocol_name]
                 print(f"\t ---------- {protocol_name} running experiment: {experiment_name + params_suffix} ----------")
@@ -177,34 +197,34 @@ def run_experiments(experiments_dict, create_output_csv=True):
                 
                 # Generate output.csv and individual vector csvs for all tracked vectors for this exp/protocol/params combo
                 exp_results_dir = os.getenv('HOME') + f"/raynet/_experiments/{experiment_name}/ini_variants/results"
-                generate_exp_csvs(exp_results_dir, protocol_name, params_str=params_suffix)
+                generate_exp_csvs(exp_results_dir, protocol_name, params_str=params_suffix, short_params_str=short_params_suffix)
         
 if __name__ == "__main__":
     experiments_to_run = {
-        "responsiveness": {
-            "protocols": ["Cubic", "Orca"],
-            "params": {
-                "BANDWIDTH" : ["10Mbps"],
-                "DELAY"     : ["5ms","10ms","20ms"],    
-                "QUEUE_SIZE": ["100000b", "200000b", "400000b"],
-                }
-            },
+        # "responsiveness": {
+        #     "protocols": ["Cubic", "Orca"],
+        #     "params": {
+        #         "BANDWIDTH" : ["10Mbps"],
+        #         "DELAY"     : ["5ms","10ms","20ms"],    
+        #         "QSIZE": ["100000b", "200000b", "400000b"],
+        #         }
+        #     },
         "competing-flows": {
-            "protocols": ["Cubic", "Orca"],
+            "protocols": ["Cubic"],
             "params": {
                 "BANDWIDTH" : ["10Mbps"],
-                "DELAY"     : ["5ms","10ms","20ms"],    
-                "QUEUE_SIZE": ["100000b", "200000b", "400000b"],
+                "DELAY"     : ["10ms", "20ms", "40ms", "60ms", "80ms", "100ms"],    
+                "QSIZE": [".2bdp", "1bdp", "4bdp"],
                 }
             },
-        "single-flow": {
-            "protocols": ["Cubic", "Orca"],
-            "params": {
-                "BANDWIDTH" : ["10Mbps"],
-                "DELAY"     : ["5ms","10ms","20ms"],    
-                "QUEUE_SIZE": ["100000b", "200000b", "400000b"],
-                }
-            },
+        # "competing-flows": {
+        #     "protocols": ["Orca"],
+        #     "params": {
+        #         "BANDWIDTH" : ["10Mbps"],
+        #         "DELAY"     : ["10ms"],    
+        #         "QSIZE": ["1bdp"],
+        #         }
+        #     },
         
         # "responsiveness": ["Cubic"], # TODO: change format to add protocols and params once everything is working 
         # "double-flow-dumbbell": ["Cubic"], # TODO: change format to add protocols and params once everything is working 

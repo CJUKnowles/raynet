@@ -147,7 +147,7 @@ if __name__ == '__main__':
     register_env(env_name, omnetgymapienv_creator)
     
     load_from_checkpoint = True
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.5/SAC_Orca-1.5_2026-04-22_02-03-16ebgrsgyg/checkpoints/checkpoint_46"
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.6/SAC_Orca-1.6_2026-04-24_01-43-07r_7_n4yw/checkpoints/checkpoint_16"
     env_config = {"iniPath": sys.argv[1],
                   "stacking": 10}
     

@@ -183,7 +183,7 @@ def omnetgymapienv_creator(env_config):
 register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
 if __name__ == '__main__':
-    env_name = "Orca-1.5"
+    env_name = "Orca-1.6"
     register_env(env_name, omnetgymapienv_creator)
     num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
@@ -197,12 +197,8 @@ if __name__ == '__main__':
     minimum_rtt_range = (5, 100)                      # ms
     bottleneck_buffer_range = (25000, 4000000)    # Bits. 1x min BDP to 2x max BDP
     
-    # Second run training params (further explore larger BDPs and smaller queue sizes)
-    
-
-    
     load_from_checkpoint = True
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.5/SAC_Orca-1.5_2026-04-22_02-03-16ebgrsgyg/checkpoints/checkpoint_46"
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.6/SAC_Orca-1.6_2026-04-24_01-43-07r_7_n4yw/checkpoints/checkpoint_16"
     steps_to_train = 1000000
     
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Orca/src/training/OrcaTraining.ini",
@@ -235,12 +231,6 @@ if __name__ == '__main__':
                 actor_lr=.0001,
                 critic_lr=.001,
                 )
-            #.evaluation(evaluation_interval=3, evaluation_num_env_runners=1, evaluation_parallel_to_training=True) # (WARNING - MIGHT BREAK UPON COMPLETION, SEGFAULT WITHOUT EXPLANATION) Perform occasional runs without exploration to eval performance
-            #.training(optimizer={"foreach": False, "capturable": True})
-            #.evaluation(evaluation_interval=1000, evaluation_duration_unit="timesteps")
-            # .fault_tolerance(restart_failed_sub_environments=False, ignore_env_runner_failures=False)
-            #.training(training_intensity=1000)  # num_steps_sampled_before_learning_starts=0 training_intensity=1000
-            # .build_algo()
             )
     algo = config.build_algo()
     

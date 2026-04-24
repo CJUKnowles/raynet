@@ -1,7 +1,7 @@
 # Two-minute run, a single isolated flow sending data to a server.
 
 [General]
-ned-path = HOME/raynet/_topologies:HOME/inet4.5/examples:HOME/inet4.5/showcases:HOME/inet4.5/src:HOME/inet4.5/tests/validation:HOME/inet4.5/tests/networks:HOME/inet4.5/tutorials:HOME/raynet/simlibs/tcpPaced/src:HOME/raynet/simlibs/cubic/src:HOME/raynet/simlibs/RLComponents/src:HOME/raynet/simlibs/Orca/src:HOME/raynet/simlibs/Astrea/src
+ned-path = /home/james/raynet/_topologies:/home/james/inet4.5/examples:/home/james/inet4.5/showcases:/home/james/inet4.5/src:/home/james/inet4.5/tests/validation:/home/james/inet4.5/tests/networks:/home/james/inet4.5/tutorials:/home/james/raynet/simlibs/tcpPaced/src:/home/james/raynet/simlibs/cubic/src:/home/james/raynet/simlibs/RLComponents/src:/home/james/raynet/simlibs/Orca/src:/home/james/raynet/simlibs/Astrea/src
 # General
 sim-time-limit = 60s
 
@@ -31,9 +31,9 @@ cmdenv-event-banners = false
 # Network parameters
 network = topologies.Dumbbell
 **.numberOfFlows = 2                                                    # Number of client/server pairs. Includes the "main" protocol being tested, client[0]
-**.router1.ppp[0].queue.dataCapacity = QSIZE_PLACEHOLDER     # Bottleneck buffer size
-**.bottleneckDatarate = BANDWIDTH_PLACEHOLDER                              # Bottleneck bandwidth
-**.bottleneckDelay = DELAY_PLACEHOLDER                                      # Base RTT
+**.router1.ppp[0].queue.dataCapacity = 800000b     # Bottleneck buffer size
+**.bottleneckDatarate = 10Mbps                              # Bottleneck bandwidth
+**.bottleneckDelay = 40.0ms                                      # Base RTT
 
 # Competing cubic flow
 **.client[*].tcp.typename = "TcpPaced"
