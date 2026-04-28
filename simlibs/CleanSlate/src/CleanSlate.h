@@ -53,6 +53,7 @@ public: // General use
 
     // TcpCubic Overrides (These are mostly unchanged, and just used to gather statistic or disable automatic pacing)
     virtual void rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) override;  // Used to track rtt-related stats for observations
+    virtual void receivedDataAck(uint32_t firstSeqAcked) override;
     virtual void established(bool active) override; // Called when the TCP CONNECTION is established (some time AFTER startup!)
 
     // RLInterface Overrides (Required by the RL agent)

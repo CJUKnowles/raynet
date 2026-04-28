@@ -1,0 +1,64 @@
+<scenario>
+    <at t="0s">
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]"
+            par="datarate" value="15Mbps"/>
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]"
+            par="delay" value="27ms"/>
+        <set-channel-param src-module="router2" src-gate="pppg$o[0]"
+            par="delay" value="27ms"/>
+    </at>
+
+    <at t="30s">
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]"
+            par="datarate" value="10.299836529675861Mbps"/>
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]"
+            par="delay" value="33ms"/>
+        <set-channel-param src-module="router2" src-gate="pppg$o[0]"
+            par="delay" value="33ms"/>
+    </at>
+
+    <at t="45s">
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]"
+            par="datarate" value="18.236039980967163Mbps"/>
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]"
+            par="delay" value="24ms"/>
+        <set-channel-param src-module="router2" src-gate="pppg$o[0]"
+            par="delay" value="24ms"/>
+    </at>
+
+    <at t="60s">
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]"
+            par="datarate" value="10.599145373815132Mbps"/>
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]"
+            par="delay" value="18ms"/>
+        <set-channel-param src-module="router2" src-gate="pppg$o[0]"
+            par="delay" value="18ms"/>
+    </at>
+
+    <at t="75s">
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]"
+            par="datarate" value="16.194519597503778Mbps"/>
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]"
+            par="delay" value="35ms"/>\
+        <set-channel-param src-module="router2" src-gate="pppg$o[0]"
+            par="delay" value="35ms"/>
+    </at>
+
+    <at t="90s">
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]"
+            par="datarate" value="12.578629698351811Mbps"/>
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]"
+            par="delay" value="35ms"/>
+        <set-channel-param src-module="router2" src-gate="pppg$o[0]"
+            par="delay" value="35ms"/>
+    </at>
+
+    <at t="105s">
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]"
+            par="datarate" value="13.833132719633113Mbps"/>
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]"
+            par="delay" value="46ms"/>
+        <set-channel-param src-module="router2" src-gate="pppg$o[0]"
+            par="delay" value="46ms"/>
+    </at>
+</scenario>

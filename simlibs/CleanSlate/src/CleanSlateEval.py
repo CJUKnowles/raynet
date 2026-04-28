@@ -1,0 +1,194 @@
+import sys, os
+from ray.runtime_env import RuntimeEnv
+import gymnasium as gym
+from gymnasium import spaces
+import numpy as np
+import math
+from ray.tune.registry import register_env
+from ray.rllib.callbacks.callbacks import RLlibCallback
+import pprint
+import ray
+from ray import tune
+from ray.tune import Tuner
+from ray.air import CheckpointConfig
+import random
+import math
+from ray.rllib.algorithms.ppo.ppo import PPOConfig
+from ray.rllib.algorithms.sac.sac import SACConfig
+from ray.rllib.algorithms.sac.sac import SAC
+import os
+import time
+from random import randint
+from ray.tune.analysis import ExperimentAnalysis
+import GPUtil
+from collections import deque
+import torch
+
+class OmnetGymApiEnv(gym.Env):
+    def __init__(self,env_config):
+        """
+        Initialize the training environment configuration
+        - This mostly involves setting spcaes (bounds, shapes, types) for actions and observations.
+        - These bounds are needed for RL algorithms provided by RLlib- They limit the problem space and are also used for normalization.
+        """
+        sys.path.insert(0, os.path.join(os.getenv('HOME'), "raynet", "build"))
+        from omnetbind import OmnetGymApi
+        self.runner = OmnetGymApi()
+        
+        self.env_config = env_config
+        self.step_count = 0 # just for debugging
+        self.random_seed = os.getpid() # Ensures each ray worker generates different parameters
+        random.seed(self.random_seed)
+        # Initialize env parameters to some reasonable defaults (these should be quickly overwritten in reset())
+        self.stacking = self.env_config["stacking"]
+
+        self.has_reset = False
+
+        # Define the action space (possible values for actions)
+        self.action_space = spaces.Box(low=-2, high=2, shape=(1,), dtype=np.float32) # CleanSlate: A float value from -2.0 to 2.0. Will be used to alter cwnd via (cwnd = 2^action * cwnd).
+
+        # Define the observation space (expected values/types for each observation feature)
+        self.obs_min = np.tile(np.array(
+                     [0,                            # Throughput
+                      0,                            # Pacerate
+                      0,                            # Lossrate
+                      0,                            # number of acks
+                      0,                            # Interval duration
+                      0,                            # srtt
+                      0                             # Delay metric
+                      ], dtype=np.float32), self.stacking)
+        self.obs_max = np.tile(np.array(
+                     [1,                            # Throughput
+                      10,                           # Pacerate
+                      10,                           # Lossrate
+                      10,                           # Number of ACKs
+                      1,                            # Interval duration
+                      1,                            # srtt
+                      1,                            # Delay metric
+                      ], dtype=np.float32), self.stacking)
+        self.observation_space = spaces.Box(
+            low=self.obs_min, 
+            high=self.obs_max, 
+            dtype=np.float32) # A 4-dimensional array, each feature is a float value with its own bounds
+        
+        # Create empty observation history deque
+        self.num_observations = 7
+        self.obs_history = deque(np.zeros(self.stacking*self.num_observations),maxlen=self.stacking*self.num_observations)
+        
+       
+    def reset(self, *, seed=None, options=None):
+        # Reset the observation history to empty
+        self.obs_history = deque(np.zeros(self.stacking*self.num_observations),maxlen=self.stacking*self.num_observations)
+        
+        
+        self.runner.initialise(self.env_config["iniPath"], "CleanSlate")
+        
+        
+        obs = self.runner.reset()
+        
+        # Pull the initial observation and store return it to the trainer
+        obs = obs['CleanSlate']
+        for i in range(self.stacking):
+            self.obs_history.extend(obs)    # Reset only - fill the obs_history with copies of first obs instead of 0's
+        self.obs_history.extend(obs)
+        return_obs_history = np.asarray(list(self.obs_history),dtype=np.float32)
+        return  return_obs_history, {}
+
+    def step(self, actions):
+        # Forward the action to our agent
+        actions = actions.item() # TODO: Make sure this is right. Your types and shapes are a bit sketchy atm
+        action = {'CleanSlate': actions}
+        obs, rewards, terminateds, info_ = self.runner.step(action)
+        self.obs_history.extend(obs['CleanSlate'])
+        
+        # Extract obs/rewards from our agent
+        obs = np.asarray(list(obs['CleanSlate']), dtype=np.float32)    # also formats the RLAgent's obs so RLlib can understand it
+        return_obs_history = np.asarray(list(self.obs_history),dtype=np.float32)
+        #TODO: Append this to self.obs_history and return that instead. 
+        reward = rewards['CleanSlate']                               # Get the reward our RLAgent is reporting
+        sim_truncated = False
+        
+        # Check if this training episode is complete
+        if terminateds['CleanSlate']:      # TERMINATED - The RLAgent has reported itself as done (within the context of the MDP.) End the simulation.
+            print(terminateds)
+            self.runner.shutdown()
+            self.runner.cleanup()
+        if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
+            sim_truncated = True
+        
+        # Debug
+        printFreq = 1
+        if self.step_count % printFreq == -1:
+            print("-")
+            print(f"{printFreq} step(s) completed (Agent total: {self.step_count}):")
+            print("\tObservations:")
+            print(f"\t\tThroughput: {obs[0]:.2f}%             \t\t(Normalized, per interval)")
+            print(f"\t\tPacing Rate: {obs[1]:.2f}%        \t\t(Normalized, per interval)")
+            print(f"\t\tLoss Rate: {obs[2]:.2f}%          \t\t(Normalized, per interval)")
+            print(f"\t\tACKs: {obs[3]:.2f}x              \t\t(Multiplier of cwnd, per interval)") #? Identical to goodput(throughput) if normalized. 
+            print(f"\t\tInterval time: {obs[4]:.2f}s      \t\t(Raw, per interval)") #? Identical to delay if normalized?
+            print(f"\t\tSRTT: {obs[5]:.2f}%                   \t\t(Normalized, current)") #? Basically same as delay? slightly longer time horizon
+            print(f"\t\tDelay: {obs[6]:.2f}%                    \t\t(Log, current)") #? Maybe normalize?
+            
+            print(f"\tRewards:")
+            print(f"\t\tREWARD: {reward:.5f}                  \t(Raw, per interval)")
+        self.step_count += 1
+        
+        # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
+        return  return_obs_history, reward, terminateds['CleanSlate'], sim_truncated, {}
+        
+# Generates the OmnetGymApiEnv for the calling ray worker
+def omnetgymapienv_creator(env_config):
+    return OmnetGymApiEnv(env_config)  # return an env instance
+
+register_env("OmnetGymApiEnv", omnetgymapienv_creator)
+
+if __name__ == '__main__':
+    env_name = "CleanSlate-inference"
+    register_env(env_name, omnetgymapienv_creator)
+    
+    load_from_checkpoint = True
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_CleanSlate-1.6_2026-04-25_10-11-221ee1c874/checkpoints/checkpoint_13"
+    env_config = {"iniPath": sys.argv[1],
+                  "stacking": 10}
+    
+    ray.init(local_mode=True)
+    config = (
+            SACConfig()
+            # .resources(num_gpus=len(gpus), num_gpus_per_learner_worker=1)
+            .env_runners(explore=False) #, rollout_fragment_length=1000
+            .environment(env_name, env_config=env_config) # "OmnetGymApiEnv
+            )
+    algo = config.build_algo()
+    
+    # Convert betas? (solution found online, fixes a crash when loading a checkpoint)
+    def betas_tensor_to_float(learner):
+        for param_grp_key in learner._optimizer_parameters.keys():
+            param_grp = param_grp_key.param_groups[0]
+            param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
+    if (load_from_checkpoint):
+        algo.restore(checkpoint_load_dir)
+        algo.learner_group.foreach_learner(betas_tensor_to_float)
+    
+    # Inference Loop! Only tested for cleanSlate but MUCH faster that .train()
+    steps = 0
+    check_in_freq = 100
+    env = OmnetGymApiEnv(env_config)
+    obs, _ = env.reset()
+    module = algo.get_module("default_module")
+    while True:
+        obs_batch = torch.from_numpy(np.asarray(obs, dtype=np.float32)).unsqueeze(0)
+        with torch.no_grad():
+            out = module.forward_inference({"obs": obs_batch})
+
+        action = module.get_inference_action_dist_cls().from_logits(
+            out["action_dist_inputs"]
+        ).sample()[0].cpu().numpy()
+
+        obs, reward, terminated, truncated, _ = env.step(action)
+
+        if steps % check_in_freq == 0:
+            print(f"Step {steps}, reward={reward}")
+        steps += 1
+        if terminated or truncated:
+            obs, _ = env.reset()

@@ -10,6 +10,7 @@ import os
 import subprocess
 import re
 import time as termTime
+import xml.etree.ElementTree as ET
 
 experiments_dir = f"{os.getenv('HOME')}/raynet/_experiments"
 experiment_paths = {
@@ -22,6 +23,7 @@ runner_paths = {
     "Orca": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/OrcaEval.py",
     "Cubic": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/CubicEval.py",
     "Astrea": f"{os.getenv('HOME')}/raynet/simlibs/Astrea/src/AstreaEval.py",
+    "CleanSlate": f"{os.getenv('HOME')}/raynet/simlibs/CleanSlate/src/CleanSlateEval.py",
 }
 
 def parse_numeric(value):
@@ -78,7 +80,7 @@ def dumb_plot(csv_file:str, output_name:str="plotted"):
     plt.savefig(pdf_path)
 
 
-def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickname=None, do_dumb_plots=False, params_str=None, short_params_str=None):
+def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickname=None, do_dumb_plots=False, params_str=None, short_params_str=None, run=None):
     """
     Uses the .vec file in the included results directory and produces a series of metric CSVs.
     The exp and protocol parameters are used to locate the correct vec file and to organize the output directories.
@@ -90,6 +92,8 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
         params_str = "__default__"
     if not short_params_str:
         short_params_str = params_str
+    if not run:
+        run = 0
     argNum = 0
     vectorsToExtract = ["throughput", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "queueLength", "queueBitLength", "incomingDataRate", "outgoingDataRate"]
     extracted = False
@@ -125,16 +129,72 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
                 modName = re.sub(r'(conn)-\d+', r'\1', modName)
                 
                 final_list = pd.DataFrame({'time': time, str(vec): val})
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/" + params_str, shell=True).communicate(timeout=40)
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/" + params_str+ "/csvs", shell=True).communicate(timeout=40)
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/" + params_str+ "/csvs/" + protocol_nickname, shell=True).communicate(timeout=40)
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/" + params_str+ "/csvs/" + protocol_nickname + "/runPlaceholder", shell=True).communicate(timeout=40)
-                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/" + params_str+ "/csvs/" + protocol_nickname + "/runPlaceholder" + "/" + str(modName), shell=True).communicate(timeout=40)
-                csv_path = os.getenv('HOME') + '/raynet/results/'+ exp_nickname + "/" + short_params_str + '/csvs/' + protocol_nickname + "/runPlaceholder" + "/" + str(modName) + "/" + vec + '.csv'
+                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/" + short_params_str, shell=True).communicate(timeout=40)
+                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/" + short_params_str + f"/run{run}", shell=True).communicate(timeout=40)
+                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/" + short_params_str + f"/run{run}" + "/"  + protocol_nickname, shell=True).communicate(timeout=40)
+                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/" + short_params_str + f"/run{run}" + "/"  + protocol_nickname + "/csvs/", shell=True).communicate(timeout=40)
+                subprocess.Popen("mkdir -p " + os.getenv('HOME') + '/raynet/results/' + exp_nickname + "/" + short_params_str + f"/run{run}" + "/"  + protocol_nickname + "/csvs/" + str(modName), shell=True).communicate(timeout=40)
+                csv_path = os.getenv('HOME') + '/raynet/results/'+ exp_nickname + "/" + short_params_str + f"/run{run}" + "/"  + protocol_nickname + "/csvs/" + str(modName) + "/" + vec + '.csv'
                 final_list.to_csv(csv_path, index=False)
                 extracted = True
                 if (do_dumb_plots): 
                     dumb_plot(csv_path, output_name=vec)
+    
+    # Parse the associated scenario.xml (if applicable) and output changed values to csvs 
+    scenario_file = filepath.rsplit("/", 1)[0]  # ini_variants directory
+    scenario_file += f"/scenario.xml_{params_str}"
+
+    print(scenario_file)
+
+    if not os.path.exists(scenario_file):
+        print("No scenario.xml found, continuing to next experiment")
+    else:
+        print(f"Parsing scenario.xml... ({scenario_file})")
+
+        tree = ET.parse(scenario_file)
+        root = tree.getroot()
+
+        param_series = {}
+
+        for at_block in root.findall("at"):
+            time_str = at_block.get("t")
+            time_val = float(time_str.replace("s", ""))
+
+            for param in at_block.findall("set-channel-param"):
+                par_name = param.get("par")    
+                param_val = parse_numeric(param.get("value"))
+
+                if par_name not in param_series:
+                    param_series[par_name] = []
+
+                param_series[par_name].append((time_val, param_val))
+
+        # Output one CSV per parameter
+        for par_name, series in param_series.items():
+            if not series:
+                continue
+
+            times, values = zip(*series)
+            df = pd.DataFrame({
+                "time": times,
+                par_name: values
+            })
+
+            # Create directory: .../scenario/
+            base_dir = (
+                os.getenv('HOME')
+                + '/raynet/results/'
+                + exp_nickname + "/"
+                + short_params_str + f"/run{run}/"
+                + protocol_nickname + "/csvs/scenario/"
+            )
+
+            subprocess.Popen(f"mkdir -p {base_dir}", shell=True).communicate(timeout=40)
+
+            csv_path = base_dir + f"{par_name}.csv"
+            df.to_csv(csv_path, index=False)
+
+            print(f"Saved scenario CSV: {csv_path}")
     termTime.sleep(1)
 
 def run_experiments(experiments_dict, create_output_csv=True):
@@ -156,78 +216,170 @@ def run_experiments(experiments_dict, create_output_csv=True):
         param_values_product = list(itertools.product(*params_dict.values()))
         unique_param_combinations = [dict(zip(param_keys, param_values)) for param_values in param_values_product]
     
-        # Generate a .ini file for each unique param combination
+        # Generate a .ini file for each unique param combination and run
         for params in unique_param_combinations:
-            with open(original_ini_file, 'r') as fin:
-                ini_string = fin.read()
-            ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
-            params_suffix = ""
-            for param, value in params.items():
-                old_value = value
-                # Convert qmult to BDP in bytes (if applicable)
-                if param == "QSIZE" and "bdp" in value:
-                    value = f"{int(parse_numeric(params["BANDWIDTH"]) * 1000 * parse_numeric(params["DELAY"]) * parse_numeric(value))}b"
-                    print(f"{old_value} changed to {value}")
-                # Convert two-way delay (RTT) to one-way delay (if applicable)
-                if param == "DELAY":
-                    value = f"{parse_numeric(value)/2.0}ms"
-                    print(f"{old_value} changed to {value}")
-                print(f"using {value}")
-                ini_string = ini_string.replace(param + "_PLACEHOLDER",  value)
-                params_suffix = params_suffix + f"_{old_value}-{param}"
-            modified_ini_file = ini_variants_base + params_suffix
-            with open(modified_ini_file, 'w') as fout:
-                fout.write(ini_string)
+            for run in range(1, experiments_dict[experiment_name]["meta"]["runs"] + 1):
+                with open(original_ini_file, 'r') as fin:
+                    ini_string = fin.read()
+                ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
+                ini_string = ini_string.replace("START_TIME_PLACEHOLDER",  str(random.uniform(0, 0.2)))
+                
+                params_suffix = ""
+                for param, value in params.items():
+                    if experiment_name == "responsiveness":
+                        old_value = value
+                        params_suffix = params_suffix + f"_{old_value}-{param}"
+                        
+                        # Create scenario.xml variant
+                        with open(f"{original_ini_file.rsplit("/", 1)[0]}/scenario.xml") as scenario_file:
+                            scenario_string = scenario_file.read()
+                        bw_min = experiments_dict[experiment_name]["meta"]["bw_range"][0]
+                        bw_max = experiments_dict[experiment_name]["meta"]["bw_range"][1]
+                        initial_bw = int((bw_min+bw_max)/2.0)
+                        
+                        scenario_string = re.sub(
+                            r"INITIAL_BW_PLACEHOLDER",
+                            lambda _: f"{initial_bw}Mbps",
+                            scenario_string
+                        )
+                        
+                        scenario_string = re.sub(
+                            r"BW_PLACEHOLDER",
+                            lambda _: f"{random.uniform(bw_min, bw_max)}Mbps",
+                            scenario_string
+                        )
+                        
+                        rtt_min = experiments_dict[experiment_name]["meta"]["rtt_range"][0]/2
+                        rtt_max = experiments_dict[experiment_name]["meta"]["rtt_range"][1]/2
+                        initial_delay = int((rtt_min+rtt_max)/2.0)
+
+                        scenario_string = re.sub(
+                            r"INITIAL_DELAY_PLACEHOLDER",
+                            lambda _: f"{initial_delay}ms",
+                            scenario_string
+                        )
+                        
+                        delay_done = False
+                        while not delay_done:
+                            delay_value = f"{int(random.uniform(rtt_min, rtt_max))}ms"
+                            scenario_string = scenario_string.replace("DELAY_PLACEHOLDER", delay_value, 2)
+                            if "DELAY_PLACEHOLDER" not in scenario_string:
+                                delay_done=True
+                        # scenario_string = re.sub(
+                        #     r"DELAY_PLACEHOLDER",
+                        #     lambda _: f"{random.uniform(rtt_min, rtt_max)}ms",
+                        #     scenario_string,
+                        #     count=2
+                        # )
+                        modified_scenario_file = f"{ini_variants_base.rsplit("/", 1)[0]}/scenario.xml_" + params_suffix + f"_RUN{run}"
+                        with open(modified_scenario_file, 'w') as fout:
+                            fout.write(scenario_string)
+                        
+                        # Convert qmult to BDP in bytes (if applicable)
+                        if param == "QSIZE" and "bdp" in value:
+                            value = f"{int(initial_bw * 1000 * initial_delay * 2 * parse_numeric(value))}b"
+                        print(f"using {value}")
+                        ini_string = ini_string.replace("BW_PLACEHOLDER", f"{int(initial_bw)}Mbps")
+                        ini_string = ini_string.replace("DELAY_PLACEHOLDER", f"{int(initial_delay)}ms")
+                        ini_string = ini_string.replace(param + "_PLACEHOLDER",  value)
+                        ini_string = ini_string.replace("SCENARIO_PLACEHOLDER", modified_scenario_file)
+                    else:
+                        # Convert qmult to BDP in bytes (if applicable)
+                        old_value = value
+                        if param == "QSIZE" and "bdp" in value:
+                            value = f"{int(parse_numeric(params["BANDWIDTH"]) * 1000 * parse_numeric(params["DELAY"]) * parse_numeric(value))}b"
+                            print(f"{old_value} changed to {value}")
+                        # Convert two-way delay (RTT) to one-way delay (if applicable)
+                        if param == "DELAY":
+                            value = f"{parse_numeric(value)/2.0}ms"
+                            print(f"{old_value} changed to {value}")
+                        print(f"using {value}")
+                        ini_string = ini_string.replace(param + "_PLACEHOLDER",  value)
+                        params_suffix = params_suffix + f"_{old_value}-{param}"
+                modified_ini_file = ini_variants_base + params_suffix + f"_RUN{run}"
+                with open(modified_ini_file, 'w') as fout:
+                    fout.write(ini_string)
         
         # Perform all generated experiment files for each protocol
         for protocol_name in experiments_dict[experiment_name]["protocols"]:
             build_str = "ORCA" if protocol_name == "Cubic" else protocol_name.upper()
             subprocess.Popen(f"source ~/omnetpp/setenv && cd ~/raynet && ./build.sh -f {build_str}", shell=True, executable="/bin/bash").communicate(timeout=40)
             for params in unique_param_combinations: # Looping through a second time separately so I don't have to generate all the files multiple times
-                # Run the experiment for this protocol and param combo
-                params_suffix = ""          # used to name the exp.ini and inform column names
-                short_params_suffix = ""    # used to name results directory
-                for param, value in params.items():
-                    params_suffix = params_suffix + f"_{value}-{param}"
-                    short_params_suffix = short_params_suffix + f"_{value}-{param}"
-                modified_ini_file = ini_variants_base + params_suffix
-                protocol_runner_path = runner_paths[protocol_name]
-                print(f"\t ---------- {protocol_name} running experiment: {experiment_name + params_suffix} ----------")
-                os.system(f"{python} {protocol_runner_path} {modified_ini_file}") # Finally runs the exp
-                
-                # Generate output.csv and individual vector csvs for all tracked vectors for this exp/protocol/params combo
-                exp_results_dir = os.getenv('HOME') + f"/raynet/_experiments/{experiment_name}/ini_variants/results"
-                generate_exp_csvs(exp_results_dir, protocol_name, params_str=params_suffix, short_params_str=short_params_suffix)
+                for run in range(1, experiments_dict[experiment_name]["meta"]["runs"] + 1):
+                    # Run the experiment for this protocol and param combo
+                    params_suffix = ""          # used to find the exp.ini and inform column names
+                    short_params_suffix = ""    # used to name results directory
+                    for param, value in params.items():
+                        params_suffix = params_suffix + f"_{value}-{param}"
+                        short_params_suffix = short_params_suffix + f"_{value}-{param}"
+                    params_suffix += f"_RUN{run}"
+                    modified_ini_file = ini_variants_base + params_suffix
+                    protocol_runner_path = runner_paths[protocol_name]
+                    print(f"\t ---------- {protocol_name} running experiment: {experiment_name + params_suffix} ----------")
+                    os.system(f"{python} {protocol_runner_path} {modified_ini_file}") # Finally runs the exp
+                    
+                    # Generate output.csv and individual vector csvs for all tracked vectors for this exp/protocol/params combo
+                    exp_results_dir = os.getenv('HOME') + f"/raynet/_experiments/{experiment_name}/ini_variants/results"
+                    generate_exp_csvs(exp_results_dir, protocol_name, params_str=params_suffix, short_params_str=short_params_suffix, run=run)
         
 if __name__ == "__main__":
+    random.seed(47901741)
     experiments_to_run = {
         # "responsiveness": {
-        #     "protocols": ["Cubic", "Orca"],
+        #     "protocols": ["Orca", "Cubic", "CleanSlate"],
         #     "params": {
-        #         "BANDWIDTH" : ["10Mbps"],
-        #         "DELAY"     : ["5ms","10ms","20ms"],    
-        #         "QSIZE": ["100000b", "200000b", "400000b"],
+        #         "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
+        #         },
+        #     "meta": {
+        #         "runs" : 100,
+        #         "bw_range" : (10, 20),
+        #         "rtt_range" : (10, 100),
         #         }
         #     },
-        "competing-flows": {
-            "protocols": ["Cubic"],
+        # "competing-flows": {
+        #     "protocols": ["Cubic", "Orca", "CleanSlate"],
+        #     "params": {
+        #         "BANDWIDTH" : ["10Mbps"],
+        #         "DELAY"     : ["10ms", "20ms", "30ms", "40ms", "50ms", "60ms", "70ms", "80ms","90ms", "100ms"],    
+        #         "QSIZE": [".2bdp", "1bdp", "4bdp"],
+        #         },
+        #    "meta": {
+        #        "runs" : 10,
+        #        }
+        #     },
+        "single-flow": {
+            "protocols": ["CleanSlate"],
             "params": {
                 "BANDWIDTH" : ["10Mbps"],
-                "DELAY"     : ["10ms", "20ms", "40ms", "60ms", "80ms", "100ms"],    
+                "DELAY"     : ["10ms", "20ms", "30ms", "40ms", "50ms", "60ms", "70ms", "80ms","90ms", "100ms"],    
                 "QSIZE": [".2bdp", "1bdp", "4bdp"],
-                }
+                },
+           "meta": {
+               "runs" : 10,
+               }
             },
         # "competing-flows": {
-        #     "protocols": ["Orca"],
+        #     "protocols": ["Orca", "Cubic", "CleanSlate"],
         #     "params": {
         #         "BANDWIDTH" : ["10Mbps"],
-        #         "DELAY"     : ["10ms"],    
-        #         "QSIZE": ["1bdp"],
+        #         "DELAY"     : ["10ms","50ms","100ms"],    
+        #         "QSIZE": [".2bdp", "1bdp", "4bdp"],
+        #         },
+        #    "meta": {
+        #        "runs" : 3,
+        #        }
+        #     },
+        # "responsiveness": {
+        #     "protocols": ["Orca", "Cubic", "CleanSlate"],
+        #     "params": {
+        #         "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
+        #         },
+        #     "meta": {
+        #         "runs" : 3,
+        #         "bw_range" : (10, 20),
+        #         "rtt_range" : (10, 100),
         #         }
         #     },
-        
-        # "responsiveness": ["Cubic"], # TODO: change format to add protocols and params once everything is working 
-        # "double-flow-dumbbell": ["Cubic"], # TODO: change format to add protocols and params once everything is working 
     }
     
     run_experiments(experiments_to_run)

@@ -2,6 +2,7 @@
 #include "omnetpp/ccomponent.h"
 #include "omnetpp/simtime_t.h"
 #include "transportlayer/tcp/TcpPacedConnection.h"
+#include "transportlayer/tcp/TcpPaced.h"
 #include <algorithm>
 #include <numeric>
 #include <ostream>
@@ -95,8 +96,8 @@ std::optional<ObsType> CleanSlate::computeObservation(){
         obs[0] = this->cleanSlateThroughput / this->cleanSlateMaxThroughput;
 
         // Pacerate
-        this->cleanSlatePaceRate = (1.0/dynamic_cast<TcpPacedConnection*>(conn)->intersendingTime.dbl()) * (double) state->snd_mss;
-        obs[1] = std::min(10.0, this->cleanSlatePaceRate / this->cleanSlateMaxThroughput); // Clamp to 10 as per paper (paceRate before first action is massive)
+        double paceRate = (1.0/dynamic_cast<TcpPacedConnection*>(conn)->intersendingTime.dbl()) * (double) state->snd_mss;
+        obs[1] = std::min(10.0, paceRate / this->cleanSlateMaxThroughput);
 
         // Lossrate: What percentage of bytes sent this interval were retransmissions
         this->cleanSlateLossRate = 0.0;
@@ -210,8 +211,20 @@ void CleanSlate::decisionMade(ActionType action) {
     if (this->takeActions && this->rttReportCount > 0 && newCwnd <= 1000000) {
         if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         state->snd_cwnd = newCwnd;
-        this->cleanSlatePaceRate = ((double) state->snd_cwnd / (double) state->snd_mss) / state->srtt.dbl();  // Segments/s
-        dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(1.0/cleanSlatePaceRate); // 1/paceRate = intersendingtime
+
+        // Update pacing rate (standard approach)
+        if(state->snd_cwnd > 0) {
+            double paceFactor;
+            if (state->snd_cwnd < state->ssthresh/2) {
+                paceFactor = 2;
+            }
+            else{
+                paceFactor = 1.2;
+            }
+        uint32_t maxWindow = std::max(state->snd_cwnd, dynamic_cast<TcpPacedConnection*>(conn)->getBytesInFlight());
+        double pace = state->srtt.dbl()/(((double) (maxWindow) / (double)state->snd_mss) * paceFactor);
+        dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(pace);
+        }
         owner->emit(actionSignal, multiplier); // Emit action for plotting
     } else {
         // Invalid. Skip this action entirely.
@@ -267,9 +280,9 @@ bool CleanSlate::getDone() {
     // Deprecated, remove this later (done is just set and checked directly)
 }
 
-// MARK: Cubic Methods
+// MARK: TcpPacedNoCC Methods
 // ============================================================================
-// These are copied directly from cubic. Any lines that alter the pacing rate were commented out,
+// These are copied directly from TcpPacedNoCC.
 // and a couple lines were added for tracking some extra information for CleanSlate to use.
 // ============================================================================
 
@@ -283,4 +296,12 @@ void CleanSlate::rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) {
     
     this->cleanSlateMinDelay = std::min(this->cleanSlateMinDelay, packetRTT);
 }
+
+// Override to track bytes delivered
+void CleanSlate::receivedDataAck(uint32_t firstSeqAcked) {
+    TcpPacedNoCC::receivedDataAck(firstSeqAcked);
+    this->bytesDelivered += state->snd_mss; // Number of bytes sent so far this interval
+}
+
+
 #endif

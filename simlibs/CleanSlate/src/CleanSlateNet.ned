@@ -19,7 +19,6 @@ network CleanSlateNet
         int numberOfFlows = default(1);
         double bottleneckDatarate @unit("Mbps") = default(3Mbps);
         double bottleneckDelay @unit("ms") = default(10ms);
-        
     types:
         channel bottleneckLine extends ThruputMeteringChannel
         {

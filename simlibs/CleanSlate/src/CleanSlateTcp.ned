@@ -1,7 +1,7 @@
 package CleanSlate;
-import inet.transportlayer.tcp.Tcp;
+import tcppaced.transportlayer.tcp.TcpPaced;
 
-simple CleanSlateTcp extends Tcp
+simple CleanSlateTcp extends TcpPaced
 {
     parameters:
         @class(CleanSlateTcp);
@@ -16,19 +16,15 @@ simple CleanSlateTcp extends Tcp
         bool printDebugMessages;                            // used to print debug messages
         bool takeActions;                                   // Skips actions if set to false. Useful for comparing against the base case without altering code.
         int maxRLSteps;                                     // how many training steps should take place before the agent reports as done
-        double monitorIntervalDuration = default(1.0);      // How many seconds a monitor interval should last
+        bool fixedIntervals = default(true);         // If false, monitor intervals will adjust to SRTT dynamically
+        double fixedIntervalDuration = default(.1);         // How many seconds a fixed monitor interval should last. If not fixed, MTPs will be set to SRTT dynamically
+        double delayWeight = default(5);                    // Beta term from CleanSlate paper. Reward degrades when RTT > baseRTT*delayWeight. Larger values emphasize throughput in reward calculation.
         @signal[stepData];				                    // step data signal
         @signal[actionQuery];			                    // action query signal
 
-
+        // Statistics recording
         @signal[throughput];
-        @signal[srtt];
-        @signal[action];
         @signal[intervalDuration];
-        @signal[cwnd];
-        @statistic[cwnd](record=vector(removeRepeats); interpolationmode=sample-hold);
         @statistic[throughput](record=vector(removeRepeats); interpolationmode=sample-hold);
-        @statistic[srtt](record=vector(removeRepeats); interpolationmode=sample-hold);
-        @statistic[action](record=vector(removeRepeats); interpolationmode=sample-hold);
         @statistic[intervalDuration](record=vector(removeRepeats); interpolationmode=sample-hold);
 }

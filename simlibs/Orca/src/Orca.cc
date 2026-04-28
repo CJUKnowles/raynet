@@ -146,7 +146,7 @@ std::optional<ObsType> Orca::computeObservation(){
         // Finally, schedule the next step (will be automatically cancelled if done)
         scheduleNextStep(this->fixedIntervals ? this->fixedIntervalDuration : state->srtt.dbl());
     }
-
+    
     // Debug prints
     if(debug) {
         cout << "-" << endl;
@@ -283,7 +283,7 @@ bool Orca::getDone() {
 
 // MARK: Cubic Methods
 // ============================================================================
-// These are copied directly from cubic. Any lines that alter the pacing rate were commented out,
+// These are copied directly from cubic.
 // and a couple lines were added for tracking some extra information for Orca to use.
 // ============================================================================
 

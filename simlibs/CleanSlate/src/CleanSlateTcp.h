@@ -4,13 +4,14 @@
 #define TRANSPORTLAYER_CleanSlateTcp_H_
 
 #include <inet/transportlayer/tcp/Tcp.h>
+#include <transportlayer/tcp/TcpPaced.h>
 
 using namespace inet::tcp;
 using namespace omnetpp;
 /*
  * Overrides TcpPaced implementation to define new NED parameters.
  */
-class CleanSlateTcp : public Tcp
+class CleanSlateTcp : public TcpPaced
 {
 public:
     CleanSlateTcp();

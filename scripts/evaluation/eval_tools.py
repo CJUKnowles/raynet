@@ -60,11 +60,11 @@ def create_csv_dict(results_dir:str=None):
                 metric = os.path.splitext(filename)[0]
                 
                 dir_names = root.split(os.sep)          # Split by "/" or "\\" depending on platform
-                module = dir_names[-1].split('.', 1)[1]   # Module name, excluding the network name prefix
-                module_type = "client" if "client" in module else "server" if "server" in module else "queue" if "queue" in module else "other"
-                run = dir_names[-2]
+                module = dir_names[-1].split('.', 1)[1] if '.' in dir_names[-1] else dir_names[-1]   # Module name, excluding the network name prefix
+                module_type = "client" if "client" in module else "server" if "server" in module else "queue" if "queue" in module else "scenario" if "scenario" in module else "other"
+                # csvs folder is'[-2]
                 protocol = dir_names[-3]
-                # csvs folder is'[-4]
+                run = parse_numeric(dir_names[-4], as_int=True)
                 params = dir_names[-5]
                 experiment = dir_names[-6]
                 
@@ -234,7 +234,7 @@ def plot_cwnd_timeseries(csv_df, ax=None, show_competition=True):
             line, = ax.plot(x, y, alpha=0.2, linewidth=0.8, color=protocol_colors[row["protocol"]])
 
             # Smoothed mean
-            ax.plot(x, rolling_mean, linewidth=2, label=row["protocol"], color=protocol_colors[row["protocol"]], linestyle='-' if is_primary_flow else '--')
+            ax.plot(x, rolling_mean, linewidth=2, label=row["protocol"] if is_primary_flow else None, color=protocol_colors[row["protocol"]], linestyle='-' if is_primary_flow else '--')
 
     ax.set_xlabel("Time")
     ax.set_ylabel("cwnd (bytes)")
@@ -253,7 +253,7 @@ def plot_srtt_timeseries(csv_df, ax=None, show_competition=True):
     - Expects a single experiment's dataframe as input
     - Only plots primary flows (module number is 0, module type is server)
     """
-
+    scenario_df = csv_df[csv_df["module_type"].str.contains("scenario")]
     csv_df = csv_df[csv_df["module_type"].str.contains("client")]
     csv_df = csv_df[csv_df["module"].str.contains("conn")]
     csv_df = csv_df[csv_df["metric"].str.contains("srtt")]
@@ -279,13 +279,35 @@ def plot_srtt_timeseries(csv_df, ax=None, show_competition=True):
             )
             all_y_values.extend(data["srtt"].values)
 
+    # Plot the base RTT as optimal if there is a scenario file that alters it
+    scenario_delay_df = scenario_df[scenario_df["metric"] == "delay"]
+    if not scenario_delay_df.empty:
+        scenario_delay_df = scenario_delay_df.iloc[0]
+        scenario_delay_data = pd.read_csv(scenario_delay_df["csv_path"])
+        scenario_delay_data["delay"] *= 2 * .001 # one-way to two-way delay (RTT)
+        print("-")
+        print(scenario_delay_data)
+        ax.plot(
+                scenario_delay_data["time"],
+                scenario_delay_data["delay"],
+                linestyle='--',
+                linewidth=1,
+                color='black',
+                alpha=1,
+                label="Optimal",
+                drawstyle="steps-post",
+                zorder=10
+            )
+        
     ax.set_xlabel("Time")
     ax.set_ylabel("sRTT (ms)")
     ax.set_title("sRTT over time")
     ax.legend(fontsize=8)
-    ax.set_ylim(bottom=0, top=np.percentile(all_y_values, 99)*1.1)
+    ax.set_ylim(bottom=0)
     ax.set_yscale("linear")
-    ax.ticklabel_format(style='plain', axis='y')
+    ax.yaxis.set_major_formatter(
+        ticker.FuncFormatter(lambda y, _: f"{y*1000:g}") # Display y-axis in ms
+    )
     ax.grid(True)
 
     return ax
@@ -296,7 +318,7 @@ def plot_throughput_timeseries(csv_df, ax=None, show_competition=True):
     - Expects a single experiment's dataframe as input
     - Only plots primary flows (module number is 0, module type is server)
     """
-
+    scenario_df = csv_df[csv_df["module_type"].str.contains("scenario")]
     csv_df = csv_df[csv_df["module_type"].str.contains("server")]
     csv_df = csv_df[csv_df["module"].str.contains("conn")]
     csv_df = csv_df[csv_df["metric"].str.contains("throughput")]
@@ -323,6 +345,25 @@ def plot_throughput_timeseries(csv_df, ax=None, show_competition=True):
             )
             all_y_values.extend(data["throughput"].values)
             
+    # Plot optimal throughputs only if there is a scenario file containing that info (mostly for responsiveness experiments)
+    scenario_throughput_df = scenario_df[scenario_df["metric"] == "datarate"]
+    if not scenario_throughput_df.empty:
+        scenario_throughput_df = scenario_throughput_df.iloc[0]
+        scenario_throughput_data = pd.read_csv(scenario_throughput_df["csv_path"])
+        scenario_throughput_data["datarate"] *= 125000 * 8 #mbps
+        print("-")
+        print(scenario_throughput_data)
+        ax.plot(
+                scenario_throughput_data["time"],
+                scenario_throughput_data["datarate"],
+                linestyle='--',
+                linewidth=1,
+                color='black',
+                alpha=1,
+                label="Optimal",
+                drawstyle="steps-post",
+                zorder=10
+            )
 
     ax.set_xlabel("Time")
     ax.set_ylabel("Throughput (Mbps)")
@@ -330,12 +371,14 @@ def plot_throughput_timeseries(csv_df, ax=None, show_competition=True):
     ax.legend(fontsize=8)
     ax.set_ylim(bottom=0, top=np.percentile(all_y_values, 99)*1.1)
     ax.set_yscale("linear")
-    ax.ticklabel_format(style='plain', axis='y')
+    ax.yaxis.set_major_formatter(
+        ticker.FuncFormatter(lambda y, _: f"{y/1e6:g}") # makes the y-axis Mbps insead of Bps
+    )
     ax.grid(True)
 
     return ax
 
-def plot_tcp_friendliness(csv_df, ax=None, show_competition=False):
+def plot_tcp_friendliness(csv_df, ax=None, show_competition=False, startup_time=30):
     csv_df = csv_df[csv_df["module_type"].str.contains("server")]
     csv_df = csv_df[csv_df["module"].str.contains("conn")]
     csv_df = csv_df[csv_df["metric"].str.contains("throughput")]
@@ -373,39 +416,51 @@ def plot_tcp_friendliness(csv_df, ax=None, show_competition=False):
         for i, protocol in enumerate(protocols):
             proto_df = df_q[df_q["protocol"] == protocol]
             y_vals = []
+            y_err_lower = []
+            y_err_upper = []
+
             for delay in delays:
                 row = proto_df[proto_df["DELAY"] == delay]
                 if row.empty:
                     y_vals.append(0)
+                    y_err_lower.append(0)
+                    y_err_upper.append(0)
                     continue
 
-                main_flow = row[row["module"].str.contains("0")].iloc[0]
-                main_flow_data = pd.read_csv(main_flow["csv_path"])
-                # print("\n\n-\nmain_flow:")
-                # print(main_flow)
-                # print(f"mean throughput: {main_flow_data["throughput"].mean()}")
-                
-                competing_flow = row[row["module"].str.contains("1")].iloc[0]
-                competing_flow_data = pd.read_csv(competing_flow["csv_path"])
-                # print("\ncompeting_flow:")
-                # print(competing_flow)
-                # print(f"mean throughput: {competing_flow_data["throughput"].mean()}")
-                
-                # print(f"\nratio: {main_flow_data["throughput"].mean() / competing_flow_data["throughput"].mean()}")
-                
-                ratio = main_flow_data["throughput"].mean() / competing_flow_data["throughput"].mean()
-                y_vals.append(ratio)
-                all_y_values.append(ratio)
+                ratios = []
+                for run in row["run"].unique():
+                    main_flow = row[row["module"].str.contains("0")]
+                    main_flow = main_flow[main_flow["run"] == run].iloc[0]
+                    main_flow_data = pd.read_csv(main_flow["csv_path"])
+                    main_flow_data = main_flow_data[main_flow_data["time"] > startup_time]
 
-            ax_i.plot(
+                    competing_flow = row[row["module"].str.contains("1")]
+                    competing_flow = competing_flow[competing_flow["run"] == run].iloc[0]
+                    competing_flow_data = pd.read_csv(competing_flow["csv_path"])
+                    competing_flow_data = competing_flow_data[competing_flow_data["time"] > startup_time]
+                    
+                    ratio = main_flow_data["throughput"].mean() / competing_flow_data["throughput"].mean()
+                    ratios.append(ratio)
+
+                mean = np.mean(ratios)
+                min_val = np.min(ratios)
+                max_val = np.max(ratios)
+
+                y_vals.append(mean)
+                y_err_lower.append(mean - min_val)
+                y_err_upper.append(max_val - mean)
+
+            ax_i.errorbar(
                 delays,
                 y_vals,
+                yerr=[y_err_lower, y_err_upper],
                 label=protocol,
                 color=protocol_colors[protocol],
                 marker=protocol_markers[protocol],
                 linestyle='-',
                 linewidth=1.5,
-                markersize=10,
+                markersize=8,
+                capsize=4,
             )
         
         ax_i.axhline(
@@ -498,7 +553,6 @@ def plot_goodput_ratio_aggregate(csv_df, ax=None, show_competition=False):
                 if row.empty:
                     y_vals.append(0)
                     continue
-
                 row = row.iloc[0]
                 data = pd.read_csv(row["csv_path"])
 
@@ -543,15 +597,17 @@ if __name__ == "__main__":
     for exp in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == exp]
         
-        # # Generate aggregate plots combining all param combinations
+        # Special aggregate plots unique to each experiment
         if exp == "competing-flows":
+            print("Plotting completing flows aggregate plots")
             fig, axes = plot_tcp_friendliness(exp_df)
             fig.savefig(os.getenv('HOME') + f"/raynet/results/{exp}/aggregate_plots.pdf")
             plt.close(fig)
         elif exp == "responsiveness":
             # TODO: Find a way to plot overall performance of responsiveness experiments. Compare each datapoint against its theoretical max? cant just take a mean.
-            print("not implemented")
+            print("responot implemented")
         else:
+            print("Plotting single flow aggregate plots")
             fig, axs = plt.subplots(20, 1, figsize=(15, 100))
             plot_goodput_ratio_aggregate(exp_df, axs)
             fig.tight_layout()
@@ -559,22 +615,24 @@ if __name__ == "__main__":
             plt.close(fig)
         
 
-        # # Generate a plot for each unique param combination
-        # for params in exp_df["params"].unique():
-        #     params_df = exp_df[exp_df["params"] == params]
-        #     fig, axs = plt.subplots(20, 1, figsize=(15, 100))
-            
-            
-        #     plot_throughput_timeseries(params_df, axs[0])
-        #     plot_srtt_timeseries(params_df, axs[1])
-        #     plot_cwnd_timeseries(params_df, axs[2])
-        #     plot_pacerate_timeseries(params_df, axs[3])
-        #     plot_qsize_timeseries(params_df, axs[4])
-            
-        #     fig.tight_layout()
-        #     fig.savefig(os.getenv('HOME') + f"/raynet/results/{exp}/{params}/summary.pdf")
-        #     plt.close(fig)
+        # Summary Timeseries plots for all experiments
+        for params in exp_df["params"].unique():
+            params_df = exp_df[exp_df["params"] == params]
+            for run in params_df["run"].unique():
+                run_df = params_df[params_df["run"] == run]
+                fig, axs = plt.subplots(20, 1, figsize=(15, 100))
                 
+                
+                plot_throughput_timeseries(run_df, axs[0])
+                plot_srtt_timeseries(run_df, axs[1])
+                plot_cwnd_timeseries(run_df, axs[2])
+                plot_pacerate_timeseries(run_df, axs[3])
+                plot_qsize_timeseries(run_df, axs[4])
+                
+                fig.tight_layout()
+                fig.savefig(os.getenv('HOME') + f"/raynet/results/{exp}/{params}/run{int(run)}/summary.pdf")
+                plt.close(fig)
+                    
             
     # metric_csvs = metric_csvs[metric_csvs["module"].str.contains("0")]          # Only grab data from primary flows
     # #metric_csvs = metric_csvs[(metric_csvs["module_type"] == "client")]       # Only grab data from clients

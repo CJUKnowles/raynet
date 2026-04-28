@@ -22,6 +22,7 @@ from random import randint
 from ray.tune.analysis import ExperimentAnalysis
 import GPUtil
 from collections import deque
+import torch
 
 class OmnetGymApiEnv(gym.Env):
     def __init__(self,env_config):
@@ -155,11 +156,25 @@ if __name__ == '__main__':
             )
     algo = config.build()
     
-    # Main loop!
+    # Inference Loop! Only tested for cleanSlate but MUCH faster that .train()
     steps = 0
     check_in_freq = 100
+    env = OmnetGymApiEnv(env_config)
+    obs, _ = env.reset()
+    module = algo.get_module("default_module")
     while True:
-        result = algo.training_step()
+        obs_batch = torch.from_numpy(np.asarray(obs, dtype=np.float32)).unsqueeze(0)
+        with torch.no_grad():
+            out = module.forward_inference({"obs": obs_batch})
+
+        action = module.get_inference_action_dist_cls().from_logits(
+            out["action_dist_inputs"]
+        ).sample()[0].cpu().numpy()
+
+        obs, reward, terminated, truncated, _ = env.step(action)
+
         if steps % check_in_freq == 0:
-            print(f"Performing step: {steps}")
+            print(f"Step {steps}, reward={reward}")
         steps += 1
+        if terminated or truncated:
+            obs, _ = env.reset()
