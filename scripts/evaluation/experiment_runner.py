@@ -26,7 +26,7 @@ runner_paths = {
     "CleanSlate": f"{os.getenv('HOME')}/raynet/simlibs/CleanSlate/src/CleanSlateEval.py",
 }
 
-def parse_numeric(value):
+def parse_numeric(value): 
     match = re.search(r"[-+]?\d*\.?\d+", str(value))
     return float(match.group()) if match else None
 
@@ -119,6 +119,7 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
     for vec in vectorsToExtract:
         results = rawResults.loc[(rawResults['name'] == str(vec)+":vector") | (rawResults['name'] == str(vec)+":vector(removeRepeats)")]
         print(results)
+        print(vec)
         for mod in range(len(results.vecvalue.to_numpy())):
             if(not results.vecvalue.to_numpy()[mod] is None):
                 val = results.vecvalue.to_numpy()[mod] #VALUE
@@ -348,7 +349,7 @@ if __name__ == "__main__":
         #        }
         #     },
         "single-flow": {
-            "protocols": ["CleanSlate"],
+            "protocols": ["Cubic", "Orca", "CleanSlate"],
             "params": {
                 "BANDWIDTH" : ["10Mbps"],
                 "DELAY"     : ["10ms", "20ms", "30ms", "40ms", "50ms", "60ms", "70ms", "80ms","90ms", "100ms"],    
