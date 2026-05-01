@@ -10,7 +10,7 @@ simlibs/RLCC/src/RLCC
 simlibs/RLCC/src/Makefile
 simlibs/*/src/Makefile
 results/
-
+_results/
 */src/out/*
 **/compile_commands.json
 **/.cache
