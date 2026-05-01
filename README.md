@@ -17,17 +17,19 @@ Raynet requires (at least) the following third party (open-source) software:
 OMNeT++ and INET are assumed to be installed the HOME directory. If this is an issue, feel free to alter `build.sh` and `cmakelists.txt` to support your needs or create symbolic links to your existing OMNeT++/INET directories.
 
 # RayNet Components
-**src** contains the binding API and a environment interface inspired by OMNeT++'s `cmdenv`. The contents of this directory collectively make up the simulation wrapper and will be compiled in to the `build` directory.
-**RLComponents** contains critical simulation components like the `Broker`. In addition to some helper classes, it also crucially contains `typedefs.h`, which is where observation types are defined on a per-protocol basis. If you wish to make your own protocol, you'll need to add a few lines to this header file.
-**simlibs** contains various user-provided simulation libraries. This includes RL-driven CC schemes written for RayNet like `Orca` and `Astraea` as well as generally useful OMNeT++ components like `cubic` and `TcpPaced`. Users wishing to add functionality to their simulations are encouraged to put any relevant code here.
+- **src**: contains the binding API and a environment interface inspired by OMNeT++'s `cmdenv`. The contents of this directory collectively make up the simulation wrapper and will be compiled in to the `build` directory.
+
+- **RLComponents**: contains critical simulation components like the `Broker`. In addition to some helper classes, it also crucially contains `typedefs.h`, which is where observation types are defined on a per-protocol basis. If you wish to make your own protocol, you'll need to add a few lines to this header file.
+
+- **simlibs**: contains various user-provided simulation libraries. This includes RL-driven CC schemes written for RayNet like `Orca` and `Astraea` as well as generally useful OMNeT++ components like `cubic` and `TcpPaced`. Users wishing to add functionality to their simulations are encouraged to put any relevant code here.
 
 # Evaluation Directories
 A collection of directories intended for evaluation scripts, topologies, results, plots, etc. are provided for your convenience. These directories include:
 - **_experiments**: Contains configuartion and scenario files to support experimentation.
 - **_plots**: Evaluation scripts will automatically output aggregate plots here.
 - **_results**: The experiment runner will parse simulation vector outputs, compile them into `.csv` files, and save them to this directory.
-- **_scripts**: Flexible, put whatever miscellaneous python scripts you need in here. By default, this contains an experiment runner and plotting script.
-- **_topologies**: Intended to contain generally useful topologies to be shared among many experiments and training environments. Currently only contains and a dumbbell topology.
+- **_scripts**: Used for various python scripts. By default, this contains an experiment runner and plotting script.
+- **_topologies**: Intended to contain generally useful topologies to be shared among many experiments and training environments. Currently only contains a dumbbell topology.
 
 ## Building instrutions
 
@@ -59,7 +61,7 @@ Several other build flags are included for convenience. Users are encouraged to 
 
 ### Step 4 - Python environmnet
 
-How and where this is done is up to the user, but access must provided to a Python environment with the modules in `requirements.txt` installed. The following commands will create a virtual environment in the RayNet directory and install required packages:
+Access must provided to a Python environment with the modules from `requirements.txt` installed. `requirementsExtras.txt` contains additional optional modules that may be useful for plotting and experimentation:
 ```
 python3 -m venv .venv
 source .venv/bin/activate
