@@ -23,7 +23,7 @@ _Custom Components_ refers to any simulation component that the user may need wh
 ## Dependencies
 
 The project has been tested on Ubuntu 20.04, with Omnet++ v5.6.2, pybind11 v2.7.1. Required dependencies are:
-- Omnet++ 6.0
+- Omnet++ 6.3.0
 - Ray 1.13.0
 
 To be able to reproduce congestion control results, you will also need to install:
