@@ -51,7 +51,7 @@ def create_csv_dict(results_dir:str=None):
     This dataframe provides easy navigation of all metric CSVs, which is useful for create combined plots.
     """
     if not results_dir:
-        results_dir = os.getenv('HOME') + "/raynet/results"
+        results_dir = os.getenv('HOME') + "/raynet/_results"
     
     csvs = []
     for root, dirs, files in os.walk(results_dir):
@@ -1115,8 +1115,8 @@ if __name__ == "__main__":
                     start_time = 0
                 show_competing = exp == "competing-flows"
                 (fig, axs) = plot_timeseries(run_df, startup_time=start_time, end_time=end_time, all=False, show_competing=show_competing)
-                fig.savefig(os.getenv('HOME') + f"/raynet/results/{exp}/{params}/run{int(run)}/summary.pdf")
-                print(f"Plotted timeseries: {os.getenv('HOME') + f"/raynet/results/{exp}/{params}/run{int(run)}/summary.pdf"}")
+                fig.savefig(os.getenv('HOME') + f"/raynet/_results/{exp}/{params}/run{int(run)}/summary.pdf")
+                print(f"Plotted timeseries: {os.getenv('HOME') + f"/raynet/_results/{exp}/{params}/run{int(run)}/summary.pdf"}")
                 plt.close(fig)
                 
                 
