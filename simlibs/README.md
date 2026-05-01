@@ -1,0 +1,4 @@
+# Simlibs
+This section contains various simulation libraries containing useful OMNeT++ components. Some of these components are RayNet-specific (Orca, Astraea, CleanSlate, and RLComponents) while others are from external source and only serve to add OMNeT++ functionality (tcpPaced, cubic). Orca, Astrea, and CleanSlate are the RL-driven CC schemes that were evaluated in the final report, and RLComponents contains the Broker and other (mostly deprecated) simulation components and helper classes.
+
+If you wish to create your own simulation library, simply copy the format that Orca and Astraea set out. Be sure to alter package names and especially the outermost MakeFile, which contains the command that informs OMNeT++ to link itself with the component.
