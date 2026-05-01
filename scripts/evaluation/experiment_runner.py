@@ -1,6 +1,5 @@
 import os
 import subprocess
-import eval_tools
 import itertools
 import pandas as pd
 import numpy as np

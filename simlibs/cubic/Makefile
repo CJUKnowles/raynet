@@ -10,7 +10,7 @@ cleanall: checkmakefiles
 	rm -f src/Makefile
 
 makefiles:
-	cd src && opp_makemake --make-so -f --deep -KINET4_5_PROJ=${HOME}/inet4.5 -KTCPPACED_PROJ=${HOME}/raynet/simlibs/tcpPaced -DINET_IMPORT -I$$\(INET4_5_PROJ\)/src -L$$\(INET4_5_PROJ\)/src -lINET$$\(D\) -I$$\(TCPPACED_PROJ\)/src -L$$\(TCPPACED_PROJ\)/src -ltcpPaced$$\(D\)
+	cd src && opp_makemake -o cubic --make-so -f --deep -KINET4_5_PROJ=${HOME}/inet4.5 -KTCPPACED_PROJ=${HOME}/raynet/simlibs/tcpPaced -DINET_IMPORT -I$$\(INET4_5_PROJ\)/src -L$$\(INET4_5_PROJ\)/src -lINET$$\(D\) -I$$\(TCPPACED_PROJ\)/src -L$$\(TCPPACED_PROJ\)/src -ltcpPaced$$\(D\)
 
 checkmakefiles:
 	@if [ ! -f src/Makefile ]; then \
