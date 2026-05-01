@@ -1,7 +1,7 @@
 # RayNet - RL Training Platform for Network Protocols
+RayNet (Raynet was originally created by Luca Giacomoni in 2023) is a platform that enables simulation-based development of RL-driven congestion control protocols through the OMNeT++ discrete event simulator.  This repo is an extension of RayNet designed to improve the user experience and expand RayNet's capabilities as part of a final year project at the University of Sussex.
 
 ## System software components
-
 This repository contains RayNet's source code and some scripts to train and evauate RL models. 
 
 The system integrates the core Omnet++ discrete event simulator with its linked simulation libraries and Ray/RLlib through pybindings11. The figure below depicts the different packages/libraries in RayNet:
@@ -9,12 +9,12 @@ The system integrates the core Omnet++ discrete event simulator with its linked 
 <img src="/docs/images/libraries.png" width="600">
 
 Raynet requires (at least) the following third party (open-source) software:
-- Omnet++
-- Ray/RLlib
-- Tensorflow or Pytorch
+- **Omnet++**: Provides the underlying simulation framework. Support for version 6.3 was added as part of this fork but still need work. In particular, this version causes crashes on environment reset that are usually caught and handled by Ray/RLlib without issue. If this is a problem, version 6.0 support is more stable but may not work with newer versions of external dependencies like INET.
+- **INET**: Provides useful simulation components relating to computer networks and congestion control. A custom version of INET4.5 was used for this project (https://github.com/Avian688/inet4.5) and is required for the Orca, Astrea, CleanSlate, TcpPaced, and Cubic simlibs. Aiden Valentine is the author of this custom INET version as well as the TcpPaced and Cubic simlibs.
+- **Ray/RLlib**: RayNet supports all traditional RL workflows through `OmnetBindApi`, but Ray/RLlib is the most trivially supported and well-tested option for RayNet. Plus, the repo contains many Ray/RLlib examples to work off of.
+- **Python Modules:** Critical python modules like TensorFlow and PyTorch support training and evaluation scripts. A `requirements.txt` is provided that lists the essential modules, and `requirementsExtras.txt` provides **all** modules used in production of the final year project.
 
-If you require to build TCP/IP simulation models, or reproduce the results of our RL-driven congestion control policy, you'll also need:
-- INET
+OMNeT++ and INET are assumed to be installed the HOME directory. If this is an issue, feel free to alter `build.sh` and `cmakelists.txt` to support your needs or create symbolic links to your existing OMNeT++/INET directories.
 
 **RLComponents** is part of our distribution and include ad-hoc components (_Stepper_, _Broker_, _RLInterface_) that allow simulations to run agents that make decisions in a time discrete fashion. 
 
