@@ -25,6 +25,7 @@ model/out
 model/Makefile
 *.so
 *.exe
+**/ini_variants
 *.a
 *.o
 inet4.5
