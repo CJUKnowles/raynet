@@ -1,0 +1,2 @@
+# RLComponents
+Contains critical RayNet components that enable RL-functionality in the simulation. Most importantly contains the Broker, which must be included in every RayNet simulation and is reponsible for brokering information between simulation and non-simulation components. Also contains `typedefs.h`, which is where observations for each RL-driven CC scheme is defined. 
