@@ -35,81 +35,6 @@ protocol_markers = {
     "Astrea": "^",
 }
 
-# def plot_goodput_ratio_aggregate(csv_df, ax=None, show_competition=False):
-#     csv_df = csv_df[csv_df["module_type"].str.contains("server")]
-#     csv_df = csv_df[csv_df["module"].str.contains("conn")]
-#     csv_df = csv_df[csv_df["module"].str.contains("0")]
-#     csv_df = csv_df[csv_df["metric"].str.contains("throughput")]
-
-#     if csv_df.empty:
-#         print("plot_goodput_ratio_aggregate(): CSV dataframe is empty. Returning.")
-#         return None
-
-#     qsizes = sorted(csv_df["QSIZE"].unique())
-
-#     if ax is None:
-#         fig, axes = plt.subplots(1, len(qsizes), figsize=(6 * len(qsizes), 5), sharey=True)
-#         if len(qsizes) == 1:
-#             axes = [axes]
-#     else:
-#         axes = ax if isinstance(ax, (list, np.ndarray)) else [ax]
-
-#     empty_axes = [a for a in axes if is_ax_empty(a)]
-#     axes_to_use = empty_axes[:len(qsizes)]
-
-#     if len(axes_to_use) < len(qsizes):
-#         raise ValueError("Not enough empty subplots to draw all queue sizes")
-
-#     for ax_i, qsize in zip(axes_to_use, qsizes):
-#         df_q = csv_df[csv_df["QSIZE"] == qsize]
-
-#         delays = sorted(df_q["DELAY"].unique())
-#         protocols = df_q["protocol"].unique()
-
-#         bar_width = 0.8 / len(protocols)
-#         x_positions = np.arange(len(delays))
-
-#         all_y_values = []
-
-#         for i, protocol in enumerate(protocols):
-#             proto_df = df_q[df_q["protocol"] == protocol]
-
-#             y_vals = []
-#             for delay in delays:
-#                 row = proto_df[proto_df["DELAY"] == delay]
-#                 if row.empty:
-#                     y_vals.append(0)
-#                     continue
-#                 row = row.iloc[0]
-#                 data = pd.read_csv(row["csv_path"])
-
-#                 ratio = data["throughput"].mean() / parse_numeric(row["BANDWIDTH"])
-#                 y_vals.append(ratio)
-#                 all_y_values.append(ratio)
-
-#             ax_i.bar(
-#                 x_positions + i * bar_width,
-#                 y_vals,
-#                 width=bar_width,
-#                 label=protocol,
-#                 color=protocol_colors[protocol],
-#             )
-
-#         ax_i.set_xticks(x_positions + bar_width * (len(protocols) - 1) / 2)
-#         ax_i.set_xticklabels(delays)
-
-#         ax_i.set_title(f"QSIZE = {qsize}")
-#         ax_i.set_xlabel("Delay")
-#         ax_i.grid(True)
-
-#         if ax_i is axes_to_use[0]:
-#             ax_i.set_ylabel("Goodput Ratio")
-
-#     axes_to_use[0].legend(fontsize=8)
-    
-#     return axes_to_use
-
-
 def parse_numeric(value, as_int=False):
     match = re.search(r"[-+]?\d*\.?\d+", str(value))
     if as_int:
@@ -1148,32 +1073,32 @@ def plot_cdfs(exp_df, size=.6):
     fig.savefig(os.getenv('HOME') + f"/raynet/_plots/{exp}_cdf.pdf")
     plt.close(fig)
 
+
+"""
+Automatically generates plots for all experiments. This is mostly built-to-purpose for the dissertation plots,
+but can serve as a template for other experiment/plot automation by future maintainers as well.
+- Timeseries plots are for a particular run
+- CDF plots are intended for the responsiveness experiment, showing aggregate performance over many random trials
+- TCP friendliness plots are intended for the competing flows experiment, showing goodput ratio against the competing cubic flow
+"""
 if __name__ == "__main__":    
     metric_csvs = create_csv_dict()        # dataframe containing [experiment, params, protocol, module, metric, csv_path] for easy access
-    experiments = ["competing-flows"]
+    experiments = ["competing-flows", "responsiveness", "single-flow"]
     for exp in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == exp]
         
-        # # Special aggregate plots unique to each experiment
-        # if exp == "competing-flows":
-        #     print("Plotting completing flows aggregate plots")
-        #     fig, axes = plot_tcp_friendliness(exp_df, startup_time=30)
-        #     fig.savefig(os.getenv('HOME') + f"/raynet/_plots/{exp}_tcp-friendliness.pdf")
-        #     plt.close(fig)
-        # elif exp == "responsiveness":
-        #     print("Plotting responsiveness aggregate plots")
-        #     plot_cdfs(exp_df)
-        # else:
-        #     print("Plotting single flow aggregate plots")
-        #     plot_aggregate_metrics(exp_df)
-        #     # print("Plotting single flow aggregate plots")
-        #     # fig, axes = plot_throughput_aggregate(exp_df, end_time=60)
-        #     # fig.savefig(os.getenv('HOME') + f"/raynet/_plots/{exp}_throughput.pdf")
-        #     # plt.close(fig)
-        #     # fig, axes = plot_delay_aggregate(exp_df, end_time=60)
-        #     # fig.savefig(os.getenv('HOME') + f"/raynet/_plots/{exp}_delay.pdf")
-        #     # plt.close(fig)
-        
+        # Special aggregate plots unique to each experiment
+        if exp == "competing-flows":
+            print("Plotting completing flows aggregate plots")
+            fig, axes = plot_tcp_friendliness(exp_df, startup_time=30)
+            fig.savefig(os.getenv('HOME') + f"/raynet/_plots/{exp}_tcp-friendliness.pdf")
+            plt.close(fig)
+        elif exp == "responsiveness":
+            print("Plotting responsiveness aggregate plots")
+            plot_cdfs(exp_df)
+        else:
+            print("Plotting single flow aggregate plots")
+            plot_aggregate_metrics(exp_df)
 
         # Summary Timeseries plots for all experiments (may be slow!)
         for params in exp_df["params"].unique():

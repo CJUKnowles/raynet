@@ -200,8 +200,7 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
 def run_experiments(experiments_dict, create_output_csv=True):
     """
     Runs the given experiment for each protocol listed, using their respective eval runner scripts
-    Input:
-        A dict containing the experiments to run as keys, and the protoocls to run them with as values.
+    - This is admittedly very messy and was developed in a time crunch for the dissertation, but it gets the job done and can be cleaned up later if needed
     """
     python = f"{os.getenv('HOME')}/raynet/.venv/bin/python"
     
@@ -322,31 +321,37 @@ def run_experiments(experiments_dict, create_output_csv=True):
                     exp_results_dir = os.getenv('HOME') + f"/raynet/_experiments/{experiment_name}/ini_variants/results"
                     generate_exp_csvs(exp_results_dir, protocol_name, params_str=params_suffix, short_params_str=short_params_suffix, run=run)
         
+"""
+Automation script for running many experiments with different parameter combinations and protocols
+- Each param in the "params" field will be substituted into the assoociated .ini file (e.g. BANDWIDTH_PLACEHOLDER)
+- All param combos will be automatically explored via itertools.product, and each combo will generate a unique config file
+- The "meta" section contains other useful information that will not be used for replacement or naming or the itertools product, but can be used for other experiment-specific stuff
+"""
 if __name__ == "__main__":
     random.seed(47901741)
     experiments_to_run = {
-        # "responsiveness": {
-        #     "protocols": ["Orca", "Cubic", "CleanSlate"],
-        #     "params": {
-        #         "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
-        #         },
-        #     "meta": {
-        #         "runs" : 100,
-        #         "bw_range" : (10, 20),
-        #         "rtt_range" : (10, 100),
-        #         }
-        #     },
-        # "competing-flows": {
-        #     "protocols": ["Cubic", "Orca", "CleanSlate"],
-        #     "params": {
-        #         "BANDWIDTH" : ["10Mbps"],
-        #         "DELAY"     : ["10ms", "20ms", "30ms", "40ms", "50ms", "60ms", "70ms", "80ms","90ms", "100ms"],    
-        #         "QSIZE": [".2bdp", "1bdp", "4bdp"],
-        #         },
-        #    "meta": {
-        #        "runs" : 10,
-        #        }
-        #     },
+        "responsiveness": {
+            "protocols": ["Orca", "Cubic", "CleanSlate"],
+            "params": {
+                "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
+                },
+            "meta": {
+                "runs" : 100,
+                "bw_range" : (10, 20),
+                "rtt_range" : (10, 100),
+                }
+            },
+        "competing-flows": {
+            "protocols": ["Cubic", "Orca", "CleanSlate"],
+            "params": {
+                "BANDWIDTH" : ["10Mbps"],
+                "DELAY"     : ["10ms", "20ms", "30ms", "40ms", "50ms", "60ms", "70ms", "80ms","90ms", "100ms"],    
+                "QSIZE": [".2bdp", "1bdp", "4bdp"],
+                },
+           "meta": {
+               "runs" : 10,
+               }
+            },
         "single-flow": {
             "protocols": ["Cubic", "Orca", "CleanSlate"],
             "params": {
@@ -358,28 +363,6 @@ if __name__ == "__main__":
                "runs" : 10,
                }
             },
-        # "competing-flows": {
-        #     "protocols": ["Orca", "Cubic", "CleanSlate"],
-        #     "params": {
-        #         "BANDWIDTH" : ["10Mbps"],
-        #         "DELAY"     : ["10ms","50ms","100ms"],    
-        #         "QSIZE": [".2bdp", "1bdp", "4bdp"],
-        #         },
-        #    "meta": {
-        #        "runs" : 3,
-        #        }
-        #     },
-        # "responsiveness": {
-        #     "protocols": ["Orca", "Cubic", "CleanSlate"],
-        #     "params": {
-        #         "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
-        #         },
-        #     "meta": {
-        #         "runs" : 3,
-        #         "bw_range" : (10, 20),
-        #         "rtt_range" : (10, 100),
-        #         }
-        #     },
     }
     
     run_experiments(experiments_to_run)
