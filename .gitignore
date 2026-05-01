@@ -14,7 +14,7 @@ _results/
 */src/out/*
 **/compile_commands.json
 **/.cache
-
+.DS_STORE
 .cache
 *.venv
 resultsoutput.csv
