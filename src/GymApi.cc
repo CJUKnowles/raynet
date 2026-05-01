@@ -10,7 +10,10 @@ void GymApi::cleanupmemory(){
     getSimulation()->deleteNetwork();
     cSimulation::setActiveSimulation(nullptr);
     delete simulationPtr;  // will delete app as well
-
+    
+    // Below are manual cleanup steps to prevent memory leaks and dangling pointers.
+    // Some of these are likely best practices and should be kept, but cause crashes during cleaup in new OMNeT++ versions.
+    // Most of these should be added back in once the reset lifecycle listener/segfault bug is fixed, but for now they are commented out to prevent crashes during cleanup.
     // CodeFragments::executeAll(CodeFragments::SHUTDOWN);
     
     // cout << "GymApi.cc::cleanupmemory(): Manually removing all dead lifecyclelisteners from static env:" << endl;
@@ -21,15 +24,14 @@ void GymApi::cleanupmemory(){
     // }
     
     // cout << "Done removing listeners. Listener list after removal: " << endl;
-
     // delete env;
-
     // delete simulationPtr;
     // delete event;
     // delete bootconfigptr;
     // delete inifilePtr;
 }
 
+// Generates a new OMNeT++ simulation and environment, and initializes them with the provided ini file and section name.
 void GymApi::initialise(std::string _iniPath, std::string sectionName){
     cStaticFlag dummy;
     // initializations
@@ -58,68 +60,32 @@ void GymApi::initialise(std::string _iniPath, std::string sectionName){
 
     // Finally, initialize the simulation environment and its components.
     env->initialiseEnvironment(cstrings.size(), &cstrings[0],bootconfigptr, sectionName);
-    
 }
 
-
+// Performs a single step without an action, and returns the resulting observations from the environment
  std::unordered_map<std::string, ObsType > GymApi::reset(){
     // Reset the environment
     bool isReset = true;
     std::unordered_map<std::string, ObsType > resetObs;
-
-    // run the simulation
-
     std::string id = env->step(0, isReset);
 
-
-    if(id != "SIMULATION_END"){
-        cModule *mod = getSimulation()->getModuleByPath((getSimulation()->getSystemModule()->getFullPath()+string(".broker")).c_str());
-        Broker *target = check_and_cast<Broker *>(mod);
-
-
-        auto obss = target->getObservations();
-        int numObservationsCollected = target->invalidateOldStates();
-        bool simDone = false;
-        // Don't do this anymore. getObservations() now returns only new observations. Set Broker.ObsCollectionMode to IMMEDIATE if you only want one obs per dict
-        // // Prune any observations not from the agent that triggered this EOS
-        // auto it = obss.begin();
-        // while (it != obss.end()) {
-        //     // Check if key's first character is F
-        //     if (it->first != id) {
-        //         // erase() function returns the iterator of the next
-        //         // to last deleted element.
-        //         it = obss.erase(it);
-        //     } else
-        //         it++;
-        // }
-        return obss;
-    }
-    else{
+    // Return early and notify the trainer if the simulation has concluded
+    if(id == "SIMULATION_END"){
         ObsType obs;
         std::unordered_map<std::string, ObsType> obss = { {"SIMULATION_END", obs} };
-        return obss;
+        return obss;   
     }
-    
+
+    // Otherwise, return initial observations from the environment
+    cModule *mod = getSimulation()->getModuleByPath((getSimulation()->getSystemModule()->getFullPath()+string(".broker")).c_str());
+    Broker *target = check_and_cast<Broker *>(mod);
+    auto obss = target->getObservations();
+    int numObservationsCollected = target->invalidateOldStates();
+    bool simDone = false;
+    return obss;
 }
 
-// std::tuple<std::unordered_map<std::string, ObsType >, std::unordered_map<std::string, RewardType > , std::unordered_map<std::string,bool > > GymApi::step(ActionType action){
-    
-//     std::tuple<std::unordered_map<std::string, ObsType >, std::unordered_map<std::string, RewardType > , std::unordered_map<std::string,bool > > returnTuple;
-//     bool isReset = false;
-
-//     string networkname("simplenetwork");
-//     // We call step on the environment
-//     env->step(action, isReset, networkname);
-
-
-//     cModule *mod = getSimulation()->getModuleByPath((networkname+string(".broker")).c_str());
-//     Broker *target = check_and_cast<Broker *>(mod);
-    
-//     returnTuple = {target->getObservations(), target->getRewards(), target->getDones()};
-
-//     return returnTuple;
-// }
-
+// Progresses the simulation by calling env->step() (Cmderlenv::step()) with the provided action, and returns the resulting observations, rewards, and done flags for all agents in a tuple.
 std::tuple< std::unordered_map<std::string, ObsType>,
             std::unordered_map<std::string, RewardType>,
             std::unordered_map<std::string,bool>,
@@ -133,30 +99,29 @@ std::tuple< std::unordered_map<std::string, ObsType>,
     std::tuple<std::unordered_map<std::string, ObsType >, std::unordered_map<std::string, RewardType > , std::unordered_map<std::string,bool > , std::unordered_map<std::string,bool > > returnTuple;
     bool isReset = false;
     std::string id = env->step(actions, isReset);
-
+    
+    // Collects obs, rewards, dones, etc. from the Broker and return to the trainer
     cModule *mod = getSimulation()->getModuleByPath(( getSimulation()->getSystemModule()->getFullPath()+ string(".broker")).c_str());
     Broker *target = check_and_cast<Broker *>(mod);
-
     auto obss = target->getObservations();
     auto rewards = target->getRewards();
     auto dones = target->getDones();
     int numObservationsCollected = target->invalidateOldStates();
+    
+    // Add extra done info to send to the trainer
     bool allDone = target->getAllDone();
     dones.insert({"__all__", allDone});
-
     bool simDone = false;
-
     if(id == "SIMULATION_END"){
         simDone = true;
     }
-    
+
     returnTuple = { obss, rewards, dones, { {"simDone", simDone} } };
     return returnTuple;
 }
 
 
-void GymApi::shutdown(){
-    
+void GymApi::shutdown(){    
     env->endSimulation();
 }
   

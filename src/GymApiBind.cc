@@ -7,7 +7,7 @@ namespace py = pybind11;
 PYBIND11_MODULE(omnetbind, m) {
     m.doc() = "binding module to run Omnet++ simulation from Python";
     
-    // bindings to abc class
+    // Translates python function calls to GymApi methods
     py::class_<GymApi>(m, "OmnetGymApi")
         .def(py::init<>())
         .def("initialise", &GymApi::initialise)

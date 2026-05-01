@@ -22,7 +22,7 @@ using namespace std;
 
 
 /**
- * Command line user interface.
+ * Extension of OMNeT++'s command line user interface to provide RL functionality
  */
 class Cmdrlenv : public Cmdenv
 {
@@ -36,10 +36,6 @@ class Cmdrlenv : public Cmdenv
 
     // Shutdown the simulation
     void endSimulation();
-
-    double getReward();
-    std::vector<double> getObservation();
-
 };
 
 #endif
