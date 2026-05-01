@@ -136,36 +136,26 @@ class OmnetGymApiEnv(gym.Env):
 
     def step(self, actions):
         """
-        Receive an action from the policy (provided by RLlib), forward it to the RayNet RLAgent, and return the result to RLlib for further training.
-        - This experiment(?) script is not responsible for determining the action/policy, it is just a middleman between RLlib and the RayNet RLAgent.
+        Receive an action from the policy (provided by RLlib), forward it to the RayNet RLAgent, and return the result to RLlib for training and inference.
+        - This script is not responsible for determining the action/policy. It is just a middleman between RLlib and the RayNet RLAgent.
         - Actions/observations exist in a dictionary to support multi-agent environments.
-        - This experiment only support single-agent environments, so observations/rewards are immediately extracted from the dictionary
+        - Orca only supports single-agent environments, so observations/rewards are immediately extracted from the dictionary
         """
         # Forward the action (provided by RLlib) to OMNeT++ (and eventually our RLAgent Orca), and retrieve the RLAgent's reported result
-        actions = actions.item() # TODO: Make sure this is right. Your types and shapes are a bit sketchy atm
+        actions = actions.item()
         action = {'Orca': actions}
         obs, rewards, terminateds, info_ = self.runner.step(action)
         self.obs_history.extend(obs['Orca'])
-        # print("Step obs:")
-        # print(obs)
         
         # Extra the relevant obs/rewards from the environment info (only the info relevent to our single-agent)
         obs = np.asarray(list(obs['Orca']), dtype=np.float32)    # also formats the RLAgent's obs so RLlib can understand it
         return_obs_history = np.asarray(list(self.obs_history),dtype=np.float32)
-        #TODO: Append this to self.obs_history and return that instead. 
         reward = rewards['Orca']                               # Get the reward our RLAgent is reporting
         sim_truncated = False
-  
-        # Debug stuff
-        # print("\t\t\tSTEP: ")
-        # print("\t\t\tobs: ", obs)
-        # print("\t\t\trewards: ", rewards)
-        # print("\t\t\tterminateds: ", terminateds)
-        # print("\t\t\tinfo_: ", info_)
         if math.isnan(reward):
             print("Warning: NaN reward returned!")
+            
         # Check if this training episode is complete
-        
         if terminateds['Orca']:      # TERMINATED - The RLAgent has reported itself as done (within the context of the MDP.) End the simulation.
             print(terminateds)
             self.runner.shutdown()
@@ -180,17 +170,12 @@ class OmnetGymApiEnv(gym.Env):
 def omnetgymapienv_creator(env_config):
     return OmnetGymApiEnv(env_config)  # return an env instance
 
-register_env("OmnetGymApiEnv", omnetgymapienv_creator)
-
 if __name__ == '__main__':
     env_name = "Orca-1.6"
     register_env(env_name, omnetgymapienv_creator)
     num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
     max_steps_range = (2000, 2000)
-    # bottleneck_bandwidth_range = (6, 6)            
-    # minimum_rtt_range = (5, 5)
-    # bottleneck_buffer_range = (5280000, 5280000) 
     
     # Original run training params
     bottleneck_bandwidth_range = (5, 20)            # Megabits
@@ -259,26 +244,3 @@ if __name__ == '__main__':
             algo.save_checkpoint(checkpoint_dir) # Somehow get the directory from this?
             print(f"Saved checkpoint to {checkpoint_dir}")
             checkpoint += 1
-
-    # old -------------------------------
-    #algo = SAC.from_checkpoint(os.getenv('HOME') + "/ray_results/orca/SAC_OmnetGymApiEnv_8fe1c_00000_0_2026-03-04_01-57-55/checkpoint_000021")
-    # ray.tune.run(
-    #     "SAC",
-    #     name="orca",
-    #     stop={"num_env_steps_sampled_lifetime": steps_to_train},
-    #     config=config,
-    #     restore=os.getenv('HOME') + "/ray_results/orca/SAC_OmnetGymApiEnv_8fe1c_00000_0_2026-03-04_01-57-55/checkpoint_000021",
-    #     #resume=True,
-    #     checkpoint_config=CheckpointConfig(checkpoint_frequency=1000, checkpoint_at_end=True),
-
-    # )
-    
-    # trials_dfs = exp.trial_dataframes # Returns a dict of dfs. Each df represents a trial, and contains rows of training iterations. Used for time series plots.
-    # trials_results = exp.results_df # Returns a df in which each row represents a trial, and contains aggregate/summary information about it. Used for scalar plots.
-    # #results = exp.dataframe()
-    
-    # results_path = exp.experiment_path
-    
-    # for trial_id, trial_df in trials_dfs.items():
-    #     print(f"Creating plot for trial {trial_id}")
-    #     eval_utils.plot_experiment_summary(trial_df, exp.experiment_path, f"{trial_id}_time_series.pdf")

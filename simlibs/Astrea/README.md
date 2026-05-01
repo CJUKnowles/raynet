@@ -1,0 +1,2 @@
+# Astraea
+Astraea is unfortunately unfinished due to issues during training. There is likely something wrong with the replay buffer configuration or reward computation. Astraea does function and will run in multi-agent simulations, but has so far made no progress with extended training. 

@@ -26,11 +26,6 @@ import torch
 
 class OmnetGymApiEnv(gym.Env):
     def __init__(self,env_config):
-        """
-        Initialize the training environment configuration
-        - This mostly involves setting spcaes (bounds, shapes, types) for actions and observations.
-        - These bounds are needed for RL algorithms provided by RLlib- They limit the problem space and are also used for normalization.
-        """
         sys.path.insert(0, os.path.join(os.getenv('HOME'), "raynet", "build"))
         from omnetbind import OmnetGymApi
         self.runner = OmnetGymApi()
@@ -142,6 +137,11 @@ def omnetgymapienv_creator(env_config):
 
 register_env("OmnetGymApiEnv", omnetgymapienv_creator)
 
+
+"""
+This script is just a copy of OrcaEval.py that uses the cubic configuration section (which is again, just orca, but does not apply actions).
+This is done so that Cubic outputs all the relevant signals during evalution that were written for Orca, but isn't strictly necessary.    
+"""
 if __name__ == '__main__':
     env_name = "Cubic-inference"
     register_env(env_name, omnetgymapienv_creator)
