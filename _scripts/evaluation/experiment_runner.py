@@ -93,13 +93,13 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
         short_params_str = params_str
     if not run:
         run = 0
-    argNum = 0
-    vectorsToExtract = ["throughput", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "queueLength", "queueBitLength", "incomingDataRate", "outgoingDataRate"]
-    extracted = False
     if not protocol_nickname:
         protocol_nickname = protocol
     if not exp_nickname:
-        exp_nickname = filepath.rsplit("/", 3)[1]
+        exp_nickname = filepath.rsplit("/", 4)[-4]
+    argNum = 0
+    vectorsToExtract = ["throughput", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "queueLength", "queueBitLength", "incomingDataRate", "outgoingDataRate"]
+    extracted = False
     
     vec_file = filepath + f"/{protocol}-#0.vec"
     out_path = filepath + "output.csv"

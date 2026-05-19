@@ -81,6 +81,8 @@ export RAYNET_FEATURE=$feature
 # Command/flags have been validated. Begin building here.
 # ----------------------------------------------------------------------------------------------------------------------------------
 
+source $HOME/omnetpp/setenv
+
 # List of simlibs. Any simlib that needs to be compiled FIRST (eg. is a dependency) should be added here, rather than the loop.
 simlibs=("$RAYNET_HOME/simlibs/RLComponents"
          "$RAYNET_HOME/simlibs/tcpPaced"
