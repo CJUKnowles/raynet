@@ -11,6 +11,7 @@ simlibs/RLCC/src/Makefile
 simlibs/*/src/Makefile
 results/
 _results/
+_results_SUBMISSION/
 */src/out/*
 **/compile_commands.json
 **/.cache

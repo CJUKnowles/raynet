@@ -13,4 +13,9 @@
 - [ ] Remove all Cmdrlenv outputs when in silent mode
 - [ ] Add experiment fault-tolerance to allow experiments to continue running if one fails
 - [ ] Track experiment runner progress so it can easily be paused and resumed
+- [ ] Add experiment runner/plotter progress outputs and time estimates
+- [ ] Reduce the number of vectors recorded for experiments (could only get them to work reliably by outputting all of them)
+- [ ] Update python libraries where possible. Hunt down some of those startup warnings. 
+- [ ] Clean up build scripts and remove their deprecated features (like passing CLEAN_ALL to cmake)
+- [ ] Prune requirements-extra.txt of any unused modules. Anything not currently used in training scripts or experiment_runner/plotter are probably useless.
 - [ ] 

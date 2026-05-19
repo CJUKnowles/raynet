@@ -430,7 +430,7 @@ def plot_throughput_timeseries(csv_df, ax=None, show_competition=True, startup_t
 
 def plot_timeseries(exp_df, startup_time=0, end_time=60, all=True, show_competing=False, size=.5):
     if all:
-        count = 4
+        count = 5
     else:
         count = 3
     fig, axs = plt.subplots(count, 1, figsize=(15 * size, count * 5 * size))
@@ -439,6 +439,7 @@ def plot_timeseries(exp_df, startup_time=0, end_time=60, all=True, show_competin
     plot_cwnd_timeseries(run_df, axs[2], startup_time=startup_time,  end_time=end_time)
     if all: 
         plot_pacerate_timeseries(run_df, axs[3], startup_time=startup_time,  end_time=end_time)
+        plot_qsize_timeseries(run_df, axs[4], startup_time=startup_time,  end_time=end_time)
     fig.subplots_adjust(top=0.95, bottom=.07, left=.1, right=.97)
     axs[count-1].set_xlabel("Time (seconds)")
     # for ax_i in axs[0]:
@@ -1087,18 +1088,18 @@ if __name__ == "__main__":
     for exp in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == exp]
         
-        # Special aggregate plots unique to each experiment
-        if exp == "competing-flows":
-            print("Plotting completing flows aggregate plots")
-            fig, axes = plot_tcp_friendliness(exp_df, startup_time=30)
-            fig.savefig(os.getenv('HOME') + f"/raynet/_plots/{exp}_tcp-friendliness.pdf")
-            plt.close(fig)
-        elif exp == "responsiveness":
-            print("Plotting responsiveness aggregate plots")
-            plot_cdfs(exp_df)
-        else:
-            print("Plotting single flow aggregate plots")
-            plot_aggregate_metrics(exp_df)
+        # # Special aggregate plots unique to each experiment
+        # if exp == "competing-flows":
+        #     print("Plotting completing flows aggregate plots")
+        #     fig, axes = plot_tcp_friendliness(exp_df, startup_time=30)
+        #     fig.savefig(os.getenv('HOME') + f"/raynet/_plots/{exp}_tcp-friendliness.pdf")
+        #     plt.close(fig)
+        # elif exp == "responsiveness":
+        #     print("Plotting responsiveness aggregate plots")
+        #     plot_cdfs(exp_df)
+        # else:
+        #     print("Plotting single flow aggregate plots")
+        #     plot_aggregate_metrics(exp_df)
 
         # Summary Timeseries plots for all experiments (may be slow!)
         for params in exp_df["params"].unique():
@@ -1114,7 +1115,7 @@ if __name__ == "__main__":
                 else:
                     start_time = 0
                 show_competing = exp == "competing-flows"
-                (fig, axs) = plot_timeseries(run_df, startup_time=start_time, end_time=end_time, all=False, show_competing=show_competing)
+                (fig, axs) = plot_timeseries(run_df, startup_time=start_time, end_time=end_time, all=True, show_competing=show_competing)
                 fig.savefig(os.getenv('HOME') + f"/raynet/_results/{exp}/{params}/run{int(run)}/summary.pdf")
                 print(f"Plotted timeseries: {os.getenv('HOME') + f"/raynet/_results/{exp}/{params}/run{int(run)}/summary.pdf"}")
                 plt.close(fig)
