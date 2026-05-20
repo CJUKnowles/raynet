@@ -198,7 +198,7 @@ if __name__ == '__main__':
     bottleneck_buffer_range = (25000, 4000000)    # Bits. 1x min BDP to 2x max BDP
     
     load_from_checkpoint = True
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_CleanSlate-1.6_2026-04-25_10-11-221ee1c874/checkpoints/checkpoint_13"
+    checkpoint_load_dir = os.getenv('HOME') + "/raynet/_models/CleanSlate/checkpoints/checkpoint_13"
     steps_to_train = 1000000
     
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/CleanSlate/src/training/CleanSlateTraining.ini",

@@ -183,7 +183,7 @@ if __name__ == '__main__':
     bottleneck_buffer_range = (25000, 4000000)    # Bits. 1x min BDP to 2x max BDP
     
     load_from_checkpoint = True
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/Orca-1.6/SAC_Orca-1.6_2026-04-24_01-43-07r_7_n4yw/checkpoints/checkpoint_16"
+    checkpoint_load_dir = os.getenv('HOME') + "/raynet/_models/Orca/checkpoints/checkpoint_16"
     steps_to_train = 1000000
     
     env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Orca/src/training/OrcaTraining.ini",
