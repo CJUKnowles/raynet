@@ -1,3 +1,12 @@
+"""
+This script is a demonstration of how to run RayNet on one of the experiments from orbtcpExperiments.
+- There is a specific python version provided, but it shouldn't matter so long as the environment used has ray/rllib and other critical libraries
+- The runner script is the one associated with the protocol being evaluated (e.g. OrcaEval.py for Orca)
+- An ini_path and section name must be provided to specify what to run
+- Each runner script points to a specific checkpoint (like in raynet/_models) that is used for inference. 
+- Cubic is only included here becuase it was easier to just run Orca with actions disabled for my experiment setup.
+"""
+
 import os
 
 runner_paths = {
