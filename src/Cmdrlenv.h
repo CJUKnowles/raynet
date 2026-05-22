@@ -26,6 +26,12 @@ using namespace std;
  */
 class Cmdrlenv : public Cmdenv
 {
+  private:
+    bool endRunRequired = false;
+    bool networkSetupDone = false;
+    bool finishCalled = false;
+    bool runEnded = false;
+
   public:
     Cmdrlenv();
     // Set up the simulation

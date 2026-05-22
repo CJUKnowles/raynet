@@ -15,6 +15,11 @@ inline bool elapsed(long millis, int64_t& since)
 // Loads the configuration file and initializes the simulation environment, preparing it for execution. Seemingly copied almost entirely from Cmdenv
 void Cmdrlenv::initialiseEnvironment(int argc, char *argv[],cConfiguration *configobject, std::string sectionName){
     cout << "Cmdrlenv::initialiseEnvironment()------------------------" << endl;
+    endRunRequired = false;
+    networkSetupDone = false;
+    finishCalled = false;
+    runEnded = false;
+
     opt = static_cast<CmdenvOptions*>(createOptions());
 
     args = new ArgList();
@@ -50,9 +55,6 @@ void Cmdrlenv::initialiseEnvironment(int argc, char *argv[],cConfiguration *conf
             return;
         }
 
-        bool finishedOK = false;
-        bool networkSetupDone = false;
-        bool endRunRequired = false;
         try{
             if (opt->verbose)
                     out << "\nPreparing for running configuration " << opt->configName << ", run #" << 0 << "..." << endl;
@@ -329,12 +331,57 @@ std::string Cmdrlenv::step(std::unordered_map<std::string, ActionType>  actions,
 
 
 void Cmdrlenv::endSimulation(){
-    loggingEnabled = true;
-    if (opt->verbose)
-        out << "\nCalling finish() at end of Run" << endl;
-    getSimulation()->callFinish();
-    cLogProxy::flushLastLine();
-    checkFingerprint();
-    notifyLifecycleListeners(LF_ON_SIMULATION_SUCCESS);
-    shutdown();
+    if (runEnded)
+        return;
+
+    bool finishedOK = true;
+
+    try {
+        loggingEnabled = opt->logDuringFinish;
+        if (!finishCalled && getSimulation()->getSystemModule()) {
+            if (opt->verbose)
+                out << "\nCalling finish() at end of Run..." << endl;
+            getSimulation()->callFinish();
+            finishCalled = true;
+            cLogProxy::flushLastLine();
+            checkFingerprint();
+            notifyLifecycleListeners(LF_ON_SIMULATION_SUCCESS);
+        }
+    }
+    catch (std::exception& e) {
+        finishedOK = false;
+        stoppedWithException(e);
+        notifyLifecycleListeners(LF_ON_SIMULATION_ERROR);
+        displayException(e);
+    }
+
+    if (endRunRequired) {
+        try {
+            notifyLifecycleListeners(LF_ON_RUN_END);
+            runEnded = true;
+        }
+        catch (std::exception& e) {
+            finishedOK = false;
+            notifyLifecycleListeners(LF_ON_SIMULATION_ERROR);
+            displayException(e);
+        }
+    }
+
+    if (networkSetupDone) {
+        try {
+            loggingEnabled = opt->logDuringCleanup;
+            getSimulation()->deleteNetwork();
+            networkSetupDone = false;
+        }
+        catch (std::exception& e) {
+            finishedOK = false;
+            notifyLifecycleListeners(LF_ON_SIMULATION_ERROR);
+            displayException(e);
+        }
+    }
+
+    stopOutputRedirection();
+
+    if (!finishedOK)
+        exitCode = 1;
 }

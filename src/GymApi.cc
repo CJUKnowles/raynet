@@ -3,13 +3,21 @@
 #include <string>
 
 
-GymApi::GymApi(){
+GymApi::GymApi()
+    : env(nullptr), simulationPtr(nullptr), event(nullptr), bootconfigptr(nullptr), inifilePtr(nullptr)
+{
 }
 
 void GymApi::cleanupmemory(){
-    getSimulation()->deleteNetwork();
+    if (env)
+        env->endSimulation();
+    else if (simulationPtr)
+        simulationPtr->deleteNetwork();
+
     cSimulation::setActiveSimulation(nullptr);
     delete simulationPtr;  // will delete app as well
+    simulationPtr = nullptr;
+    env = nullptr;
     
     // Below are manual cleanup steps to prevent memory leaks and dangling pointers.
     // Some of these are likely best practices and should be kept, but cause crashes during cleanup in new OMNeT++ versions.
@@ -24,7 +32,7 @@ void GymApi::cleanupmemory(){
     // }
     
     // cout << "Done removing listeners. Listener list after removal: " << endl;
-    // delete env;
+    // env is owned by cSimulation and was deleted with simulationPtr above.
     // delete simulationPtr;
     // delete event;
     // delete bootconfigptr;
@@ -33,7 +41,9 @@ void GymApi::cleanupmemory(){
 
 // Generates a new OMNeT++ simulation and environment, and initializes them with the provided ini file and section name.
 void GymApi::initialise(std::string _iniPath, std::string sectionName){
-    cStaticFlag dummy;
+    if (env || simulationPtr)
+        cleanupmemory();
+
     // initializations
     CodeFragments::executeAll(CodeFragments::STARTUP);
     SimTime::setScaleExp(-12);
@@ -71,6 +81,7 @@ void GymApi::initialise(std::string _iniPath, std::string sectionName){
 
     // Return early and notify the trainer if the simulation has concluded
     if(id == "SIMULATION_END"){
+        env->endSimulation();
         ObsType obs;
         std::unordered_map<std::string, ObsType> obss = { {"SIMULATION_END", obs} };
         return obss;   
@@ -114,6 +125,7 @@ std::tuple< std::unordered_map<std::string, ObsType>,
     bool simDone = false;
     if(id == "SIMULATION_END"){
         simDone = true;
+        env->endSimulation();
     }
 
     returnTuple = { obss, rewards, dones, { {"simDone", simDone} } };

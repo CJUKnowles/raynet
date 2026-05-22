@@ -12,6 +12,9 @@ simlibs/*/src/Makefile
 results/
 _results/
 temp/
+.agents
+.codex
+.project
 _results_SUBMISSION/
 */src/out/*
 **/compile_commands.json

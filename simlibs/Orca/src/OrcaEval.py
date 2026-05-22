@@ -99,6 +99,11 @@ class OmnetGymApiEnv(gym.Env):
         actions = actions.item() # TODO: Make sure this is right. Your types and shapes are a bit sketchy atm
         action = {'Orca': actions}
         obs, rewards, terminateds, info_ = self.runner.step(action)
+        if info_['simDone']:
+            self.runner.cleanup()
+            return_obs_history = np.asarray(list(self.obs_history), dtype=np.float32)
+            return return_obs_history, rewards.get('Orca', 0.0), False, True, {}
+
         self.obs_history.extend(obs['Orca'])
         
         # Extract obs/rewards from our agent
@@ -192,4 +197,4 @@ if __name__ == '__main__':
             print(f"Step {steps}, reward={reward}")
         steps += 1
         if terminated or truncated:
-            obs, _ = env.reset()
+            break

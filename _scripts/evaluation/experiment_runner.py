@@ -105,15 +105,15 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
     out_path = filepath + "output.csv"
     
     # Create an index file, and output a combined results CSV
-    cmd = f"""
-                source ~/omnetpp/setenv &&
-                opp_scavetool i "{vec_file}" &&
-                opp_scavetool export "{vec_file}" -F CSV-R -o "{out_path}"
-            """
     # cmd = f"""
     #             source ~/omnetpp/setenv &&
+    #             opp_scavetool i "{vec_file}" &&
     #             opp_scavetool export "{vec_file}" -F CSV-R -o "{out_path}"
     #         """
+    cmd = f"""
+                source ~/omnetpp/setenv &&
+                opp_scavetool export "{vec_file}" -F CSV-R -o "{out_path}"
+            """
     subprocess.Popen(cmd, shell=True, executable="/bin/bash").communicate(timeout=40)
     
     # Create an individual output CSV for each metric in vectorsToExtract
