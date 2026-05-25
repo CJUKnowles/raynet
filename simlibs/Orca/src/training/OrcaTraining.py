@@ -163,7 +163,8 @@ class OmnetGymApiEnv(gym.Env):
             self.runner.cleanup()
         if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
             sim_truncated = True
-    
+            self.runner.cleanup()
+        
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
         return  return_obs_history, reward, terminateds['Orca'], sim_truncated, {}
         
@@ -172,21 +173,21 @@ def omnetgymapienv_creator(env_config):
     return OmnetGymApiEnv(env_config)  # return an env instance
 
 if __name__ == '__main__':
-    env_name = "Orca-1.6"
+    env_name = "Orca-paperparams-v0"
     register_env(env_name, omnetgymapienv_creator)
     num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
     max_steps_range = (2000, 2000)
     
     # Dissertation training parameters
-    bottleneck_bandwidth_range = (5, 20)            # Megabits
-    minimum_rtt_range = (5, 100)                      # ms
-    bottleneck_buffer_range = (25000, 4000000)    # Bits. 1x min BDP to 2x max BDP
+    # bottleneck_bandwidth_range = (5, 20)            # Megabits
+    # minimum_rtt_range = (5, 100)                      # ms
+    # bottleneck_buffer_range = (25000, 4000000)    # Bits. 1x min BDP to 2x max BDP
     
-    # # # Orca paper parameters
-    # bottleneck_bandwidth_range = (6, 192)            # Megabits
-    # minimum_rtt_range = (4, 400)                      # ms
-    # bottleneck_buffer_range = (24000, 768000000)    # Bits. 1x min BDP to 2x max BDP
+    # # Orca paper parameters
+    bottleneck_bandwidth_range = (6, 192)            # Megabits
+    minimum_rtt_range = (4, 400)                      # ms
+    bottleneck_buffer_range = (24000, 768000000)    # Bits. 1x min BDP to 2x max BDP
     
     load_from_checkpoint = False
     checkpoint_load_dir = os.getenv('HOME') + "/raynet/_models/Orca/checkpoints/checkpoint_16"

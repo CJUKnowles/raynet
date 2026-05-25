@@ -17,7 +17,7 @@ cleanall: checkmakefiles
 	rm -f src/Makefile
 
 makefiles:
-	cd src && opp_makemake -o CleanSlate --make-so -f --deep --mode ${MODE} -D${RAYNET_FEATURE} -I${RAYNET_HOME}/simlibs/RLComponents/src -L${RAYNET_HOME}/simlibs/RLComponents/src -lRLComponents${LIB_SUFFIX} -I${HOME}/inet4.5/src -L${HOME}/inet4.5/src -lINET${LIB_SUFFIX} -I${HOME}/omnetpp/samples/tcpPaced/src -L${HOME}/omnetpp/samples/tcpPaced/src -ltcpPaced${LIB_SUFFIX} -I${HOME}/omnetpp/samples/cubic/src -L${HOME}/omnetpp/samples/cubic/src -lcubic${LIB_SUFFIX} -I${HOME}/raynet/simlibs/tcpPacedNoCC/src -L${HOME}/raynet/simlibs/tcpPacedNoCC/src -ltcpPacedNoCC${LIB_SUFFIX}   
+	cd src && opp_makemake -o tcpPacedNoCC --make-so -f --deep --mode ${MODE} -I${HOME}/inet4.5/src -L${HOME}/inet4.5/src -lINET${LIB_SUFFIX} -I${HOME}/omnetpp/samples/tcpPaced/src -L${HOME}/omnetpp/samples/tcpPaced/src -ltcpPaced${LIB_SUFFIX}  -I${HOME}/omnetpp/samples/cubic/src -L${HOME}/omnetpp/samples/cubic/src -lcubic${LIB_SUFFIX}   
 
 checkmakefiles:
 	@if [ ! -f src/Makefile ]; then \

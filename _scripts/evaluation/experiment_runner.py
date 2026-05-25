@@ -337,7 +337,7 @@ if __name__ == "__main__":
     # Testing params, do what u want with these
     experiments_to_run = {
         "responsiveness": {
-            "protocols": ["Cubic", "Orca"],
+            "protocols": ["CleanSlate"],
             "params": {
                 "QSIZE": [".2bdp","1bdp", "4bdp"], # Based on the average BDP of the ranges given
                 },

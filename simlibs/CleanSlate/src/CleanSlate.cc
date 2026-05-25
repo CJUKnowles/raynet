@@ -26,14 +26,13 @@ CleanSlate::~CleanSlate() {
     if (debug) cout << "\tCleanSlate: Destructor method called. Goodbye.";
     getSimulation()->getSystemModule()->unsubscribe(stringId.c_str(), (cListener*) this);
     getSimulation()->getSystemModule()->unsubscribe("performAction", (cListener*) this);
-    
 }
 
 // Called during sim initialization
 void CleanSlate::initialize() {
     if (debug) cout << "\tCleanSlate initialize()" << endl;
-    this->rewardDelayForgiveness = this->conn->getTcpMain()->par("rewardDelayForgiveness");
-    this->rewardLossMultiplier = this->conn->getTcpMain()->par("rewardLossMultiplier");
+    this->delayCoefficient = this->conn->getTcpMain()->par("delayCoefficient");
+    this->lossCoefficient = this->conn->getTcpMain()->par("lossCoefficient");
     this->fixedIntervals = this->conn->getTcpMain()->par("fixedIntervals");
     this->fixedIntervalDuration = this->conn->getTcpMain()->par("fixedIntervalDuration");
     this->maxRLSteps = this->conn->getTcpMain()->par("maxRLSteps");
@@ -47,20 +46,19 @@ void CleanSlate::initialize() {
     RLInterface::initialise();
     TcpPacedNoCC::initialize();
 
-    // Register metric signals (for plotting)
+    // Signals
     throughputSignal = owner->registerSignal("throughput");
     actionSignal = owner->registerSignal("action");
-    // Suscribe to important signals:
-    TcpPacedConnection* pacedConn = dynamic_cast<TcpPacedConnection*>(conn);
+    TcpPacedConnection* pacedConn = dynamic_cast<TcpPacedConnection *>(conn);
     pacedConn->subscribe(pacedConn->retransmissionRateSignal, (cListener*) this);
 }
 
-// OMNet Method? Called after component initialization is complete?
+// INET method, called after connection is established.
 void CleanSlate::established(bool active) {
     if (debug) cout << "\tCleanSlate: established()" << endl;
     TcpPacedNoCC::established(active);
     
-    // Only initialize the RL agent if this is a client
+    // Only register this as an RL agent if this is a client
     if (active) {
         this->isActive = active;
 
@@ -118,17 +116,13 @@ std::optional<ObsType> CleanSlate::computeObservation(){
     // Delay: Tracked in overridden method above. Only update the minimum if delay reports were received this interval.
     if (this->rttReportCount == 0 || state->srtt.dbl() == 0.0) {
         // No RTT reports were received this interval. Set all RTT related values to 0 to represent lack of data.
-        this->cleanSlateDelay = 0.0; // Deprecated?
-        this->cleanSlateDelayMetric = 0.0; // Delay is unobserved, not 0. Do not report as optimal.
-        obs[5] = 0.0; // SRTT
-        obs[6] = 0.0; // Delay metric
+        this->cleanSlateDelayMetric = 0.0;    // Delay is unobserved, not 0. Do not report as optimal.
+        obs[5] = 0.0;                   // SRTT
+        obs[6] = 0.0;                   // Delay metric
     } else {
-        // RTT reports were received this interval. Compute the average and potentially update the minimum.
-        this->cleanSlateDelay = this->cleanSlateDelaySum/this->rttReportCount;
-
-        // Compute the delay metric (0.0 is poor, 1.0 is optimal. Report as optimal if within the forgiveness window.)
-        if (state->srtt > this->cleanSlateMinDelay * this->rewardDelayForgiveness) {                                             
-            this->cleanSlateDelayMetric = this->cleanSlateMinDelay * this->rewardDelayForgiveness / state->srtt;
+        // Observation is valid, compute the delay metric (0.0 is poor, 1.0 is optimal. Report as optimal if within the delay budget)
+        if (state->srtt > this->cleanSlateMinDelay * this->delayCoefficient) {                                             
+            this->cleanSlateDelayMetric = this->cleanSlateMinDelay * this->delayCoefficient / state->srtt;
         } else {
             this->cleanSlateDelayMetric = 1.0;
         }
@@ -137,15 +131,14 @@ std::optional<ObsType> CleanSlate::computeObservation(){
     }
     
 
-    // Update step count, and check if the step limit has been reached
+    // Schedule next step if episode not done
     RLStepsTaken++;
-    if (RLStepsTaken >= this->maxRLSteps) {
+    if (RLStepsTaken >= this->maxRLSteps && this->maxRLSteps > 0) {
         done = true;
     } else {
-        // Finally, schedule the next step (will be automatically cancelled if done)
         scheduleNextStep(this->fixedIntervals ? this->fixedIntervalDuration : state->srtt.dbl());
     }
-
+    
     // Debug prints
     if(debug) {
         cout << "-" << endl;
@@ -176,14 +169,14 @@ std::optional<ObsType> CleanSlate::computeObservation(){
     owner->emit(throughputSignal, this->cleanSlateThroughput);
 
     return ObsType({
-            obs[0],     // Normalized throughput
-            obs[1],       // Normalized pacerate
-            obs[2], // Normalized lossrate
+            obs[0],                   // Normalized throughput
+            obs[1],               // Normalized pacerate
+            obs[2],               // Normalized lossrate
             obs[3],              // Normalized ACKs count (maybe use tcp_cwnd? ask aiden)     
-            obs[4],                               // Monitor interval duration
+            obs[4],              // Monitor interval duration
             obs[5],             // Normalized SRTT (delay)
-            obs[6]                               // Normalized SRTT (possibly forgiven, if within the forgiveness window)
-        });
+            obs[6]              // Normalized SRTT (possibly forgiven, if within the forgiveness window)
+    });
 }
 
 RewardType CleanSlate::computeReward(){
@@ -192,7 +185,7 @@ RewardType CleanSlate::computeReward(){
     if (this->cleanSlateMaxThroughput == 0.0) {
         reward = 0.0;
     } else {
-        reward = (this->cleanSlateThroughput-(this->rewardLossMultiplier*this->cleanSlateLossRate))/this->cleanSlateMaxThroughput*this->cleanSlateDelayMetric;
+        reward = (this->cleanSlateThroughput-(this->lossCoefficient*this->cleanSlateLossRate))/this->cleanSlateMaxThroughput*this->cleanSlateDelayMetric;
     }
     if (debug) cout << "\t\tReward: " << reward << endl;
     return(reward);
@@ -212,7 +205,7 @@ void CleanSlate::decisionMade(ActionType action) {
         if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         state->snd_cwnd = newCwnd;
 
-        // Update pacing rate (standard approach)
+        // Update pacing rate
         if(state->snd_cwnd > 0) {
             double paceFactor;
             if (state->snd_cwnd < state->ssthresh/2) {
@@ -235,7 +228,6 @@ void CleanSlate::decisionMade(ActionType action) {
 
     if (debug) {
         cout << "\t\t" << (this->takeActions) << endl;
-        // cout << "\t\t" << (this->first_slowstart_complete) << endl;
         cout << "\t\t" << (this->rttReportCount > 0) << endl;
         cout << "\t\t" << (newCwnd < 1000000) << endl;
         cout << "-" << endl;
@@ -248,8 +240,7 @@ void CleanSlate::resetStepVariables()
     if (debug) cout << "\t\tCleanSlate: resetStepVariables()" << endl;
     this->cleanSlateThroughput=0.0;    // The average delivery rate (throughput) over the last interval
     this->cleanSlateLossRate=0.0;      // The average loss rate of packets over the last interval
-    this->cleanSlateDelay=0.0;         // The average delay of packets over the last interval
-    this->cleanSlateDelaySum=0.0;      // Sum of all RTT reports received over an interval
+    this->cleanSlateDelaySum=0.0;      // Sum of all RTT reports received over an interval 
     this->cleanSlateACKTotal=0.0;      // The number of valid acknowledgements over the last interval
     this->bytesDelivered=0.0;
     this->rttReportCount=0; // The number of RTT values we have measured over the last interval
@@ -280,9 +271,9 @@ bool CleanSlate::getDone() {
     // Deprecated, remove this later (done is just set and checked directly)
 }
 
-// MARK: TcpPacedNoCC Methods
+// MARK: Cubic Methods
 // ============================================================================
-// These are copied directly from TcpPacedNoCC.
+// These are copied directly from cubic.
 // and a couple lines were added for tracking some extra information for CleanSlate to use.
 // ============================================================================
 
