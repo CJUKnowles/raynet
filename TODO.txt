@@ -1,7 +1,6 @@
 # Things to do
 - [ ] Figure out how to add OmnetBind to the virtual environment (no more symbolic links or manually finding the module in code)
 - [ ] Finish omnetpp6.3 port (fix the reset segfaults)
-- [ ] Update cartpole example to work with current architecture (mostly just add explicit step scheduling)
 - [ ] Figure out how load the official Orca model from a checkpoint and do inference
 - [ ] Add a non-paced CC example that doesn't require custom version of INET for new users
 - [ ] Integrate RayNet with QTEnv and the IDE (may already be possible?)
@@ -16,6 +15,7 @@
 - [ ] Add experiment runner/plotter progress outputs and time estimates
 - [ ] Reduce the number of vectors recorded for experiments (could only get them to work reliably by outputting all of them)
 - [ ] Update python libraries where possible. Hunt down some of those startup warnings. 
-- [ ] Clean up build scripts and remove their deprecated features (like passing CLEAN_ALL to cmake)
+- [x] Clean up build scripts and remove their deprecated features (like passing CLEAN_ALL to cmake)
+- [x] Remove protocol-specific compilation, allowing multiple protocols to coexist
 - [ ] Prune requirements-extra.txt of any unused modules. Anything not currently used in training scripts or experiment_runner/plotter are probably useless.
 - [ ] 

@@ -142,6 +142,6 @@ mkdir build
 cd build
 echo "Building RayNet..."
 echo "---------------------------------"
-cmake -DCMAKE_BUILD_TYPE=$mode -DCLEAN_ALL=$clean ../ && \
+cmake -DCMAKE_BUILD_TYPE=$mode ../ && \
 make -j32
 echo "---------------------------------"
