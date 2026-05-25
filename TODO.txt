@@ -18,4 +18,3 @@
 - [x] Clean up build scripts and remove their deprecated features (like passing CLEAN_ALL to cmake)
 - [x] Remove protocol-specific compilation, allowing multiple protocols to coexist
 - [ ] Prune requirements-extra.txt of any unused modules. Anything not currently used in training scripts or experiment_runner/plotter are probably useless.
-- [ ] 
