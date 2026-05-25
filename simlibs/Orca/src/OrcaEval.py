@@ -174,7 +174,7 @@ if __name__ == '__main__':
             param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
     if (load_from_checkpoint):
         algo.restore(checkpoint_load_dir)
-        algo.learner_group.foreach_learner(betas_tensor_to_float)
+        #algo.learner_group.foreach_learner(betas_tensor_to_float)
     
     # Inference Loop! Only tested for cleanSlate but MUCH faster that .train()
     steps = 0

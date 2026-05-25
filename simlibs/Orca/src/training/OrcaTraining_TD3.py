@@ -1,3 +1,7 @@
+"""
+A test for using TD3 to train Orca, without Ray/RLlib.
+Currently does not work. Existing models were trained with SAC on Ray/RLlib.
+"""
 import argparse
 import math
 import os

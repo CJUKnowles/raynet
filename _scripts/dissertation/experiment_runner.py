@@ -20,6 +20,7 @@ experiment_paths = {
 
 runner_paths = {
     "Orca": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/OrcaEval.py",
+    "OrcaPaper": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/OrcaEval_paper.py",
     "Cubic": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/CubicEval.py",
     "Astrea": f"{os.getenv('HOME')}/raynet/simlibs/Astrea/src/AstreaEval.py",
     "CleanSlate": f"{os.getenv('HOME')}/raynet/simlibs/CleanSlate/src/CleanSlateEval.py",
@@ -336,29 +337,29 @@ if __name__ == "__main__":
     
     # Testing params, do what u want with these
     experiments_to_run = {
-        # "responsiveness": {
-        #     "protocols": ["CleanSlate"],
-        #     "params": {
-        #         "QSIZE": [".2bdp","1bdp", "4bdp"], # Based on the average BDP of the ranges given
-        #         },
-        #     "meta": {
-        #         "runs" : 3,
-        #         "bw_range" : (10, 20),
-        #         "rtt_range" : (10, 100),
-        #         }
-        #     },
-        
-        "competing-flows": {
-            "protocols": ["CleanSlate", "Orca", "Cubic"],
+        "responsiveness": {
+            "protocols": ["Orca"],
             "params": {
-                "BANDWIDTH" : ["10Mbps"],
-                "DELAY"     : ["10ms","50ms"],    
-                "QSIZE": ["1bdp"],
+                "QSIZE": [".2bdp","1bdp", "4bdp"], # Based on the average BDP of the ranges given
                 },
-           "meta": {
-               "runs" : 1,
-               }
+            "meta": {
+                "runs" : 3,
+                "bw_range" : (10, 20),
+                "rtt_range" : (10, 100),
+                }
             },
+        
+        # "competing-flows": {
+        #     "protocols": ["CleanSlate", "Orca", "Cubic"],
+        #     "params": {
+        #         "BANDWIDTH" : ["10Mbps"],
+        #         "DELAY"     : ["10ms","50ms"],    
+        #         "QSIZE": ["1bdp"],
+        #         },
+        #    "meta": {
+        #        "runs" : 1,
+        #        }
+        #     },
         
         # "single-flow": {
         #     "protocols": ["Orca"],

@@ -224,30 +224,52 @@ if __name__ == '__main__':
                 critic_lr=.001,
                 )
             )
-    algo = config.build_algo()
+    # algo = config.build_algo()
     
-    # Convert betas? (solution found online, fixes a crash when loading a checkpoint)
-    def betas_tensor_to_float(learner):
-        for param_grp_key in learner._optimizer_parameters.keys():
-            param_grp = param_grp_key.param_groups[0]
-            param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
-    if (load_from_checkpoint):
-        #algo.load_checkpoint(os.getenv('HOME') + "/ray_results/JAMESTEST")
-        algo.restore(checkpoint_load_dir)
-        algo.learner_group.foreach_learner(betas_tensor_to_float)
+    # # Convert betas? (solution found online, fixes a crash when loading a checkpoint)
+    # def betas_tensor_to_float(learner):
+    #     for param_grp_key in learner._optimizer_parameters.keys():
+    #         param_grp = param_grp_key.param_groups[0]
+    #         param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
+    # if (load_from_checkpoint):
+    #     #algo.load_checkpoint(os.getenv('HOME') + "/ray_results/JAMESTEST")
+    #     algo.restore(checkpoint_load_dir)
+    #     algo.learner_group.foreach_learner(betas_tensor_to_float)
     
     
-    pprint.pprint(algo.config)
-    # Main training loop!
-    iteration = 0
-    checkpoint = 0
-    iterations_per_checkpoint = 500
-    while True:
-        result = algo.train()   # Perform a single training iteration (many steps, usually shorter than an episode. Changes depending on training parameters.)
-        iteration += 1
-        print(f"Iteration {iteration} complete")
-        if (iteration % iterations_per_checkpoint == 0):
-            checkpoint_dir = algo.logdir + f"/checkpoints/checkpoint_{checkpoint}"
-            algo.save_checkpoint(checkpoint_dir) # Somehow get the directory from this?
-            print(f"Saved checkpoint to {checkpoint_dir}")
-            checkpoint += 1
+    # pprint.pprint(algo.config)
+    # # Main training loop!
+    # iteration = 0
+    # checkpoint = 0
+    # iterations_per_checkpoint = 500
+    # while True:
+    #     result = algo.train()   # Perform a single training iteration (many steps, usually shorter than an episode. Changes depending on training parameters.)
+    #     iteration += 1
+    #     print(f"Iteration {iteration} complete")
+    #     if (iteration % iterations_per_checkpoint == 0):
+    #         checkpoint_dir = algo.logdir + f"/checkpoints/checkpoint_{checkpoint}"
+    #         algo.save_checkpoint(checkpoint_dir) # Somehow get the directory from this?
+    #         print(f"Saved checkpoint to {checkpoint_dir}")
+    #         checkpoint += 1
+
+    tuner = tune.Tuner(
+        "SAC",
+        param_space=config,
+        run_config=RunConfig(
+            name=env_name,
+            storage_path=os.path.expanduser("~/ray_results"),
+
+            stop={
+                "num_env_steps_sampled_lifetime": 1_000_000,
+            },
+
+            checkpoint_config=CheckpointConfig(
+                checkpoint_frequency=500,
+                checkpoint_at_end=True,
+            ),
+
+            verbose=1,
+        ),
+    )
+
+    results = tuner.fit()
