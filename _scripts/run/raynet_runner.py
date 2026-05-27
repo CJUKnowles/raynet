@@ -3,6 +3,9 @@ A universal RayNet runner script that works on any provided protocol, config, an
 - Bootstraps RayNet environment from build_paths.sh
 - Resolves RayNet's favored venv dynamically
 - Runs selected RL protocol using its registered runner script
+
+Just call this script from the command line using this pattern to run your RL simulations:
+- python raynet_runner.py <protocol> <ini_path> <section>
 """
 
 import os

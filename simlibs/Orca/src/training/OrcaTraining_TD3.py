@@ -19,7 +19,7 @@ from stable_baselines3.common.noise import NormalActionNoise
 
 class OmnetGymApiEnv(gym.Env):
     def __init__(self, env_config):
-        sys.path.insert(0, os.path.join(os.getenv("HOME"), "raynet", "build"))
+        sys.path.insert(0, os.path.join(os.getenv("RAYNET_PATH"), "build"))
         from omnetbind import OmnetGymApi
 
         self.runner = OmnetGymApi()
@@ -157,7 +157,7 @@ def main():
     args = parse_args()
 
     env_config = {
-        "iniPath": os.getenv("HOME") + "/raynet/simlibs/Orca/src/training/OrcaTraining.ini",
+        "iniPath": os.getenv("RAYNET_PATH") + "/simlibs/Orca/src/training/OrcaTraining.ini",
         "bottleneck_bw_range": (5, 20),
         "minimum_rtt_range": (5, 100),
         "bottleneck_buffer_range": (25000, 4_000_000),
