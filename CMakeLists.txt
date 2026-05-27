@@ -17,7 +17,7 @@ foreach(lib ${SIMLIB_DIRS})
         # Append library path to LIB_PATHS (used for link_directories)
         set(LIB_PATH ${PROJECT_SOURCE_DIR}/simlibs/${lib}/src)
         list(APPEND LIB_PATHS ${LIB_PATH})
-        list(APPEND LIB_PATHS " ")        
+        list(APPEND LIB_PATHS " ")
 
         # Set the path for this specific library (may not be needed)
         string(TOUPPER ${lib} LIB_NAME)
@@ -95,5 +95,3 @@ elseif(CMAKE_BUILD_TYPE STREQUAL debug)
     set_target_properties(testcpp PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
     target_link_libraries(testcpp rlomnet oppsim_dbg)
 endif()
-
-

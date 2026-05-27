@@ -1,4 +1,4 @@
-ray
+ray==2.53.0
 gymnasium
 ray[tune]
 dm_tree

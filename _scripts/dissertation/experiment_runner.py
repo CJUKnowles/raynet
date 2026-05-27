@@ -338,35 +338,35 @@ if __name__ == "__main__":
     # Testing params, do what u want with these
     experiments_to_run = {
         "responsiveness": {
-            "protocols": ["Orca"],
+            "protocols": ["Orca", "Cubic"],
             "params": {
                 "QSIZE": [".2bdp","1bdp", "4bdp"], # Based on the average BDP of the ranges given
                 },
             "meta": {
-                "runs" : 3,
-                "bw_range" : (10, 20),
+                "runs" : 1,
+                "bw_range" : (10, 100),
                 "rtt_range" : (10, 100),
                 }
             },
         
-        # "competing-flows": {
-        #     "protocols": ["CleanSlate", "Orca", "Cubic"],
-        #     "params": {
-        #         "BANDWIDTH" : ["10Mbps"],
-        #         "DELAY"     : ["10ms","50ms"],    
-        #         "QSIZE": ["1bdp"],
-        #         },
-        #    "meta": {
-        #        "runs" : 1,
-        #        }
-        #     },
+        "competing-flows": {
+            "protocols": ["Orca", "Cubic"],
+            "params": {
+                "BANDWIDTH" : ["10Mbps"],
+                "DELAY"     : ["10ms","50ms"],    
+                "QSIZE": [".2bdp", "1bdp", "4bdp"],
+                },
+           "meta": {
+               "runs" : 1,
+               }
+            },
         
         # "single-flow": {
-        #     "protocols": ["Orca"],
+        #     "protocols": ["Orca", "Cubic"],
         #     "params": {
         #         "BANDWIDTH" : ["10Mbps"],
         #         "DELAY"     : ["10ms","50ms", "100ms"],    
-        #         "QSIZE": ["1bdp"],
+        #         "QSIZE": [".2bdp", "1bdp", "4bdp"],
         #         },
         #    "meta": {
         #        "runs" : 1,
