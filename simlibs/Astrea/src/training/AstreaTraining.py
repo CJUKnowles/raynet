@@ -31,7 +31,7 @@ class OmnetGymApiEnv(MultiAgentEnv):
         - These bounds are needed for RL algorithms provided by RLlib- They limit the problem space and are also used for normalization.
         """
         super().__init__()
-        sys.path.insert(0, os.path.join(os.getenv('HOME'), "raynet", "build"))
+        sys.path.insert(0, os.path.join(os.getenv('RAYNET_PATH'), "build"))
         from omnetbind import OmnetGymApi
         self.runner = OmnetGymApi()
         

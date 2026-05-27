@@ -94,7 +94,7 @@ def create_csv_dict(results_dir:str=None):
     This dataframe provides easy navigation of all metric CSVs, which is useful for create combined plots.
     """
     if not results_dir:
-        results_dir = os.getenv('HOME') + "/raynet/_results"
+        results_dir = os.getenv('RAYNET_PATH') + "/_results"
     
     csvs = []
     for root, dirs, files in os.walk(results_dir):
@@ -1018,7 +1018,7 @@ def plot_aggregate_metrics(exp_df, end_time=60, size=.7):
         bbox_to_anchor=(.5, 1),
         fontsize=12,
     )
-    fig.savefig(os.getenv('RAYNET_PATH')/_plots/{exp}_aggregate-metrics.pdf")
+    fig.savefig(f"{os.getenv('RAYNET_PATH')}/_plots/{exp}_aggregate-metrics.pdf")
     plt.close(fig)
 
 def plot_throughput_cdf(csv_df, ax=None, startup_time=15):
@@ -1234,7 +1234,7 @@ def plot_cdfs(exp_df, size=.6):
         h_pad=0.6,
     )
 
-    fig.savefig(os.getenv('RAYNET_PATH')/_plots/{exp}_cdf.pdf")
+    fig.savefig(f"{os.getenv('RAYNET_PATH')}/_plots/{exp}_cdf.pdf")
     plt.close(fig)
 
 
@@ -1279,8 +1279,8 @@ if __name__ == "__main__":
                     start_time = 0
                 show_competing = exp == "competing-flows"
                 (fig, axs) = plot_timeseries(run_df, startup_time=start_time, end_time=end_time, all=True, show_competing=show_competing)
-                fig.savefig(os.getenv('RAYNET_PATH')/_results/{exp}/{params}/run{int(run)}/summary.pdf")
-                print(f"Plotted timeseries: {os.getenv('RAYNET_PATH')/_results/{exp}/{params}/run{int(run)}/summary.pdf"}")
+                fig.savefig(f"{os.getenv('RAYNET_PATH')}/_results/{exp}/{params}/run{int(run)}/summary.pdf")
+                print(f"Plotted timeseries: {os.getenv('RAYNET_PATH')}/_results/{exp}/{params}/run{int(run)}/summary.pdf")
                 plt.close(fig)
                 
                 
