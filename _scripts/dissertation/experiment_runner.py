@@ -11,7 +11,7 @@ import re
 import time as termTime
 import xml.etree.ElementTree as ET
 
-experiments_dir = f"{os.getenv('HOME')}/raynet/_experiments"
+experiments_dir = f"{os.getenv('RAYNET_PATH')}/_experiments"
 experiment_paths = {
     "single-flow": f"{experiments_dir}/single-flow/single-flow.ini",
     "competing-flows": f"{experiments_dir}/competing-flows/competing-flows.ini",
@@ -19,11 +19,11 @@ experiment_paths = {
 }
 
 runner_paths = {
-    "Orca": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/OrcaEval.py",
-    "OrcaPaper": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/OrcaEval_paper.py",
-    "Cubic": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/CubicEval.py",
-    "Astrea": f"{os.getenv('HOME')}/raynet/simlibs/Astrea/src/AstreaEval.py",
-    "CleanSlate": f"{os.getenv('HOME')}/raynet/simlibs/CleanSlate/src/CleanSlateEval.py",
+    "Orca": f"{os.getenv('RAYNET_PATH')}/simlibs/Orca/src/OrcaEval.py",
+    "OrcaPaper": f"{os.getenv('RAYNET_PATH')}/simlibs/Orca/src/OrcaEval_paper.py",
+    "Cubic": f"{os.getenv('RAYNET_PATH')}/simlibs/Orca/src/CubicEval.py",
+    "Astrea": f"{os.getenv('RAYNET_PATH')}/simlibs/Astrea/src/AstreaEval.py",
+    "CleanSlate": f"{os.getenv('RAYNET_PATH')}/simlibs/CleanSlate/src/CleanSlateEval.py",
 }
 
 def parse_numeric(value): 
@@ -207,7 +207,7 @@ def run_experiments(experiments_dict, create_output_csv=True):
     Runs the given experiment for each protocol listed, using their respective eval runner scripts
     - This is admittedly very messy and was developed in a time crunch for the dissertation, but it gets the job done and can be cleaned up later if needed
     """
-    python = f"{os.getenv('HOME')}/raynet/.venv/bin/python"
+    python = f"{os.getenv('RAYNET_PATH')}/.venv/bin/python"
     
     # Perform each experiment with each protocol and parameter combination
     for experiment_name in experiments_dict.keys():
@@ -323,7 +323,7 @@ def run_experiments(experiments_dict, create_output_csv=True):
                     os.system(f"{python} {protocol_runner_path} {modified_ini_file}") # Finally runs the exp
                     
                     # Generate output.csv and individual vector csvs for all tracked vectors for this exp/protocol/params combo
-                    exp_results_dir = os.getenv('HOME') + f"/raynet/_experiments/{experiment_name}/ini_variants/results/"
+                    exp_results_dir = os.getenv('RAYNET_PATH')/_experiments/{experiment_name}/ini_variants/results/"
                     generate_exp_csvs(exp_results_dir, protocol_name, params_str=params_suffix, short_params_str=short_params_suffix, run=run)
         
 """
@@ -337,17 +337,17 @@ if __name__ == "__main__":
     
     # Testing params, do what u want with these
     experiments_to_run = {
-        "responsiveness": {
-            "protocols": ["Orca", "Cubic"],
-            "params": {
-                "QSIZE": [".2bdp","1bdp", "4bdp"], # Based on the average BDP of the ranges given
-                },
-            "meta": {
-                "runs" : 1,
-                "bw_range" : (10, 100),
-                "rtt_range" : (10, 100),
-                }
-            },
+        # "responsiveness": {
+        #     "protocols": ["Orca", "Cubic"],
+        #     "params": {
+        #         "QSIZE": [".2bdp","1bdp", "4bdp"], # Based on the average BDP of the ranges given
+        #         },
+        #     "meta": {
+        #         "runs" : 1,
+        #         "bw_range" : (10, 100),
+        #         "rtt_range" : (10, 100),
+        #         }
+        #     },
         
         "competing-flows": {
             "protocols": ["Orca", "Cubic"],
@@ -362,9 +362,9 @@ if __name__ == "__main__":
             },
         
         # "single-flow": {
-        #     "protocols": ["Orca", "Cubic"],
+        #     "protocols": ["Orca"],
         #     "params": {
-        #         "BANDWIDTH" : ["10Mbps"],
+        #         "BANDWIDTH" : ["100Mbps"],
         #         "DELAY"     : ["10ms","50ms", "100ms"],    
         #         "QSIZE": [".2bdp", "1bdp", "4bdp"],
         #         },

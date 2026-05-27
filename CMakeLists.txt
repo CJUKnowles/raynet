@@ -27,17 +27,17 @@ foreach(lib ${SIMLIB_DIRS})
 endforeach()
 
 # External libraries (no looping here, these are required to make the project work)
-set(INET_MODEL_PATH $ENV{HOME}/inet4.5/src)
+set(INET_MODEL_PATH $ENV{INET_PATH}/src)
 
-set(TCPGOODPUT_PATH $ENV{HOME}/omnetpp/samples/tcpGoodputApplications/src) # tcpGoodputApplications, creates goodput vectors for plotting via custom TcpApp
+set(TCPGOODPUT_PATH $ENV{OMNET_PATH}/samples/tcpGoodputApplications/src) # tcpGoodputApplications, creates goodput vectors for plotting via custom TcpApp
 list(APPEND LIB_PATHS ${TCPGOODPUT_PATH})
 list(APPEND LIB_NAMES tcpGoodputApplications)
 
-set(LEOSATELLITES_PATH $ENV{HOME}/omnetpp/samples/leosatellites/src) # leosatellites, not strictly necessary but contains features that ORBTCPEXPERIMENTS needs
+set(LEOSATELLITES_PATH $ENV{OMNET_PATH}/samples/leosatellites/src) # leosatellites, not strictly necessary but contains features that ORBTCPEXPERIMENTS needs
 list(APPEND LIB_PATHS ${LEOSATELLITES_PATH})
 list(APPEND LIB_NAMES leosatellites)
 
-set(ORBTCPEXPERIMENTS_PATH $ENV{HOME}/omnetpp/samples/orbtcpExperiments/src) # orbtcpExperiments, Aiden's experiment suite with some custom components like BandwidthRecorderDropTailQueue
+set(ORBTCPEXPERIMENTS_PATH $ENV{OMNET_PATH}/samples/orbtcpExperiments/src) # orbtcpExperiments, Aiden's experiment suite with some custom components like BandwidthRecorderDropTailQueue
 list(APPEND LIB_PATHS ${ORBTCPEXPERIMENTS_PATH})
 list(APPEND LIB_NAMES orbtcpExperiments)
 
@@ -67,7 +67,7 @@ find_package(OmnetPP 6.0.1 REQUIRED)
 include(OmnetppHelpers)
 add_compile_options(-fpermissive -fno-omit-frame-pointer -fPIC -MMD -MP -MF)
 add_compile_definitions(HAVE_SWAPCONTEXT)
-find_package(Python3 3.12 EXACT REQUIRED COMPONENTS Interpreter Development)
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 include_directories(${Python3_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/extern/pybind11/include ${OMNETPP_INCLUDE_DIR} ${OMNETPP_ROOT}/include ${OMNETPP_ROOT}/src ${LIB_PATHS})
 link_directories(${OMNETPP_ROOT}/lib ${INET_MODEL_PATH} ${LIB_PATHS})
 

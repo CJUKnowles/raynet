@@ -17,7 +17,7 @@ cleanall: checkmakefiles
 	rm -f src/Makefile
 
 makefiles:
-	cd src && opp_makemake -o RLComponents --make-so -f --deep --mode ${MODE} -I${HOME}/inet4.5/src -L${HOME}/inet4.5/src -lINET${LIB_SUFFIX}
+	cd src && opp_makemake -o RLComponents --make-so -f --deep --mode ${MODE} -I${INET_PATH}/src -L${INET_PATH}/src -lINET${LIB_SUFFIX}
 
 
 checkmakefiles:

@@ -1,48 +1,113 @@
 """
-This script will run the specified .ini using RayNet and the provided RL-driven protocol (e.g. Orca, Astrea, CleanSlate).
-- The provided protocol name must be registered in this script's runner_paths dictionary
-- The .ini MUST contain a Broker and a list of NED sources (ned-paths=...) for the simulation to run.
-- A .ini configuration section can optionally be provided as the 3rd argument. Will default to "General" otherwise.
-
-Usage: python raynet_runner.py <protocol> <ini_path> <section>
-Example: ~/raynet/.venv/bin/python ~/raynet/_scripts/raynet_runner.py Orca ~/raynet/_experiments/responsiveness/responsiveness.ini Orca
+A universal RayNet runner script that works on any provided protocol, config, and section.
+- Bootstraps RayNet environment from build_paths.sh
+- Resolves RayNet's favored venv dynamically
+- Runs selected RL protocol using its registered runner script
 """
 
-import os, sys
-python = f"{os.getenv('HOME')}/raynet/.venv/bin/python" # RayNet's .venv (you can use your own if you have Ray/RLlib and other critical RL libraries)
+import os
+import sys
+import subprocess
+from pathlib import Path
+
+# ------------------------------------------------------------
+# Locate project root (relative to this script, as we don't have access to environment variables if called externally)
+# ------------------------------------------------------------
+RAYNET_PATH = Path(__file__).resolve().parents[2]
+BUILD_PATHS = RAYNET_PATH / "build_paths.sh"
+
+# ------------------------------------------------------------
+# Protocol registry
+# ------------------------------------------------------------
 runner_paths = {
-    "orca": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/OrcaEval.py",
-    "cubic": f"{os.getenv('HOME')}/raynet/simlibs/Orca/src/CubicEval.py",
-    "astrea": f"{os.getenv('HOME')}/raynet/simlibs/Astrea/src/AstreaEval.py",
-    "cleanslate": f"{os.getenv('HOME')}/raynet/simlibs/CleanSlate/src/CleanSlateEval.py",
+    "orca": str(RAYNET_PATH / "simlibs/Orca/src/OrcaEval.py"),
+    "cubic": str(RAYNET_PATH / "simlibs/Orca/src/CubicEval.py"),
+    "astrea": str(RAYNET_PATH / "simlibs/Astrea/src/AstreaEval.py"),
+    "cleanslate": str(RAYNET_PATH / "simlibs/CleanSlate/src/CleanSlateEval.py"),
 }
+
+# ------------------------------------------------------------
+# Load and return a RayNet environment from build_paths.sh
+# ------------------------------------------------------------
+def load_raynet_env():
+    # Source from build_paths.sh and output environment variables into result
+    cmd = f'''
+    set -a
+    source "{BUILD_PATHS}"
+    env
+    '''
+    result = subprocess.run(
+        ["bash", "-c", cmd],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    # Convert env printout into a dict
+    env = {}
+    for line in result.stdout.splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            env[key] = value
+    
+    return env
+
+# Merge with current environment
+env = os.environ.copy()
+env.update(load_raynet_env())
+
+
+# ------------------------------------------------------------
+# Resolve venv + python
+# ------------------------------------------------------------
+VENV_PATH = Path(env["RAYNET_VENV_PATH"])
+PYTHON_BIN = str(VENV_PATH / "bin" / "python")
 
 def get_registered_protocols():
     return list(runner_paths.keys())
 
-def is_protocol_registered(protocol:str) -> bool:
+def is_protocol_registered(protocol: str) -> bool:
     return protocol in runner_paths
 
-def run_simulation(protocol:str, ini_path:str, section:str="General"):
+
+# ------------------------------------------------------------
+# Main execution
+# ------------------------------------------------------------
+def run_simulation(protocol: str, ini_path: str, section: str = "General"):
     if not is_protocol_registered(protocol):
-        print(f"Error: Protocol '{protocol}' not recognized. Available protocols: {get_registered_protocols()}")
+        print(
+            f"Error: Unknown protocol '{protocol}'. "
+            f"Available: {get_registered_protocols()}"
+        )
         sys.exit(1)
-    runner = runner_paths[protocol]                           # The python script that uses Ray/RLlib to facilitate training/inference of the given protocol
+    runner = runner_paths[protocol]
     
-    print("----------------------------------------")
-    print(f"RayNet: Running protocol {protocol} \n\tRunner: {runner} \n\t.ini file: {ini_path} \n\tSection: {section}")
-    print("----------------------------------------")
-    os.system(f"{python} {runner} {ini_path} {section}")
+    print(f"RayNet: Running protocol {protocol}...")
+    print("-------------------------------------------------------------------")
+    print(f"\tPython: \t {PYTHON_BIN}")
+    print(f"\tRunner: \t {runner}")
+    print(f"\tConfig: \t {ini_path}")
+    print(f"\tSection:\t {section}")
+    print("-------------------------------------------------------------------")
 
-if __name__ == '__main__':
-    if len(sys.argv) < 2:
+    # Run the final combined simulation command
+    subprocess.run(
+        [PYTHON_BIN, runner, ini_path, section],
+        env=env,
+        check=True
+    )
+
+
+# ------------------------------------------------------------
+# CLI entry
+# ------------------------------------------------------------
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
         print("Usage: python raynet_runner.py <protocol> <ini_path> <section>")
-        print("Example: python raynet_runner.py Orca ~/raynet/_experiments/responsiveness/responsiveness.ini Orca")
         sys.exit(1)
-    params = {
-        "protocol": sys.argv[1],                                      # Which RL protocol to run (e.g. Orca, Cubic, Astrea, CleanSlate)
-        "ini_path": sys.argv[2],                                      # Path to the .ini file that specifies the simulation configuration to run.
-        "section": sys.argv[3] if len(sys.argv) > 3 else None,        # Name of the .ini configuration section to run. "General", by default.
-              }
-
-    run_simulation(params['protocol'], params['ini_path'], params['section'])
+        
+    protocol = sys.argv[1]
+    ini_path = sys.argv[2]
+    section = sys.argv[3] if len(sys.argv) > 3 else "General"
+    
+    run_simulation(protocol, ini_path, section)

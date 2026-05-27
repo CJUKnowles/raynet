@@ -1018,7 +1018,7 @@ def plot_aggregate_metrics(exp_df, end_time=60, size=.7):
         bbox_to_anchor=(.5, 1),
         fontsize=12,
     )
-    fig.savefig(os.getenv('HOME') + f"/raynet/_plots/{exp}_aggregate-metrics.pdf")
+    fig.savefig(os.getenv('RAYNET_PATH')/_plots/{exp}_aggregate-metrics.pdf")
     plt.close(fig)
 
 def plot_throughput_cdf(csv_df, ax=None, startup_time=15):
@@ -1234,7 +1234,7 @@ def plot_cdfs(exp_df, size=.6):
         h_pad=0.6,
     )
 
-    fig.savefig(os.getenv('HOME') + f"/raynet/_plots/{exp}_cdf.pdf")
+    fig.savefig(os.getenv('RAYNET_PATH')/_plots/{exp}_cdf.pdf")
     plt.close(fig)
 
 
@@ -1255,7 +1255,7 @@ if __name__ == "__main__":
         # if exp == "competing-flows":
         #     print("Plotting completing flows aggregate plots")
         #     fig, axes = plot_tcp_friendliness(exp_df, startup_time=30)
-        #     fig.savefig(os.getenv('HOME') + f"/raynet/_plots/{exp}_tcp-friendliness.pdf")
+        #     fig.savefig(os.getenv('RAYNET_PATH')/_plots/{exp}_tcp-friendliness.pdf")
         #     plt.close(fig)
         # elif exp == "responsiveness":
         #     print("Plotting responsiveness aggregate plots")
@@ -1279,8 +1279,8 @@ if __name__ == "__main__":
                     start_time = 0
                 show_competing = exp == "competing-flows"
                 (fig, axs) = plot_timeseries(run_df, startup_time=start_time, end_time=end_time, all=True, show_competing=show_competing)
-                fig.savefig(os.getenv('HOME') + f"/raynet/_results/{exp}/{params}/run{int(run)}/summary.pdf")
-                print(f"Plotted timeseries: {os.getenv('HOME') + f"/raynet/_results/{exp}/{params}/run{int(run)}/summary.pdf"}")
+                fig.savefig(os.getenv('RAYNET_PATH')/_results/{exp}/{params}/run{int(run)}/summary.pdf")
+                print(f"Plotted timeseries: {os.getenv('RAYNET_PATH')/_results/{exp}/{params}/run{int(run)}/summary.pdf"}")
                 plt.close(fig)
                 
                 

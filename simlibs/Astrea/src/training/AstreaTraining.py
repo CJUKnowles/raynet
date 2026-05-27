@@ -198,7 +198,7 @@ if __name__ == '__main__':
     checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_Astrea-1.3_2026-04-16_11-06-44iqflmq07/checkpoints/checkpoint_57"
     stacking = 5
     
-    env_config = {"iniPath": os.getenv('HOME') + "/raynet/simlibs/Astrea/src/training/AstreaTraining.ini",
+    env_config = {"iniPath": os.getenv('RAYNET_PATH') + "/simlibs/Astrea/src/training/AstreaTraining.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
                   "minimum_rtt_range": minimum_rtt_range,
                   "bottleneck_buffer_range": bottleneck_buffer_range,
