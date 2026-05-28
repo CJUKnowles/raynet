@@ -1,3 +1,4 @@
+
 #include "RLInterface.h"
 #include "omnetpp/ccomponent.h"
 #include "omnetpp/simtime_t.h"
@@ -17,6 +18,32 @@ using namespace learning;
 
 Register_Class(Orca); // Lets omnet see and use this class
 
+namespace {
+    std::string sanitizeAgentId(std::string id)
+    {
+        for (char& c : id) {
+            if (!std::isalnum(static_cast<unsigned char>(c))) {
+                c = '_';
+            }
+        }
+        return id;
+    }
+
+    std::string makeOrcaAgentId(cComponent *owner)
+    {
+        cModule *tcpModule = dynamic_cast<cModule *>(owner);
+        cModule *hostModule = tcpModule ? tcpModule->getParentModule() : nullptr;
+        int hostIndex = hostModule ? hostModule->getIndex() : -1;
+
+        if (hostIndex == 0) {
+            return "Orca";
+        }
+        if (hostIndex > 0) {
+            return "Orca" + std::to_string(hostIndex);
+        }
+        return "Orca_" + sanitizeAgentId(owner ? owner->getFullPath() : "unknown");
+    }
+}
 Orca::Orca():
     TcpCubic(), RLInterface() {
     if (debug) cout << "\tOrca: Constructor called!";
@@ -63,7 +90,7 @@ void Orca::established(bool active) {
         this->isActive = active;
 
         // Set the RayNet ID of this agent and register with the Broker
-        RLInterface::setStringId("Orca");
+        RLInterface::setStringId(makeOrcaAgentId(owner));
         cObject* simtime = new cSimTime(0); // Used to contain initial step length, now deprecated.
         owner->emit(this->registerSig, stringId.c_str(), simtime); 
 
@@ -74,7 +101,7 @@ void Orca::established(bool active) {
 
 // Return an observation to the broker, based on the current state
 std::optional<ObsType> Orca::computeObservation(){
-    if (debug) cout << "\tOrca: computeObservation()" << endl; 
+    if (debug) cout << "\t" << stringId << " computeObservation()" << endl; 
     double lastIntervalDuration = (simTime() - this->lastIntervalTime).dbl();
 
     this->delta_snd_max = state->snd_max - this->last_snd_max;
@@ -180,7 +207,7 @@ std::optional<ObsType> Orca::computeObservation(){
 }
 
 RewardType Orca::computeReward(){
-    if (debug) cout << "\tOrca: computeReward()" << endl;
+    if (debug) cout << "\t" << stringId << " computeReward()" << endl;
     double reward;
     if (this->orcaMaxThroughput == 0.0) {
         reward = 0.0;
@@ -193,7 +220,7 @@ RewardType Orca::computeReward(){
 
 // RayNet method: Make a decision based on the policy (alter snd_cwnd)
 void Orca::decisionMade(ActionType action) {
-    if (debug) cout << "\tOrca: decisionMade()" << endl;
+    if (debug) cout << "\t" << stringId << " decisionMade()" << endl;
 
     // Compute new cwnd from the given action (cwnd *= 2^action)
     double multiplier = std::pow(2.0, (double) action);
@@ -237,7 +264,7 @@ void Orca::decisionMade(ActionType action) {
 
 void Orca::resetStepVariables()
 {
-    if (debug) cout << "\t\tOrca: resetStepVariables()" << endl;
+    if (debug) cout << "\t\t" << stringId << " resetStepVariables()" << endl;
     this->orcaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
     this->orcaLossRate=0.0;      // The average loss rate of packets over the last interval
     this->orcaDelaySum=0.0;      // Sum of all RTT reports received over an interval 
@@ -253,16 +280,16 @@ void Orca::resetStepVariables()
 // RayNet method: Called after simulation completion? Unsure how this differs from reset()
 void Orca::cleanup()
 {
-    if (debug) cout << "\tOrca: cleanUp()" << endl;
+    if (debug) cout << "\t" << stringId << " cleanUp()" << endl;
 }
 
 ObsType Orca::getRLState(){
-    if (debug) cout << "\tOrca: getRLState()" << endl;
+    if (debug) cout << "\t" << stringId << " getRLState()" << endl;
     // Deprecated, remove this later
 }
 
 RewardType Orca::getReward(){
-    if (debug) cout << "\tOrca: getReward()" << endl;
+    if (debug) cout << "\t" << stringId << " getReward()" << endl;
     // Deprecated, remove this later
 }
 

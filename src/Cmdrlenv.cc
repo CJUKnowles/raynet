@@ -128,6 +128,7 @@ void Cmdrlenv::initialiseEnvironment(int argc, char *argv[],cConfiguration *conf
 
 // Passes an action to agents then progresses the simulation until an EOS event is consumed, at which point new observations are collected and returned
 std::string Cmdrlenv::step(ActionType action, bool isReset){
+    cout << ("singleagent step");
     sigintReceived = false;
     Speedometer speedometer;
 
@@ -226,6 +227,7 @@ std::string Cmdrlenv::step(ActionType action, bool isReset){
 
 // Passes an action to agents then progresses the simulation until an EOS event is consumed, at which point new observations are collected and returned
 std::string Cmdrlenv::step(std::unordered_map<std::string, ActionType>  actions, bool isReset){
+    // cout << ("multiagent step") << endl;
     sigintReceived = false;
     Speedometer speedometer;
 
@@ -233,13 +235,14 @@ std::string Cmdrlenv::step(std::unordered_map<std::string, ActionType>  actions,
     std::string broker_name = getSimulation()->getSystemModule()->getFullPath() + std::string(".broker");
     cModule *mod = getSimulation()->getModuleByPath(broker_name.c_str());
     Broker *target = check_and_cast<Broker *>(mod);
+    // cout << ("multiagent step 1") << endl;
     std::unordered_map<std::string, std::tuple<ActionType, bool>> actionAndMove;
     for (auto& it: actions) {
         // Do stuff
         actionAndMove.insert({it.first, std::tuple<ActionType,bool>{it.second, isReset}});
     }
     target->setActionAndMove(actionAndMove);
-    
+    // cout << ("multiagent step 2") << endl;
     #define FINALLY() { \
         if (opt->expressMode) \
             doStatusUpdate(speedometer); \
@@ -261,7 +264,7 @@ std::string Cmdrlenv::step(std::unordered_map<std::string, ActionType>  actions,
                 // if event processing crashes, it can be seen which event it was
                 if (opt->autoflush)
                     out.flush();
-                
+                // cout << ("multiagent step 3") << endl;
                 // If this is an EOS event, collect observations and return
                 string eventName = event -> getName();
                 getSimulation()->executeEvent(event);
@@ -273,7 +276,7 @@ std::string Cmdrlenv::step(std::unordered_map<std::string, ActionType>  actions,
        
                 // flush so that output from different modules don't get mixed
                 cLogProxy::flushLastLine();
-
+                // cout << ("multiagent step 4") << endl;
                 checkTimeLimits();
                 if (sigintReceived)
                     throw cTerminationException("SIGINT or SIGTERM received, exiting");
@@ -283,18 +286,23 @@ std::string Cmdrlenv::step(std::unordered_map<std::string, ActionType>  actions,
             speedometer.start(getSimulation()->getSimTime());
             int64_t last_update = opp_get_monotonic_clock_usecs();
             // doStatusUpdate(speedometer);
-
+            // cout << ("multiagent step 5") << endl;
             // Main event loop
             while (true) {
+                // cout << ("multiagent step 5.0") << endl;
                 cEvent *event = getSimulation()->takeNextEvent();
+                // cout << ("multiagent step 5.1") << endl;
                 if (!event)
                     throw cTerminationException("Scheduler interrupted while waiting");
+                // cout << ("multiagent step 5.2") << endl;
                 speedometer.addEvent(getSimulation()->getSimTime());  // XXX potential performance hog
-            
+                // cout << ("multiagent step 5.3") << endl;
                 // print event banner from time to time
-                if ((getSimulation()->getEventNumber()&0xff) == 0 && elapsed(opt->statusFrequencyMs, last_update))
+                if ((getSimulation()->getEventNumber()&0xff) == 0 && elapsed(opt->statusFrequencyMs, last_update)) {
+                    // cout << ("multiagent step 5.4") << endl;
                     doStatusUpdate(speedometer);
-
+                }
+                // cout << ("multiagent step 6") << endl;
 
                 // If this is an EOS event, collect observations and return
                 string eventName = event -> getName();
@@ -304,7 +312,7 @@ std::string Cmdrlenv::step(std::unordered_map<std::string, ActionType>  actions,
                     FINALLY();
                     return agentId;
                 }
-                
+                // cout << ("multiagent step 7") << endl;
                 
                 checkTimeLimits();  // XXX potential performance hog (maybe check every 256 events, unless "cmdenv-strict-limits" is on?)
                 if (sigintReceived)

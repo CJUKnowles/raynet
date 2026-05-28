@@ -338,7 +338,7 @@ if __name__ == "__main__":
     # Testing params, do what u want with these
     experiments_to_run = {
         # "responsiveness": {
-        #     "protocols": ["Orca", "Cubic"],
+        #     "protocols": ["Orca"],
         #     "params": {
         #         "QSIZE": [".2bdp","1bdp", "4bdp"], # Based on the average BDP of the ranges given
         #         },
@@ -350,10 +350,10 @@ if __name__ == "__main__":
         #     },
         
         "competing-flows": {
-            "protocols": ["Orca", "Cubic"],
+            "protocols": ["Orca"],
             "params": {
-                "BANDWIDTH" : ["10Mbps"],
-                "DELAY"     : ["10ms","50ms"],    
+                "BANDWIDTH" : ["15Mbps"],
+                "DELAY"     : ["10ms"],    
                 "QSIZE": [".2bdp", "1bdp", "4bdp"],
                 },
            "meta": {
