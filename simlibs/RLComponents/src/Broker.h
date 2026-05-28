@@ -61,6 +61,7 @@ protected:
 
   // Omnet signalling/scheduling stuff
   cMessage* EOSmsg = new cMessage((std::string("EOS")).c_str());            // Event message signal an end-of-step, in which RayNet collects uncollected observations from the Broker.
+  void scheduleEndOfStep();
   virtual void handleMessage(cMessage *msg) override;                               // Intercepts STEP events to request agent observations
   simsignal_t obsRequestSig = registerSignal("obsRequest");                   // Signal used to request observations from agents
   simsignal_t performActionSig = registerSignal("performAction");             // Signal used to forward actions to agents

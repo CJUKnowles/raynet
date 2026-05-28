@@ -67,6 +67,13 @@ void Broker::handleMessage(cMessage *msg)
     }
 }
 
+void Broker::scheduleEndOfStep()
+{
+    if (!this->EOSmsg->isScheduled()) {
+        scheduleAt(simTime(), this->EOSmsg);
+    }
+}
+
 /*
     Agent registration/unregistration, and step size modification
     Adds/removes agents from the list of active agents, and schedules STEP events as requested.
@@ -109,7 +116,7 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
         delete activeAgents[id].STEPmsg;
         // Schedule an EOS message for the specific agent.
         if (this->obsCollectionMode == IMMEDIATE) {
-            scheduleAt(simTime(), this->EOSmsg);
+            scheduleEndOfStep();
         }
         activeAgents.erase(id);
         //Check if all agents are done and store in variable for SimulationRunner
@@ -159,10 +166,10 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, cObject *va
 
             // If obs collection mode is IMMEDIATE, then every STEP should immediately trigger observation collection via an EOS event
             if (this->obsCollectionMode == IMMEDIATE) {
-                scheduleAt(simTime(), this->EOSmsg);
+                scheduleEndOfStep();
             } else if (this->obsCollectionMode == GROUPED) {
                 if (this->areAllObsUncollected()) {
-                    scheduleAt(simTime(), this->EOSmsg);
+                    scheduleEndOfStep();
                 }
             }
             EV_TRACE << simTime() <<" Scheduled end of step for " << id << "..." << std::endl;
@@ -298,4 +305,3 @@ bool Broker::getDone(std::string id)
 bool Broker::getAllDone(){
     return allAgentsDone;
 }
-
