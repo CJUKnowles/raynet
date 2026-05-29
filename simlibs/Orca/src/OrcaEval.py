@@ -117,13 +117,20 @@ class OmnetGymApiEnv(MultiAgentEnv):
             stacked_obs = np.concatenate(self.obs_history[agent_id]).astype(np.float32)
             obs[agent_id] = stacked_obs
 
-        if terminateds["__all__"] or info_["simDone"]:
-            print("Episode complete.")
+        if terminateds["__all__"]:
+            print("Episode complete (terminated).")
             self.runner.shutdown()
             self.runner.cleanup()
+        elif info_["simDone"]:
+            print("Episode complete (truncated).")
+            self.runner.cleanup()
+            truncateds = {agent_id: True for agent_id in obs}
+            truncateds["__all__"] = True
+        else:
+            truncateds = {agent_id: False for agent_id in obs}
+            truncateds["__all__"] = False
 
-        truncateds = {agent_id: False for agent_id in obs}
-        truncateds["__all__"] = False
+        
 
         infos = {agent_id: {} for agent_id in obs}
 

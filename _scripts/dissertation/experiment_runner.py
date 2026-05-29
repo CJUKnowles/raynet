@@ -352,9 +352,9 @@ if __name__ == "__main__":
         "competing-flows": {
             "protocols": ["Orca"],
             "params": {
-                "BANDWIDTH" : ["50Mbps"],
+                "BANDWIDTH" : ["200Mbps"],
                 "DELAY"     : ["50ms"],    
-                "QSIZE": [".2bdp", "1bdp", "4bdp"],
+                "QSIZE": ["1bdp"],
                 },
            "meta": {
                "runs" : 1,
