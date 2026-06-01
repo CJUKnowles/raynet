@@ -228,7 +228,7 @@ void Orca::decisionMade(ActionType action) {
     newCwnd = max(newCwnd, state->snd_mss);
     
     // Attempt to change cwnd and pacing rate
-    if (this->takeActions && this->rttReportCount > 0) {
+    if (this->takeActions && this->rttReportCount > 0 && newCwnd <= 1000000) {
         if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         state->snd_cwnd = newCwnd;
 
@@ -256,6 +256,7 @@ void Orca::decisionMade(ActionType action) {
     if (debug) {
         cout << "\t\t" << (this->takeActions) << endl;
         cout << "\t\t" << (this->rttReportCount > 0) << endl;
+        cout << "\t\t" << (newCwnd < 1000000) << endl;
         cout << "-" << endl;
     }
 }

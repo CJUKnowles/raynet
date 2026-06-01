@@ -353,7 +353,7 @@ if __name__ == "__main__":
             "protocols": ["Orca"],
             "params": {
                 "BANDWIDTH" : ["200Mbps"],
-                "DELAY"     : ["50ms"],    
+                "DELAY"     : ["500ms"],    
                 "QSIZE": ["1bdp"],
                 },
            "meta": {
