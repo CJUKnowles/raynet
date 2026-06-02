@@ -345,7 +345,7 @@ if __name__ == "__main__":
             "meta": {
                 "runs" : 1,
                 "bw_range" : (10, 100),
-                "rtt_range" : (10, 200),
+                "rtt_range" : (10, 50),
                 }
             },
         

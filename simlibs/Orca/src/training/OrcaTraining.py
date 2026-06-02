@@ -98,7 +98,8 @@ class OmnetGymApiEnv(gym.Env):
         # Randomize environment parameters. Save them for obs normalization later.
         self.bw = round(np.random.uniform(low=bottleneck_bw_range[0], high=bottleneck_bw_range[1]))
         self.base_rtt = round(np.random.uniform(low=base_rtt_range[0], high=base_rtt_range[1]),2)
-        self.buffer_size = round(self.bw*self.base_rtt * np.random.uniform(low=.2, high=4) * 1000)  # Buffer size between .2x and 2x BDP (converted to bits)
+        #self.buffer_size = round(self.bw*self.base_rtt * np.random.uniform(low=.2, high=4) * 1000)  # Buffer size between .2x and 2x BDP (converted to bits)
+        self.buffer_size = round(np.random.uniform(low=bottleneck_buffer_range[0], high=bottleneck_buffer_range[1]))
         self.max_steps = round(np.random.uniform(low=max_steps_range[0], high=max_steps_range[1]))
 
         # print("ORCA_BOTTLENECK_BW: ", f"{self.bw}Mbps")
@@ -177,7 +178,7 @@ def omnetgymapienv_creator(env_config):
     return OmnetGymApiEnv(env_config)  # return an env instance
 
 if __name__ == '__main__':
-    env_name = "Orca-expandedparams"
+    env_name = "Orca-paperparams"
     register_env(env_name, omnetgymapienv_creator)
     num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
@@ -189,14 +190,14 @@ if __name__ == '__main__':
     # bottleneck_buffer_range = (25000, 4000000)    # Bits. 1x min BDP to 2x max BDP
     
     # Summer training parameters
-    bottleneck_bandwidth_range = (5, 100)            # Megabits
-    minimum_rtt_range = (5, 200)                      # ms
-    bottleneck_buffer_range = (25000, 20_000_000)    # Bits. 1x min BDP to 2x max BDP
+    # bottleneck_bandwidth_range = (5, 100)            # Megabits
+    # minimum_rtt_range = (5, 200)                      # ms
+    # bottleneck_buffer_range = (25000, 20_000_000)    # Bits. 1x min BDP to 2x max BDP
     
     # # # Orca paper parameters
-    # bottleneck_bandwidth_range = (6, 192)            # Megabits
-    # minimum_rtt_range = (4, 400)                      # ms
-    # bottleneck_buffer_range = (24000, 7_680_00_000)    # Bits. 1x min BDP to 2x max BDP
+    bottleneck_bandwidth_range = (6, 192)            # Megabits
+    minimum_rtt_range = (4, 400)                      # ms
+    bottleneck_buffer_range = (24000, 7_680_00_000)    # Bits. 1x min BDP to 2x max BDP
     
     load_from_checkpoint = False
     checkpoint_load_dir = (

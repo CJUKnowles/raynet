@@ -21,7 +21,7 @@ network Dumbbell
         channel bottleneckLine extends ThruputMeteringChannel
         {
             delay = parent.bottleneckDelay; 
-            datarate = parent.bottleneckDatarate; 
+            datarate = parent.bottleneckDatarate;
         }
         
         channel standardLine extends ThruputMeteringChannel

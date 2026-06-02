@@ -104,15 +104,20 @@ std::optional<ObsType> Orca::computeObservation(){
     if (debug) cout << "\t" << stringId << " computeObservation()" << endl; 
     double lastIntervalDuration = (simTime() - this->lastIntervalTime).dbl();
 
+    inet::tcp::TcpPacedConnection::RateSample rateSample = dynamic_cast<TcpPacedConnection*>(conn)->getRateSample();
+    this->bytesDelivered = rateSample.m_delivered;
+    this->bytesLost = dynamic_cast<TcpPacedConnection*>(conn)->getTotalDetectedLostBytes();
+
+    this->delta_bytes_delivered = this->bytesDelivered - this->last_bytes_delivered;    // bytes delivered this interval
+    this->delta_bytes_lost = this->bytesLost - this->last_bytes_lost;                   // bytes lost this interval
     this->delta_snd_max = state->snd_max - this->last_snd_max;
     this->delta_snd_una = state->snd_una - this->last_snd_una;
     this->delta_ack_cnt = state->ack_cnt - this->last_ack_cnt;
-    
     // Initialize empty obs to populate as we go
     double obs[7] = {0,0,0,0,0,0,};
 
     // Throughput: How many bytes were DELIVERED this interval (basically goodput?)
-    this->orcaThroughput = this->bytesDelivered / lastIntervalDuration;
+    this->orcaThroughput = this->delta_bytes_delivered / lastIntervalDuration;
     this->orcaMaxThroughput = std::max(this->orcaMaxThroughput, this->orcaThroughput);
     if (this->orcaMaxThroughput == 0.0) {
         obs[0] = obs[1] = obs[2] = 0.0;
@@ -124,17 +129,13 @@ std::optional<ObsType> Orca::computeObservation(){
         double paceRate = (1.0/dynamic_cast<TcpPacedConnection*>(conn)->intersendingTime.dbl()) * (double) state->snd_mss;
         obs[1] = std::min(10.0, paceRate / this->orcaMaxThroughput);
 
-        // Lossrate: What percentage of bytes sent this interval were retransmissions
-        this->orcaLossRate = 0.0;
-        if (this->retransmissionRate > 0.0) {  // Avoid division by 0
-            double transmissionRate = delta_snd_max/lastIntervalDuration; // How many non-retransmits occurred this interval in bytes/s
-            this->orcaLossRate = this->lossCoefficient * this->retransmissionRate / (this->retransmissionRate + transmissionRate); // What percentage of interval's sent data was retransmissions
-        }
-        obs[2] = this->retransmissionRate / this->orcaMaxThroughput;
+        // Lossrate: What percentage of bytes sent this interval were lost
+        obs[2] = this->lossCoefficient * (this->delta_bytes_lost/lastIntervalDuration) / this->orcaMaxThroughput;
+       
     }
 
     // ACKed: How many bytes were ACKed this interval
-    this->orcaACKTotal= this->bytesDelivered/(double)state->snd_mss;
+    this->orcaACKTotal= this->delta_bytes_delivered/(double)state->snd_mss;
     obs[3] = this->orcaACKTotal /  state->snd_cwnd;
     
     // Interval Duration: How many seconds passed since last interval
@@ -165,7 +166,7 @@ std::optional<ObsType> Orca::computeObservation(){
     } else {
         scheduleNextStep(this->fixedIntervals ? this->fixedIntervalDuration : state->srtt.dbl());
     }
-    
+
     // Debug prints
     if(debug) {
         cout << "-" << endl;
@@ -179,8 +180,9 @@ std::optional<ObsType> Orca::computeObservation(){
             cout << "\t\tack_cnt: " << state->ack_cnt << endl;
             cout << "\t\tdelta_ack_cnt: " << this->delta_ack_cnt << endl;
             cout << "\t\tACKTotal: " << this->orcaACKTotal << endl;
-            cout << "\t\tpacketsDelivered" << this->bytesDelivered/state->snd_mss << endl;
+            cout << "\t\tpacketsDelivered" << this->delta_bytes_delivered/state->snd_mss << endl;
             cout << "\t\trttReportCount: " << this->rttReportCount << endl;
+            cout << "\t\tbytesLost: " << this->bytesLost << endl;
             cout << "\t\tDone: " << done << endl;
         cout << "\tObservations:" << endl;
             cout << "\t\tThroughput: " << obs[0] << endl;
@@ -212,7 +214,7 @@ RewardType Orca::computeReward(){
     if (this->orcaMaxThroughput == 0.0) {
         reward = 0.0;
     } else {
-        reward = (this->orcaThroughput-(this->lossCoefficient*this->orcaLossRate))/this->orcaMaxThroughput*this->orcaDelayMetric;
+        reward = (this->orcaThroughput-(this->lossCoefficient*this->delta_bytes_lost))/this->orcaMaxThroughput*this->orcaDelayMetric;
     }
     if (debug) cout << "\t\tReward: " << reward << endl;
     return(reward);
@@ -228,7 +230,7 @@ void Orca::decisionMade(ActionType action) {
     newCwnd = max(newCwnd, state->snd_mss);
     
     // Attempt to change cwnd and pacing rate
-    if (this->takeActions && this->rttReportCount > 0 && newCwnd < 10000000) {
+    if (this->takeActions && this->rttReportCount > 0 && newCwnd < 9600000) { // Only take the action if we have valid RTT data to inform it, and if the new cwnd is a reasonable value (not insanely high due to a bug or something)
         if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         state->snd_cwnd = newCwnd;
 
@@ -266,14 +268,14 @@ void Orca::resetStepVariables()
 {
     if (debug) cout << "\t\t" << stringId << " resetStepVariables()" << endl;
     this->orcaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
-    this->orcaLossRate=0.0;      // The average loss rate of packets over the last interval
     this->orcaDelaySum=0.0;      // Sum of all RTT reports received over an interval 
     this->orcaACKTotal=0.0;      // The number of valid acknowledgements over the last interval
-    this->bytesDelivered=0.0;
     this->rttReportCount=0; // The number of RTT values we have measured over the last interval
     this->last_snd_max = state->snd_max;
     this->last_snd_una = state->snd_una;
     this->last_ack_cnt = state->ack_cnt;
+    this->last_bytes_lost = this->bytesLost;
+    this->last_bytes_delivered = this->bytesDelivered;  
     this->lastIntervalTime = simTime();
 }
 
@@ -318,5 +320,6 @@ void Orca::rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) {
 // Override to track bytes delivered
 void Orca::receivedDataAck(uint32_t firstSeqAcked) {
     TcpCubic::receivedDataAck(firstSeqAcked);
-    this->bytesDelivered += state->snd_mss; // Number of bytes sent so far this interval
+    
+    // this->bytesDelivered += state->snd_mss; // Number of bytes sent so far this interval
 }

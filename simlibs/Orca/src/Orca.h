@@ -69,7 +69,6 @@ public: // General use
 
     // Orca observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
     double orcaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
-    double orcaLossRate=0.0;      // The average loss rate of packets over the last interval
     double orcaDelaySum=0.0;      // Used to hold the current sum of reported delays over a given interval. Used to compute an average at the end.
     double orcaACKTotal=0.0;      // The number of valid acknowledgements over the last interval
     double orcaMaxThroughput=0.0; // The maximum delivery rate so far
@@ -83,12 +82,17 @@ public: // General use
     double delta_snd_max;
     double delta_snd_una;
     double delta_ack_cnt;
+    double delta_bytes_lost;
+    double delta_bytes_delivered; // The number of bytes delivered during the last interval
     uint32_t last_snd_max = 0.0; // Whatever value state->snd_max returned last interval. The TOTAL so far; NOT what was sent DURING the last interval.
     uint32_t last_snd_una = 0;  // Whatever the oldest reported unACK'd byte was at the last monitor interval
     uint32_t last_ack_cnt = 0;
+    double last_bytes_lost = 0.0;
+    double last_bytes_delivered = 0.0;
     uint32_t rttReportCount = 0;    // How many rtt reports we received this interval
     double retransmissionRate=0.0; // The most recent measurement of bytes retransmitted.
     
     double bytesDelivered=0.0; // Sum of all bytes delivered this interval
+    double bytesLost=0.0;
   };
 #endif
