@@ -17,7 +17,7 @@ cleanall: checkmakefiles
 	rm -f src/Makefile
 
 makefiles:
-	cd src && opp_makemake -o Astrea --make-so -f --deep --mode ${MODE} -I${RAYNET_PATH}/simlibs/RLComponents/src -L${RAYNET_PATH}/simlibs/RLComponents/src -lRLComponents${LIB_SUFFIX} -I${INET_PATH}/src -L${INET_PATH}/src -lINET${LIB_SUFFIX} -I${OMNET_PATH}/samples/tcpPaced/src -L${OMNET_PATH}/samples/tcpPaced/src -ltcpPaced${LIB_SUFFIX}  -I${OMNET_PATH}/samples/cubic/src -L${OMNET_PATH}/samples/cubic/src -lcubic${LIB_SUFFIX} -I${HOME}/raynet/simlibs/tcpPacedNoCC/src -L${HOME}/raynet/simlibs/tcpPacedNoCC/src -ltcpPacedNoCC${LIB_SUFFIX} 
+	cd src && opp_makemake -o Astraea --make-so -f --deep --mode ${MODE} -I${RAYNET_PATH}/simlibs/RLComponents/src -L${RAYNET_PATH}/simlibs/RLComponents/src -lRLComponents${LIB_SUFFIX} -I${INET_PATH}/src -L${INET_PATH}/src -lINET${LIB_SUFFIX} -I${OMNET_PATH}/samples/tcpPaced/src -L${OMNET_PATH}/samples/tcpPaced/src -ltcpPaced${LIB_SUFFIX} -I${OMNET_PATH}/samples/cubic/src -L${OMNET_PATH}/samples/cubic/src -lcubic${LIB_SUFFIX} -I${HOME}/raynet/simlibs/tcpPacedNoCC/src -L${HOME}/raynet/simlibs/tcpPacedNoCC/src -ltcpPacedNoCC${LIB_SUFFIX}   
 
 checkmakefiles:
 	@if [ ! -f src/Makefile ]; then \

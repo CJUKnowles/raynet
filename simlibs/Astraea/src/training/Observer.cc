@@ -9,17 +9,17 @@ Define_Module(Observer);
 void Observer::initialize()
 {
     this->debug = par("printDebugMessages");
-    this->LINK_DELAY = par("astreaBottleneckDelay");
+    this->LINK_DELAY = par("AstraeaBottleneckDelay");
     this->LINK_DELAY *= .001; // ms to s
-    this->BUFFER_SIZE = par("astreaDataCapacity");
+    this->BUFFER_SIZE = par("AstraeaDataCapacity");
     this->BUFFER_SIZE /= 8.0; // bits to bytes
-    this->BANDWIDTH = par("astreaBottleneckDatarate");
+    this->BANDWIDTH = par("AstraeaBottleneckDatarate");
     this->BANDWIDTH *= 125000; // Megabits/s to bytes/s
     this->globalState = new GlobalState();
 
-    getSimulation()->getSystemModule()->subscribe("registerAstreaAgent", this);     // used to register Astrea agents
-    getSimulation()->getSystemModule()->subscribe("unregisterAstreaAgent", this);   // used to unregister Astrea agents
-    getSimulation()->getSystemModule()->subscribe("astreaStateReport", this);       // used to report a given agent's current state
+    getSimulation()->getSystemModule()->subscribe("registerAstraeaAgent", this);     // used to register Astraea agents
+    getSimulation()->getSystemModule()->subscribe("unregisterAstraeaAgent", this);   // used to unregister Astraea agents
+    getSimulation()->getSystemModule()->subscribe("AstraeaStateReport", this);       // used to report a given agent's current state
     getSimulation()->getSystemModule()->subscribe("globalStateRequest", this);      // used to request global state info (rewards) from the Observer
     
     if (debug) {
@@ -33,14 +33,14 @@ void Observer::initialize()
 // Called at end of simulation
 void Observer::finish(){
     // TODO: cleanup, delete messages and state entries
-    getSimulation()->getSystemModule()->unsubscribe("registerAstreaAgent", this);     // used to register Astrea agents
-    getSimulation()->getSystemModule()->unsubscribe("unregisterAstreaAgent", this);   // used to unregister Astrea agents
-    getSimulation()->getSystemModule()->unsubscribe("astreaStateReport", this);       // used to report a given agent's current state
+    getSimulation()->getSystemModule()->unsubscribe("registerAstraeaAgent", this);     // used to register Astraea agents
+    getSimulation()->getSystemModule()->unsubscribe("unregisterAstraeaAgent", this);   // used to unregister Astraea agents
+    getSimulation()->getSystemModule()->unsubscribe("AstraeaStateReport", this);       // used to report a given agent's current state
     getSimulation()->getSystemModule()->unsubscribe("globalStateRequest", this);      // used to request global state info (rewards) from the Observer
 }
 
 /*
-    Astrea agent (de)registration. 
+    Astraea agent (de)registration. 
     Adds/removes a given agent from the list of agent observations used to compute global state.
     TODO: Used a better signal with less redudant arguments. You just need the agent ID and maybe a timestamp, nothing else.
 */
@@ -50,7 +50,7 @@ void Observer::receiveSignal(cComponent *source, simsignal_t signalID, const cha
     Enter_Method("schedule a step event(self message)"); // TODO: Change this? 
     const char *signalName = getSignalName(signalID);
 
-    if (strcmp(signalName, "registerAstreaAgent") == 0) {
+    if (strcmp(signalName, "registerAstraeaAgent") == 0) {
         EV_TRACE << "Registering new agent with Observer..." << std::endl;
         std::string id(value);
         EV_TRACE << "Agent ID: " << id << std::endl;
@@ -58,7 +58,7 @@ void Observer::receiveSignal(cComponent *source, simsignal_t signalID, const cha
         
         // Insert this agent into the Observer's agent list, with an empty history to populate later
         StateHistory newHistory;
-        astreaAgents.insert({id, newHistory});
+        AstraeaAgents.insert({id, newHistory});
 
     } else if (strcmp(signalName, "unregisterAgent") == 0){
         // Remove the specified agent from the Observer's agent list.
@@ -66,7 +66,7 @@ void Observer::receiveSignal(cComponent *source, simsignal_t signalID, const cha
         std::string id(value);
         EV_TRACE << "Agent ID: " << id << std::endl;
         if (debug) cout << "OBSERVER: Deregistering " << id << endl;
-        astreaAgents.erase(id);
+        AstraeaAgents.erase(id);
     }
 }
 
@@ -80,11 +80,11 @@ void Observer::receiveSignal(cComponent *source, simsignal_t signalID, cObject *
     const char *signalName = getSignalName(signalID);
 
     // Agent has sent an observation
-    if (strcmp(signalName, "astreaStateReport") == 0)
+    if (strcmp(signalName, "AstraeaStateReport") == 0)
     {
         std::string id = ((cString*) obj)->str;
         LocalState* agentCurrentState = check_and_cast<LocalState*>(value);
-        astreaAgents[id].addStateEntry(agentCurrentState);
+        AstraeaAgents[id].addStateEntry(agentCurrentState);
         this->globalState->needsUpdating = true; // GlobalState is now out of date and needs updating
         return;
     // Agent has requested global state information (more specifically, a reward value)
@@ -112,7 +112,7 @@ void Observer::computeGlobalState() {
     double pacerateSum = 0;         // Sum all of pacing rates
     int numFlows = 0;
 
-    for (auto& [agentId, stateHistory] : astreaAgents) {
+    for (auto& [agentId, stateHistory] : AstraeaAgents) {
         if (!stateHistory.history.empty()) {
             LocalState* localState = stateHistory.history.front(); // The most recent localState for the given agent
             
@@ -176,7 +176,7 @@ void Observer::computeGlobalState() {
     // Fairness Metric: 
     double globalAvgThroughput = avgThroughputSum/numFlows; // Average of all average throughputs (kill me)
     double fairnessNumerator = 0;
-    for (auto& [agentId, stateHistory] : astreaAgents) {
+    for (auto& [agentId, stateHistory] : AstraeaAgents) {
         if (!stateHistory.history.empty()) {
             fairnessNumerator += std::pow(stateHistory.avgThroughput - globalAvgThroughput, 2.0);
         }
@@ -189,9 +189,9 @@ void Observer::computeGlobalState() {
     }
     globalState->reward -= this->fairnessWeight * globalState->fairnessMetric;
 
-    // Stability Metric: average stability of all active astrea flows
+    // Stability Metric: average stability of all active Astraea flows
     double stabilitySum = 0;
-    for (auto& [agentId, stateHistory] : astreaAgents) {
+    for (auto& [agentId, stateHistory] : AstraeaAgents) {
         if (!stateHistory.history.empty()) {
             stabilitySum += stateHistory.getStability();
         }

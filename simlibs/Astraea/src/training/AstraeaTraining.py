@@ -75,9 +75,9 @@ class OmnetGymApiEnv(MultiAgentEnv):
         action_spaces = {}
         self.possible_agents = []
         for i in range(self.env_config["num_flows_range"][1] + 1):
-            self.possible_agents.append(f"Astrea{i}")
-            obs_spaces[f"Astrea{i}"] = spaces.Box(low=self.obs_min, high=self.obs_max, dtype=np.float32)
-            action_spaces[f"Astrea{i}"] = spaces.Box(low=-1.0, high=1.0, dtype=np.float32)
+            self.possible_agents.append(f"Astraea{i}")
+            obs_spaces[f"Astraea{i}"] = spaces.Box(low=self.obs_min, high=self.obs_max, dtype=np.float32)
+            action_spaces[f"Astraea{i}"] = spaces.Box(low=-1.0, high=1.0, dtype=np.float32)
         self.observation_space = spaces.Dict(obs_spaces)
         self.action_space = spaces.Dict(action_spaces)
         
@@ -172,12 +172,12 @@ def omnetgymapienv_creator(env_config):
     return env  # return an env instance
 
 if __name__ == '__main__':
-    env_name = "Astrea-1.4"
+    env_name = "Astraea-1.4"
     register_env(env_name, omnetgymapienv_creator)
     seed = 91456211
     
     
-    num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
+    num_workers = 1 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     # Environment Params
     max_steps_range = (2000, 2000)
     bottleneck_bandwidth_range = (5, 20)
@@ -195,10 +195,10 @@ if __name__ == '__main__':
     
     # Training Params
     load_from_checkpoint = False
-    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_Astrea-1.3_2026-04-16_11-06-44iqflmq07/checkpoints/checkpoint_57"
+    checkpoint_load_dir = os.getenv('HOME') + "/ray_results/SAC_Astraea-1.3_2026-04-16_11-06-44iqflmq07/checkpoints/checkpoint_57"
     stacking = 5
     
-    env_config = {"iniPath": os.getenv('RAYNET_PATH') + "/simlibs/Astrea/src/training/AstreaTraining.ini",
+    env_config = {"iniPath": os.getenv('RAYNET_PATH') + "/simlibs/Astraea/src/training/AstraeaTraining.ini",
                   "bottleneck_bw_range": bottleneck_bandwidth_range,
                   "minimum_rtt_range": minimum_rtt_range,
                   "bottleneck_buffer_range": bottleneck_buffer_range,

@@ -1,4 +1,4 @@
-package Orca.training;
+package Astraea.training;
 
 @namespace(inet);
 
@@ -9,8 +9,9 @@ import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import inet.node.inet.Router;
 import inet.node.inet.StandardHost;
 import RLComponents.Broker;
+import Astraea.training.Observer;
 
-network OrcaTraining
+network AstraeaTraining
 {
     parameters:
         int numberOfFlows = default(1);
@@ -18,13 +19,13 @@ network OrcaTraining
         double bottleneckDelay @unit("ms") = default(10ms);
         
     types:
-        channel bottleneckLine extends DatarateChannel
+        channel bottleneckLine extends ThruputMeteringChannel
         {
             delay = parent.bottleneckDelay; 
             datarate = parent.bottleneckDatarate; 
         }
         
-        channel standardLine extends DatarateChannel
+        channel standardLine extends ThruputMeteringChannel
         {
             delay = 0ms;
             datarate = 1000Gbps;
@@ -39,6 +40,7 @@ network OrcaTraining
         router1: Router;
         router2: Router;
         broker: Broker;
+        observer: Observer;
     connections:
         // Bottleneck
         router1.pppg++ <--> bottleneck: bottleneckLine <--> router2.pppg++;

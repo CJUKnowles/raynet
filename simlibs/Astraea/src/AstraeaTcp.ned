@@ -1,10 +1,10 @@
-package Astrea;
+package Astraea;
 import tcppaced.transportlayer.tcp.TcpPaced;
 
-simple AstreaTcp extends TcpPaced
+simple AstraeaTcp extends TcpPaced
 {
     parameters:
-        @class(AstreaTcp);
+        @class(AstraeaTcp);
 
         int maxWindow; 					                    // maximum window size
         int stateSize; 					                    // dimension of the state space

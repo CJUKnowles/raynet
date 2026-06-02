@@ -3,7 +3,7 @@
 #include "omnetpp/simtime.h"
 #include "omnetpp/simtime_t.h"
 #include <optional>
-#include "Astrea.h"
+#include "Astraea.h"
 #include "typedefs.h"
 #include <inet/common/INETDefs.h>
 #include "training/Observer.h"
@@ -12,15 +12,18 @@ using namespace inet::tcp;
 using namespace inet;
 using namespace learning;
 
-Register_Class(Astrea); // Lets omnet see and use this class
+Register_Class(Astraea); // Lets omnet see and use this class
 
-Astrea::Astrea():
+Astraea::Astraea():
     TcpPacedNoCC(), RLInterface() {
-    if (debug) cout << "\tAstrea: Constructor called!";
+    if (debug) cout << "\tAstraea: Constructor called!";
+    registerAstraeaAgentSig = owner->registerSignal("registerAstraeaAgent");
+    AstraeaStateReportSig = owner->registerSignal("AstraeaStateReport");
+    globalStateRequestSig = owner->registerSignal("globalStateRequest");
 }
 
-Astrea::~Astrea() {
-    if (debug) cout << "\tAstrea: Destructor method called. Goodbye.";
+Astraea::~Astraea() {
+    if (debug) cout << "\tAstraea: Destructor method called. Goodbye.";
     getSimulation()->getSystemModule()->unsubscribe(stringId.c_str(), (cListener*) this);
     getSimulation()->getSystemModule()->unsubscribe("performAction", (cListener*) this);
     getSimulation()->getSystemModule()->unsubscribe("globalStateResponse", this);
@@ -28,8 +31,8 @@ Astrea::~Astrea() {
 
 
 // // RayNet: Called to initalize the agent
-void Astrea::initialize() {
-    if (debug) cout << "\tAstrea initialize()" << endl;
+void Astraea::initialize() {
+    if (debug) cout << "\tAstraea initialize()" << endl;
     this->rewardDelayForgiveness = this->conn->getTcpMain()->par("rewardDelayForgiveness");
     this->rewardLossMultiplier = this->conn->getTcpMain()->par("rewardLossMultiplier");
     this->maxRLSteps = this->conn->getTcpMain()->par("maxRLSteps");
@@ -53,21 +56,21 @@ void Astrea::initialize() {
 }
 
 // OMNet Method? Called after component initialization is complete?
-void Astrea::established(bool active) {
-    if (debug) cout << "\tAstrea: established()" << endl;
+void Astraea::established(bool active) {
+    if (debug) cout << "\tAstraea: established()" << endl;
     TcpPacedNoCC::established(active);
 
     if (active) {
         this->isActive = active;
         cout << "ID: " << std::to_string(owner->getId()) << endl;
         // Set the RL ID of this component (for use by the training script). Ensure this is unique for multi-agent environments.
-        std::string s("Astrea" + std::to_string(this->numAgents + 1));
+        std::string s("Astraea" + std::to_string(this->numAgents + 1));
         setStringId(s);
         
         // Register this agent with RayNet
         cObject* simtime = new cSimTime(this->conn->getTcpMain()->par("monitorIntervalDuration"));
         owner->emit(this->registerSig, stringId.c_str(), simtime);
-        owner->emit(this->registerAstreaAgentSig, stringId.c_str(), simtime);
+        owner->emit(this->registerAstraeaAgentSig, stringId.c_str(), simtime);
         scheduleNextStep(this->fixedIntervalDuration);
     }
 }
@@ -79,8 +82,8 @@ void Astrea::established(bool active) {
 
 
 // Perform and observation and store the result into the provided vector (or append to it, if you're keeping history)
-std::optional<ObsType> Astrea::computeObservation(){
-    if (debug) cout << "\tAstrea: computeObservation()" << endl; 
+std::optional<ObsType> Astraea::computeObservation(){
+    if (debug) cout << "\tAstraea: computeObservation()" << endl; 
     
     //dynamic_cast<TcpPacedConnection*>(conn)->computeRetransmissionRate(); // Updates this->retransmissionBytes via TcpPaced Connection
     double delta_snd_max = state->snd_max - this->last_snd_max;
@@ -94,45 +97,45 @@ std::optional<ObsType> Astrea::computeObservation(){
     double obs[8] = {0,0,0,0,0,0, 0};
 
     // Throughput: How many bytes were DELIVERED this interval (basically goodput?)
-    this->astreaThroughput = delta_snd_una / this->fixedIntervalDuration;
-    this->astreaMaxThroughput = std::max(this->astreaMaxThroughput, this->astreaThroughput);
-    if (this->astreaMaxThroughput == 0) {
+    this->AstraeaThroughput = delta_snd_una / this->fixedIntervalDuration;
+    this->AstraeaMaxThroughput = std::max(this->AstraeaMaxThroughput, this->AstraeaThroughput);
+    if (this->AstraeaMaxThroughput == 0) {
         obs[0] = 0;
     } else {
-        obs[0] = this->astreaThroughput / this->astreaMaxThroughput;
+        obs[0] = this->AstraeaThroughput / this->AstraeaMaxThroughput;
     }
-    obs[1] = this->astreaMaxThroughput;
-    localState->throughput = this->astreaThroughput;
+    obs[1] = this->AstraeaMaxThroughput;
+    localState->throughput = this->AstraeaThroughput;
     localState->throughputRatio = obs[0];
     localState->maxThroughput = obs[1];
 
     // Latency: What is our RTT relative to the minimum observed
-    this->astreaSRTT = state->srtt.dbl();
-    if (this->astreaSRTT != 0) {
-        this->astreaMinDelay = std::min(this->astreaMinDelay, this->astreaSRTT);
+    this->AstraeaSRTT = state->srtt.dbl();
+    if (this->AstraeaSRTT != 0) {
+        this->AstraeaMinDelay = std::min(this->AstraeaMinDelay, this->AstraeaSRTT);
     }
-    obs[2] = state->srtt.dbl()/this->astreaMinDelay;
-    obs[3] = this->astreaMinDelay;
-    localState->latency = this->astreaSRTT;
+    obs[2] = state->srtt.dbl()/this->AstraeaMinDelay;
+    obs[3] = this->AstraeaMinDelay;
+    localState->latency = this->AstraeaSRTT;
     localState->minLatency = obs[3];
 
     // CWND: How does our current cwnd compare to the observed BDP
-    if (this->astreaMaxThroughput*this->astreaMinDelay == 0) {
+    if (this->AstraeaMaxThroughput*this->AstraeaMinDelay == 0) {
         obs[4] = 0;
     } else {
-        obs[4] = state->snd_cwnd/(this->astreaMaxThroughput*this->astreaMinDelay);
+        obs[4] = state->snd_cwnd/(this->AstraeaMaxThroughput*this->AstraeaMinDelay);
     }
     localState->cwnd = state->snd_cwnd;
     localState->cwndRatio = obs[4];
 
     // Lossrate: What percentage of bytes sent this interval were retransmissions
-    this->astreaLossRate = delta_rexmit_count/this->fixedIntervalDuration;
-    if (this->astreaMaxThroughput == 0) {
+    this->AstraeaLossRate = delta_rexmit_count/this->fixedIntervalDuration;
+    if (this->AstraeaMaxThroughput == 0) {
         obs[5] = 0;
     } else {
-        obs[5] = this->astreaLossRate/this->astreaMaxThroughput;
+        obs[5] = this->AstraeaLossRate/this->AstraeaMaxThroughput;
     }
-    localState->lossRate = this->astreaLossRate;
+    localState->lossRate = this->AstraeaLossRate;
     localState->lossRateRatio = obs[5];
 
     // in-flight: How many bytes are currently sent but not ACKed
@@ -152,7 +155,7 @@ std::optional<ObsType> Astrea::computeObservation(){
     } else {
         prate = 8192; // Arbitrarily large value. Pacerate is virtually infinite until it is set.
     }
-    obs[7] = (prate * state->snd_mss) / this->astreaMaxThroughput; // convert prate to bytes/s, matching maxthruput's units
+    obs[7] = (prate * state->snd_mss) / this->AstraeaMaxThroughput; // convert prate to bytes/s, matching maxthruput's units
     localState->prate = prate; // Observer only uses prate as a multiplier for latency penalty. Use segments/s.
 
     if(debug) {
@@ -182,12 +185,12 @@ std::optional<ObsType> Astrea::computeObservation(){
         cout << "-" << endl;
     } 
 
-    conn->emit(throughputSignal, this->astreaThroughput);
+    conn->emit(throughputSignal, this->AstraeaThroughput);
     conn->emit(srttSignal, state->srtt);
     conn->emit(cwndSignal, state->snd_cwnd);
 
     // Send data to Observer before returning
-    conn->emit(this->astreaStateReportSig, (cObject*) localState, new cString(stringId));
+    conn->emit(this->AstraeaStateReportSig, (cObject*) localState, new cString(stringId));
 
     // Update step count, and check if the step limit has been reached
     RLStepsTaken++;
@@ -210,8 +213,8 @@ std::optional<ObsType> Astrea::computeObservation(){
         });
 }
 
-RewardType Astrea::computeReward(){
-    if (debug) cout << "\tAstrea: computeReward()" << endl;
+RewardType Astraea::computeReward(){
+    if (debug) cout << "\tAstraea: computeReward()" << endl;
 
     // Emit a signal requested global state/reward. LocalState here is a placeholder.
     LocalState* dummy = new LocalState();
@@ -221,8 +224,8 @@ RewardType Astrea::computeReward(){
 }
 
 // RayNet method: Make a decision based on the policy (alter snd_cwnd)
-void Astrea::decisionMade(ActionType action) {
-    if (debug) cout << "\tAstrea: decisionMade()" << endl;
+void Astraea::decisionMade(ActionType action) {
+    if (debug) cout << "\tAstraea: decisionMade()" << endl;
 
     // Calculate the newCwnd
     uint32_t newCwnd;
@@ -244,9 +247,9 @@ void Astrea::decisionMade(ActionType action) {
 
         // Pacing
         if (state->srtt.dbl() != 0) {
-            this->astreaPaceRate = ((double) state->snd_cwnd / (double) state->snd_mss) / state->srtt.dbl();  // segments/s
-            dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime((double) 1.0/astreaPaceRate); // seconds between each segment sent
-            if (debug) cout << "\t\tprate set to " << this->astreaPaceRate << " (" << dynamic_cast<TcpPacedConnection*>(conn)->intersendingTime.dbl() << ")" << endl;
+            this->AstraeaPaceRate = ((double) state->snd_cwnd / (double) state->snd_mss) / state->srtt.dbl();  // segments/s
+            dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime((double) 1.0/AstraeaPaceRate); // seconds between each segment sent
+            if (debug) cout << "\t\tprate set to " << this->AstraeaPaceRate << " (" << dynamic_cast<TcpPacedConnection*>(conn)->intersendingTime.dbl() << ")" << endl;
         } else {
             if (debug) cout << "\t\tno ACKS yet received, not setting pacerate" << endl;
         }
@@ -257,9 +260,9 @@ void Astrea::decisionMade(ActionType action) {
 }
 
 
-void Astrea::resetStepVariables()
+void Astraea::resetStepVariables()
 {
-    if (debug) cout << "\tAstrea: resetStepVariables()" << endl;
+    if (debug) cout << "\tAstraea: resetStepVariables()" << endl;
     this->last_snd_max = state->snd_max;
     this->last_snd_una = state->snd_una;
     this->last_rexmit_count = state->rexmit_count;
@@ -267,25 +270,25 @@ void Astrea::resetStepVariables()
 }
 
 // Returns true if the agent is reporting this episode as complete. (Pretty sure this is never called. Just set done to true directly during an RLStep.)
-bool Astrea::getDone() {
-    if (debug) cout << "Astrea getDone(): If you're seeing this, getDone() probably isn't deprecated.";
+bool Astraea::getDone() {
+    if (debug) cout << "Astraea getDone(): If you're seeing this, getDone() probably isn't deprecated.";
     bool done = RLStepsTaken > 1000;
-    if (debug) cout << "\tAstrea: " << RLStepsTaken << " steps completed. Returning " << done << endl;
+    if (debug) cout << "\tAstraea: " << RLStepsTaken << " steps completed. Returning " << done << endl;
     return done;
 }
 
 // RayNet method: Called after simulation completion? Unsure how this differs from reset()
-void Astrea::cleanup()
+void Astraea::cleanup()
 {
-    if (debug) cout << "\tAstrea: cleanUp()" << endl;
+    if (debug) cout << "\tAstraea: cleanUp()" << endl;
 }
 
-ObsType Astrea::getRLState(){
-    if (debug) cout << "\tAstrea: getRLState()" << endl;
+ObsType Astraea::getRLState(){
+    if (debug) cout << "\tAstraea: getRLState()" << endl;
     // Deprecated, remove this later
 }
 
-RewardType Astrea::getReward(){
-    if (debug) cout << "\tAstrea: getReward()" << endl;
+RewardType Astraea::getReward(){
+    if (debug) cout << "\tAstraea: getReward()" << endl;
     // Deprecated, remove this later
 }

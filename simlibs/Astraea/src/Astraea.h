@@ -1,7 +1,7 @@
 #include "omnetpp/clistener.h"
 #include "omnetpp/simkerneldefs.h"
-#ifndef __ASTREA_CC_H_
-#define __ASTREA_CC_H_
+#ifndef __Astraea_CC_H_
+#define __Astraea_CC_H_
 
 #include <omnetpp.h>
 #include <iostream>
@@ -26,7 +26,7 @@ using namespace inet::tcp;
 using namespace inet;
 using namespace learning;
 
-class Astrea : public TcpPacedNoCC, public RLInterface
+class Astraea : public TcpPacedNoCC, public RLInterface
 {
 protected:
     // am I running on active open (client) or passive open connection (server)
@@ -40,8 +40,8 @@ protected:
     simsignal_t intervalDurationSignal;
     uint32_t dupAcks;
 public: // General use
-    Astrea();
-    virtual ~Astrea();
+    Astraea();
+    virtual ~Astraea();
 
     // 
     using RLInterface::receiveSignal;
@@ -80,26 +80,26 @@ public: // General use
     int RLStepsTaken = 0; // How many RLSteps have been completed so far.
     int maxRLSteps = 10000; // How many training steps should be taken before this agent reports itself as done.
     bool debug = false; // Prints debug messages if true
-    bool takeActions = true; // Skips Astrea actions if false
+    bool takeActions = true; // Skips Astraea actions if false
 
-    // Astrea parameters (Default values here, overridden in astrea.ini)
+    // Astraea parameters (Default values here, overridden in Astraea.ini)
     double rewardDelayForgiveness = 1; // 
     double rewardLossMultiplier = 1;   // 
-    double actionControlCoeff = .6; // Alpha term from Astrea paper. Larger values allow larger changes to cwnd.
+    double actionControlCoeff = .6; // Alpha term from Astraea paper. Larger values allow larger changes to cwnd.
     double fixedIntervalDuration=0.03;  // Seconds between steps
 
-    // Astrea observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
-    double astreaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
-    double astreaLossRate=0.0;      // The average loss rate of packets over the last interval
-    double astreaACKTotal=0.0;      // The number of valid acknowledgements over the last interval
-    double astreaSRTT=0.0;          // The smoothed RTT of (all?) packets so far
-    double astreaCwnd=0.0;          // The current congestion window (don't really need a new variable here, this is just useful for reference. Just use conn->snd_cwnd)
-    double astreaMaxThroughput=0; // The maximum delivery rate so far
-    double astreaMinDelay=9999;      // The minimum packet delay so far. Initialize to large value so the minimum is guaranteed to update.
-    double astreaPaceRate=1;        // Bytes sent per second. Usually smaller than cwnd.
-    double astreaDelayMetric=1;     // A measure of how close the currenty delay is to optimal. Will be 1 as long as the delay is within the forgiveness window.
+    // Astraea observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
+    double AstraeaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
+    double AstraeaLossRate=0.0;      // The average loss rate of packets over the last interval
+    double AstraeaACKTotal=0.0;      // The number of valid acknowledgements over the last interval
+    double AstraeaSRTT=0.0;          // The smoothed RTT of (all?) packets so far
+    double AstraeaCwnd=0.0;          // The current congestion window (don't really need a new variable here, this is just useful for reference. Just use conn->snd_cwnd)
+    double AstraeaMaxThroughput=0; // The maximum delivery rate so far
+    double AstraeaMinDelay=9999;      // The minimum packet delay so far. Initialize to large value so the minimum is guaranteed to update.
+    double AstraeaPaceRate=1;        // Bytes sent per second. Usually smaller than cwnd.
+    double AstraeaDelayMetric=1;     // A measure of how close the currenty delay is to optimal. Will be 1 as long as the delay is within the forgiveness window.
 
-    // Astrea helper variables (mostly used to facilitate computing the observations)
+    // Astraea helper variables (mostly used to facilitate computing the observations)
     simtime_t lastIntervalTime = 0.0;
     double last_snd_max = 0.0; // Whatever value state->snd_max returned last interval. The TOTAL so far; NOT what was sent DURING the last interval.
     uint32_t last_snd_una = 0;  // Whatever the oldest reported unACK'd byte was at the last monitor interval
@@ -115,11 +115,11 @@ public: // General use
     double maxCwnd=1.0; // The max cwnd observed in an interval
     double maxACKTotal=1.0; // The max ACK total observed in an interval
     double retransmissionRate; // The most recent measurement of bytes retransmitted.
-    bool first_slowstart_complete = false; // Do not take astrea actions until the first slow start phase has completed. This allows the initial state (max througphut and min delay) to form naturally and prevents deadlocks.
+    bool first_slowstart_complete = false; // Do not take Astraea actions until the first slow start phase has completed. This allows the initial state (max througphut and min delay) to form naturally and prevents deadlocks.
     
     // Observer signals
-    simsignal_t registerAstreaAgentSig = owner->registerSignal("registerAstreaAgent");
-    simsignal_t astreaStateReportSig = owner->registerSignal("astreaStateReport");
+    simsignal_t registerAstraeaAgentSig = owner->registerSignal("registerAstraeaAgent");
+    simsignal_t AstraeaStateReportSig = owner->registerSignal("AstraeaStateReport");
     simsignal_t globalStateRequestSig = owner->registerSignal("globalStateRequest");
 
     double reward = 0; // Will automatically be set when globalStateResponse signal is received

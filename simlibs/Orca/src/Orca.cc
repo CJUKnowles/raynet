@@ -128,7 +128,7 @@ std::optional<ObsType> Orca::computeObservation(){
         this->orcaLossRate = 0.0;
         if (this->retransmissionRate > 0.0) {  // Avoid division by 0
             double transmissionRate = delta_snd_max/lastIntervalDuration; // How many non-retransmits occurred this interval in bytes/s
-            this->orcaLossRate = this->retransmissionRate / (this->retransmissionRate + transmissionRate); // What percentage of interval's sent data was retransmissions
+            this->orcaLossRate = this->lossCoefficient * this->retransmissionRate / (this->retransmissionRate + transmissionRate); // What percentage of interval's sent data was retransmissions
         }
         obs[2] = this->retransmissionRate / this->orcaMaxThroughput;
     }
@@ -228,7 +228,7 @@ void Orca::decisionMade(ActionType action) {
     newCwnd = max(newCwnd, state->snd_mss);
     
     // Attempt to change cwnd and pacing rate
-    if (this->takeActions && this->rttReportCount > 0 && newCwnd <= 1000000) {
+    if (this->takeActions && this->rttReportCount > 0 && newCwnd < 10000000) {
         if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         state->snd_cwnd = newCwnd;
 

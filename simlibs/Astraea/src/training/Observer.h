@@ -168,14 +168,14 @@ struct StateHistory {
 /*
   The Observer collects and maintains a history of states from agents.
   Upon request, the Observer uses these states to compute and return global state metrics, like fairness.
-  Astrea agents use these global state metrics as rewards to emphasize global health of the network rather than individual performance.
+  Astraea agents use these global state metrics as rewards to emphasize global health of the network rather than individual performance.
 */
 class Observer : public cSimpleModule, public cListener
 {
 protected:
   // State
   GlobalState* globalState; // The most recently computed global state
-  std::unordered_map<std::string, StateHistory> astreaAgents; // Map of all Astrea agents. <agent_id, agent_current_info>
+  std::unordered_map<std::string, StateHistory> AstraeaAgents; // Map of all Astraea agents. <agent_id, agent_current_info>
   double delayCoeff = .5; // Delays below minDelay*delayCoeff will be treated as optimal
   bool debug = false;
 

@@ -6,7 +6,7 @@ namespace tcp {
         protected:
             /**
             * A version of TcpPaced that does perform any congestion control (does not alter its cwnd automatically).
-            * This was made to enable the easy creation of paced clean-slate RL protocols, like Astrea.
+            * This was made to enable the easy creation of paced clean-slate RL protocols, like Astraea.
             * This should be identical to TcpCubic, but with any lines relating to changing the cwnd commented out.
             */
 

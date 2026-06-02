@@ -161,7 +161,7 @@ if __name__ == "__main__":
 
     checkpoint_load_dir = (
         os.getenv("RAYNET_PATH")
-        + "/_models/Orca-wideparams"
+        + "/_models/Orca-expandedparams"
     )
 
     ray.init(

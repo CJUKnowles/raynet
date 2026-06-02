@@ -1,9 +1,9 @@
-#include "AstreaTcp.h"
+#include "AstraeaTcp.h"
 
-Define_Module (AstreaTcp);
+Define_Module (AstraeaTcp);
 
-AstreaTcp::AstreaTcp(){} 
-AstreaTcp::~AstreaTcp(){}
+AstraeaTcp::AstraeaTcp(){} 
+AstraeaTcp::~AstraeaTcp(){}
 
 void TcpPacedConnection::computeRetransmissionRate()
 {

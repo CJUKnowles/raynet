@@ -337,29 +337,29 @@ if __name__ == "__main__":
     
     # Testing params, do what u want with these
     experiments_to_run = {
-        # "responsiveness": {
-        #     "protocols": ["Orca"],
-        #     "params": {
-        #         "QSIZE": [".2bdp","1bdp", "4bdp"], # Based on the average BDP of the ranges given
-        #         },
-        #     "meta": {
-        #         "runs" : 1,
-        #         "bw_range" : (10, 100),
-        #         "rtt_range" : (10, 100),
-        #         }
-        #     },
-        
-        "competing-flows": {
+        "responsiveness": {
             "protocols": ["Orca"],
             "params": {
-                "BANDWIDTH" : ["200Mbps"],
-                "DELAY"     : ["500ms"],    
-                "QSIZE": ["1bdp"],
+                "QSIZE": [".2bdp","1bdp", "4bdp"], # Based on the average BDP of the ranges given
                 },
-           "meta": {
-               "runs" : 1,
-               }
+            "meta": {
+                "runs" : 1,
+                "bw_range" : (10, 100),
+                "rtt_range" : (10, 200),
+                }
             },
+        
+        # "competing-flows": {
+        #     "protocols": ["Orca"],
+        #     "params": {
+        #         "BANDWIDTH" : ["200Mbps"],
+        #         "DELAY"     : ["200ms"],    
+        #         "QSIZE": ["1bdp"],
+        #         },
+        #    "meta": {
+        #        "runs" : 1,
+        #        }
+        #     },
         
         # "single-flow": {
         #     "protocols": ["Orca"],

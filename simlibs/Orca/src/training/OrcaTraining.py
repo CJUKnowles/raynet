@@ -153,7 +153,7 @@ class OmnetGymApiEnv(gym.Env):
         obs = np.asarray(list(obs['Orca']), dtype=np.float32)    # also formats the RLAgent's obs so RLlib can understand it
         return_obs_history = np.asarray(list(self.obs_history),dtype=np.float32)
         reward = rewards['Orca']                               # Get the reward our RLAgent is reporting
-        sim_truncated = False
+        
         if math.isnan(reward):
             print("Warning: NaN reward returned!")
             
@@ -162,9 +162,12 @@ class OmnetGymApiEnv(gym.Env):
             print(terminateds)
             self.runner.shutdown()
             self.runner.cleanup()
-        if info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
-            sim_truncated = True
+            sim_truncated = False
+        elif info_['simDone']:            # TRUNCATED - Environment/simulation has finished before the agent reported as done (usually a timelimit in the .ini)
             self.runner.cleanup()
+            sim_truncated = True
+        else:
+            sim_truncated = False
         
         # OBS, REWARD, IS_TERMINATED, IS_TRUNCATED, EXTRA_INFO
         return  return_obs_history, reward, terminateds['Orca'], sim_truncated, {}
@@ -174,7 +177,7 @@ def omnetgymapienv_creator(env_config):
     return OmnetGymApiEnv(env_config)  # return an env instance
 
 if __name__ == '__main__':
-    env_name = "Orca-wideparams"
+    env_name = "Orca-expandedparams"
     register_env(env_name, omnetgymapienv_creator)
     num_workers = 15 # Must be >= 1. A value of 0 will spawn a single worker that does not reset if issues occur. 1+ allows resets.
     seed = 91456211
@@ -187,7 +190,7 @@ if __name__ == '__main__':
     
     # Summer training parameters
     bottleneck_bandwidth_range = (5, 100)            # Megabits
-    minimum_rtt_range = (5, 100)                      # ms
+    minimum_rtt_range = (5, 200)                      # ms
     bottleneck_buffer_range = (25000, 20_000_000)    # Bits. 1x min BDP to 2x max BDP
     
     # # # Orca paper parameters
@@ -196,7 +199,10 @@ if __name__ == '__main__':
     # bottleneck_buffer_range = (24000, 7_680_00_000)    # Bits. 1x min BDP to 2x max BDP
     
     load_from_checkpoint = False
-    checkpoint_load_dir = os.getenv('RAYNET_PATH') + "/_models/Orca/checkpoints/checkpoint_16"
+    checkpoint_load_dir = (
+        os.getenv("RAYNET_PATH")
+        + "/_models/Orca-wideparams"
+    )
     steps_to_train = 1000000
     
     env_config = {"iniPath": os.getenv('RAYNET_PATH') + "/simlibs/Orca/src/training/OrcaTraining.ini",
