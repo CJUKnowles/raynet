@@ -1247,22 +1247,22 @@ but can serve as a template for other experiment/plot automation by future maint
 """
 if __name__ == "__main__":    
     metric_csvs = create_csv_dict()        # dataframe containing [experiment, params, protocol, module, metric, csv_path] for easy access
-    experiments = ["competing-flows", "responsiveness", "single-flow"]
+    experiments = ["responsiveness"]
     for exp in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == exp]
         
-        # # Special aggregate plots unique to each experiment
-        # if exp == "competing-flows":
-        #     print("Plotting completing flows aggregate plots")
-        #     fig, axes = plot_tcp_friendliness(exp_df, startup_time=30)
-        #     fig.savefig(os.getenv('RAYNET_PATH')/_plots/{exp}_tcp-friendliness.pdf")
-        #     plt.close(fig)
-        # elif exp == "responsiveness":
-        #     print("Plotting responsiveness aggregate plots")
-        #     plot_cdfs(exp_df)
-        # else:
-        #     print("Plotting single flow aggregate plots")
-        #     plot_aggregate_metrics(exp_df)
+        # Special aggregate plots unique to each experiment
+        if exp == "competing-flows":
+            print("Plotting completing flows aggregate plots")
+            fig, axes = plot_tcp_friendliness(exp_df, startup_time=30)
+            fig.savefig(f"{os.getenv('RAYNET_PATH')}/_plots/{exp}_tcp-friendliness.pdf")
+            plt.close(fig)
+        elif exp == "responsiveness":
+            print("Plotting responsiveness aggregate plots")
+            plot_cdfs(exp_df)
+        else:
+            print("Plotting single flow aggregate plots")
+            plot_aggregate_metrics(exp_df)
 
         # Summary Timeseries plots for all experiments (may be slow!)
         for params in exp_df["params"].unique():

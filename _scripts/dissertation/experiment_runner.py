@@ -340,20 +340,20 @@ if __name__ == "__main__":
         "responsiveness": {
             "protocols": ["Orca"],
             "params": {
-                "QSIZE": [".2bdp","1bdp", "4bdp"], # Based on the average BDP of the ranges given
+                "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
                 },
             "meta": {
-                "runs" : 1,
-                "bw_range" : (10, 100),
-                "rtt_range" : (10, 50),
+                "runs" : 20,
+                "bw_range" : (5, 100),
+                "rtt_range" : (20, 100),
                 }
             },
         
         # "competing-flows": {
         #     "protocols": ["Orca"],
         #     "params": {
-        #         "BANDWIDTH" : ["200Mbps"],
-        #         "DELAY"     : ["200ms"],    
+        #         "BANDWIDTH" : ["20Mbps"],
+        #         "DELAY"     : ["5ms", "20ms", "50ms", "100ms", "200ms"],    
         #         "QSIZE": ["1bdp"],
         #         },
         #    "meta": {
@@ -364,9 +364,9 @@ if __name__ == "__main__":
         # "single-flow": {
         #     "protocols": ["Orca"],
         #     "params": {
-        #         "BANDWIDTH" : ["100Mbps"],
-        #         "DELAY"     : ["10ms","50ms", "100ms"],    
-        #         "QSIZE": [".2bdp", "1bdp", "4bdp"],
+        #         "BANDWIDTH" : ["20Mbps"],
+        #         "DELAY"     : ["10ms","50ms", "100ms", "200ms"],    
+        #         "QSIZE": ["1bdp"],
         #         },
         #    "meta": {
         #        "runs" : 1,

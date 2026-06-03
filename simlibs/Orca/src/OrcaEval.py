@@ -103,7 +103,7 @@ class OmnetGymApiEnv(MultiAgentEnv):
     def step(self, actions):
         converted_actions = {}
         for agent_id, action in actions.items():
-            converted_actions[agent_id] = float(np.asarray(action).item())
+            converted_actions[agent_id] = float(np.clip(np.asarray(action).item(), -2, 2))
             
         raw_obs, rewards, terminateds, info_ = self.runner.step(converted_actions)
         
@@ -140,7 +140,7 @@ def omnetgymapienv_creator(env_config):
     return OmnetGymApiEnv(env_config)
 
 if __name__ == "__main__":
-    env_name = "Orca-multi"
+    env_name = "Orca-Eval"
     register_env(env_name, omnetgymapienv_creator)
     stacking = 10
 

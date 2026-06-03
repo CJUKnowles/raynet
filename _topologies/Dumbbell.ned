@@ -27,7 +27,7 @@ network Dumbbell
         channel standardLine extends ThruputMeteringChannel
         {
             delay = 0ms;
-            datarate = 1000Gbps;
+            datarate = 10Gbps;
         }
     submodules:
     
