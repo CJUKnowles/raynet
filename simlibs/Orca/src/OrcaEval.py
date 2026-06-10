@@ -133,7 +133,7 @@ class OmnetGymApiEnv(MultiAgentEnv):
         
 
         infos = {agent_id: {} for agent_id in obs}
-
+        print(f"Step obs histories:\n {self.obs_history}")
         return (obs, rewards, terminateds, truncateds, infos,)
 
 def omnetgymapienv_creator(env_config):
@@ -161,7 +161,7 @@ if __name__ == "__main__":
 
     checkpoint_load_dir = (
         os.getenv("RAYNET_PATH")
-        + "/_models/Orca-expandedparams"
+        + "/_models/Orca-aiden-10k"
     )
 
     ray.init(

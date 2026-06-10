@@ -337,22 +337,22 @@ if __name__ == "__main__":
     
     # Testing params, do what u want with these
     experiments_to_run = {
-        "responsiveness": {
-            "protocols": ["Orca"],
-            "params": {
-                "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
-                },
-            "meta": {
-                "runs" : 20,
-                "bw_range" : (5, 100),
-                "rtt_range" : (20, 100),
-                }
-            },
+        # "responsiveness": {
+        #     "protocols": ["Orca"],
+        #     "params": {
+        #         "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
+        #         },
+        #     "meta": {
+        #         "runs" : 20,
+        #         "bw_range" : (5, 100),
+        #         "rtt_range" : (20, 100),
+        #         }
+        #     },
         
         # "competing-flows": {
         #     "protocols": ["Orca"],
         #     "params": {
-        #         "BANDWIDTH" : ["20Mbps"],
+        #         "BANDWIDTH" : ["21Mbps"],
         #         "DELAY"     : ["5ms", "20ms", "50ms", "100ms", "200ms"],    
         #         "QSIZE": ["1bdp"],
         #         },
@@ -361,17 +361,17 @@ if __name__ == "__main__":
         #        }
         #     },
         
-        # "single-flow": {
-        #     "protocols": ["Orca"],
-        #     "params": {
-        #         "BANDWIDTH" : ["20Mbps"],
-        #         "DELAY"     : ["10ms","50ms", "100ms", "200ms"],    
-        #         "QSIZE": ["1bdp"],
-        #         },
-        #    "meta": {
-        #        "runs" : 1,
-        #        }
-        #     },
+        "single-flow": {
+            "protocols": ["Orca"],
+            "params": {
+                "BANDWIDTH" : ["51Mbps"],
+                "DELAY"     : ["50ms", "100ms", "200ms"],    
+                "QSIZE": ["1bdp"],
+                },
+           "meta": {
+               "runs" : 1,
+               }
+            },
     }
     run_experiments(experiments_to_run)
     

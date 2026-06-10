@@ -303,7 +303,7 @@ def plot_cwnd_timeseries(csv_df, ax=None, show_competition=True, startup_time=0,
         if(show_competition or is_primary_flow):
             x = data["time"]
             y = data["cwnd"]
-            
+            all_y_values.extend(data["cwnd"].values)
             # Rolling stats
             rolling_mean = y.rolling(window, center=True).mean()
             rolling_std = y.rolling(window, center=True).std()
@@ -331,9 +331,9 @@ def plot_cwnd_timeseries(csv_df, ax=None, show_competition=True, startup_time=0,
                     pe.Normal()
                 ]
                 )
-
+    
     ax.set_ylabel("cwnd (bytes)")
-    ax.set_ylim(bottom=0)
+    ax.set_ylim(bottom=0, top=np.percentile(all_y_values, 99)*1.1)
     ax.set_xlim(left=0)
     ax.set_yscale("linear")
     ax.ticklabel_format(style='plain', axis='y')
@@ -1247,7 +1247,7 @@ but can serve as a template for other experiment/plot automation by future maint
 """
 if __name__ == "__main__":    
     metric_csvs = create_csv_dict()        # dataframe containing [experiment, params, protocol, module, metric, csv_path] for easy access
-    experiments = ["responsiveness"]
+    experiments = ["single-flow"]
     for exp in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == exp]
         
