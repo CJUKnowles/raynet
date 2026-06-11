@@ -6,7 +6,7 @@ import traceback
 from pathlib import Path
 
 
-RAYNET_PATH = Path(os.getenv("RAYNET_PATH", "/home/james/raynet"))
+RAYNET_PATH = Path(os.getenv("RAYNET_PATH", Path(__file__).resolve().parents[4]))
 sys.path.insert(0, str(RAYNET_PATH / "build"))
 
 

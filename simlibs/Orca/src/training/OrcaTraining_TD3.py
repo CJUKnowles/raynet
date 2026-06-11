@@ -2,14 +2,15 @@
 Train the OMNeT++ Orca implementation with the original Orca TD3 learner.
 
 This is intentionally a small bridge rather than a rewrite of the original
-learner. The TensorFlow TD3 implementation lives in ~/orca/rl-module/agent.py;
-this file supplies the simulator rollout loop that Ray/RLlib used to hide.
+learner. The vendored TensorFlow TD3 implementation lives in ./learner; this
+file supplies the simulator rollout loop that Ray/RLlib used to hide.
 """
 
 import argparse
 import math
 import multiprocessing
 import os
+import pickle
 import random
 import sys
 import time
@@ -127,13 +128,11 @@ tf.layers = types.SimpleNamespace(
 sys.modules["tensorflow"] = tf
 
 
-RAYNET_PATH = Path(os.getenv("RAYNET_PATH", "/home/james/raynet"))
-ORCA_RL_MODULE = Path(os.getenv("ORCA_RL_MODULE", "/home/james/orca/rl-module"))
+RAYNET_PATH = Path(os.getenv("RAYNET_PATH", Path(__file__).resolve().parents[4]))
 
-sys.path.insert(0, str(ORCA_RL_MODULE))
 sys.path.insert(0, str(RAYNET_PATH / "build"))
 
-from agent import Agent  # noqa: E402
+from learner import Agent  # noqa: E402
 from OrcaEpisodeWorker import run_episode  # noqa: E402
 
 
@@ -214,10 +213,11 @@ class OmnetOrcaRolloutEnv:
             )
 
         obs = reset_obs[self.agent_name]
-        for _ in range(self.stacking):
+        observation_valid = self.observation_has_acks(obs)
+        if observation_valid:
             self.obs_history.extend(obs)
         self._log(f"reset: initial stacked state shape={self._state().shape}")
-        return self._state()
+        return self._state(), observation_valid
 
     def step(self, learner_action):
         action = action_scalar(learner_action)
@@ -238,12 +238,17 @@ class OmnetOrcaRolloutEnv:
             if info.get("simDone", False):
                 self.closed = True
                 self._join_episode_process()
-                return self._state(), 0.0, False, True
+                return self._state(), 0.0, False, True, False
             raise RuntimeError(
                 f"runner.step() did not return an Orca observation. Returned keys were {list(obs.keys())}."
             )
 
-        self.obs_history.extend(obs[self.agent_name])
+        observation = obs[self.agent_name]
+        observation_valid = self.observation_has_acks(observation)
+        if observation_valid:
+            self.obs_history.extend(observation)
+        else:
+            self._log("step: invalid observation; retaining previous recurrent state")
 
         reward = float(rewards[self.agent_name])
         if math.isnan(reward):
@@ -258,7 +263,13 @@ class OmnetOrcaRolloutEnv:
             self.closed = True
             self._join_episode_process()
 
-        return self._state(), reward, terminal_for_training, terminated or truncated
+        return (
+            self._state(),
+            reward,
+            terminal_for_training,
+            terminated or truncated,
+            observation_valid,
+        )
 
     def close(self):
         print("! Closing environment and cleaning up runner !")
@@ -267,9 +278,8 @@ class OmnetOrcaRolloutEnv:
     def _state(self):
         return np.asarray(list(self.obs_history), dtype=np.float32)
 
-    def latest_observation_has_acks(self, state):
-        latest_obs = np.asarray(state)[-self.raw_obs_dim:]
-        return bool(latest_obs[self.ack_count_index] > 0.0)
+    def observation_has_acks(self, observation):
+        return bool(np.asarray(observation)[self.ack_count_index] > 0.0)
 
     def _cleanup_after_previous_episode(self):
         if self.worker_process is None:
@@ -388,6 +398,79 @@ def build_agent(env, args, summary_writer):
     )
 
 
+def flush_transitions(agent, transitions, count=None):
+    """Move queued actor transitions into the original learner's replay buffer."""
+    if count is None:
+        count = len(transitions)
+    if count <= 0:
+        return
+
+    batch = transitions[:count]
+    del transitions[:count]
+    agent.store_many_experience(
+        np.asarray([item[0] for item in batch], dtype=np.float32),
+        np.asarray([item[1] for item in batch], dtype=np.float32),
+        np.asarray([item[2] for item in batch], dtype=np.float32),
+        np.asarray([item[3] for item in batch], dtype=np.float32),
+        np.asarray([item[4] for item in batch], dtype=np.float32),
+        len(batch),
+    )
+
+
+def save_replay_buffer(agent, replay_path):
+    replay_path.parent.mkdir(parents=True, exist_ok=True)
+    with replay_path.open("wb") as replay_file:
+        pickle.dump(agent.rp_buffer, replay_file)
+    print(f"Saved replay buffer: {replay_path}", flush=True)
+
+
+def load_replay_buffer(agent, replay_path):
+    if not replay_path.is_file():
+        print(f"No replay buffer found at {replay_path}; starting empty.", flush=True)
+        return
+
+    with replay_path.open("rb") as replay_file:
+        replay_buffer = pickle.load(replay_file)
+    if replay_buffer.s0_buf.shape[1] != agent.s_dim:
+        raise ValueError(
+            f"Replay state dimension is {replay_buffer.s0_buf.shape[1]}, "
+            f"but the learner expects {agent.s_dim}"
+        )
+    if replay_buffer.a_buf.shape[1] != agent.a_dim:
+        raise ValueError(
+            f"Replay action dimension is {replay_buffer.a_buf.shape[1]}, "
+            f"but the learner expects {agent.a_dim}"
+        )
+    agent.rp_buffer = replay_buffer
+    print(
+        f"Loaded replay buffer: {replay_path} "
+        f"({agent.rp_buffer.length_buf} transitions)",
+        flush=True,
+    )
+
+
+def evaluate_policy(env, agent, max_steps):
+    """Run one deterministic evaluation episode without modifying replay."""
+    state, observation_valid = env.reset()
+    action = 0.0
+    episode_return = 0.0
+    valid_observations = 0
+    simulator_steps = 0
+
+    while simulator_steps < max_steps:
+        if observation_valid:
+            action = action_scalar(agent.get_action(state, use_noise=False))
+        state, reward, _, episode_done, observation_valid = env.step(action)
+        simulator_steps += 1
+        if observation_valid:
+            episode_return += reward
+            valid_observations += 1
+        if episode_done:
+            break
+
+    return episode_return, simulator_steps, valid_observations
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Original Orca TD3 learner for OMNeT++")
     parser.add_argument("--seed", type=int, default=91456211)
@@ -395,16 +478,49 @@ def parse_args():
     parser.add_argument(
         "--num-simulations",
         type=int,
-        default=16,
+        default=1,
         help="Number of OMNeT++ simulations to run in parallel",
     )
     parser.add_argument("--max-episode-steps", type=int, default=500)
-    parser.add_argument("--train-after", type=int, default=512)
+    parser.add_argument(
+        "--train-after",
+        type=int,
+        default=201,
+        help="Replay transitions required before learning (original learner used >200)",
+    )
     parser.add_argument("--train-every", type=int, default=1)
     parser.add_argument("--updates-per-train", type=int, default=1)
+    parser.add_argument(
+        "--update-delay-ms",
+        type=float,
+        default=5.0,
+        help="Minimum wall-clock delay between learner updates",
+    )
+    parser.add_argument(
+        "--dequeue-length",
+        type=int,
+        default=100,
+        help="Actor transitions inserted into replay per batch",
+    )
+    parser.add_argument(
+        "--eval-every",
+        type=int,
+        default=1000,
+        help="Run deterministic evaluation after this many valid observations; 0 disables",
+    )
+    parser.add_argument("--eval-steps", type=int, default=64)
     parser.add_argument("--checkpoint-every", type=int, default=50_000)
     parser.add_argument("--log-dir", type=str, default=str(RAYNET_PATH / "_models" / "Orca-original-td3"))
     parser.add_argument("--restore", type=str, default="")
+    parser.add_argument(
+        "--replay-path",
+        type=str,
+        default="",
+        help="Replay pickle path; defaults to LOG_DIR/replay_memory.pkl",
+    )
+    parser.add_argument("--restore-replay", dest="restore_replay", action="store_true")
+    parser.add_argument("--no-restore-replay", dest="restore_replay", action="store_false")
+    parser.set_defaults(restore_replay=True)
     parser.add_argument("--bootstrap-on-truncation", dest="bootstrap_on_truncation", action="store_true")
     parser.add_argument("--no-bootstrap-on-truncation", dest="bootstrap_on_truncation", action="store_false")
     parser.set_defaults(bootstrap_on_truncation=True)
@@ -428,6 +544,10 @@ def main():
     args = parse_args()
     if args.num_simulations < 1:
         raise ValueError("--num-simulations must be at least 1")
+    if args.dequeue_length < 1:
+        raise ValueError("--dequeue-length must be at least 1")
+    if args.update_delay_ms < 0:
+        raise ValueError("--update-delay-ms cannot be negative")
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -445,6 +565,7 @@ def main():
     log_dir = Path(args.log_dir)
     checkpoint_dir = log_dir / "checkpoints"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    replay_path = Path(args.replay_path) if args.replay_path else log_dir / "replay_memory.pkl"
 
     envs = []
     for worker_id in range(args.num_simulations):
@@ -455,6 +576,18 @@ def main():
                 bootstrap_on_truncation=args.bootstrap_on_truncation,
                 verbose=not args.quiet_env,
             )
+        )
+    eval_env = None
+    if args.eval_every > 0:
+        eval_config = dict(
+            base_env_config,
+            worker_id=args.num_simulations,
+            max_steps_range=(args.eval_steps, args.eval_steps),
+        )
+        eval_env = OmnetOrcaRolloutEnv(
+            eval_config,
+            bootstrap_on_truncation=args.bootstrap_on_truncation,
+            verbose=not args.quiet_env,
         )
     print(
         f"Running {args.num_simulations} parallel simulation(s) "
@@ -476,33 +609,43 @@ def main():
 
             if args.restore:
                 saver.restore(sess, args.restore)
+                if args.restore_replay:
+                    load_replay_buffer(agent, replay_path)
             else:
                 agent.init_target()
 
             with ThreadPoolExecutor(max_workers=args.num_simulations) as executor:
-                states = list(executor.map(lambda env: env.reset(), envs))
+                resets = list(executor.map(lambda env: env.reset(), envs))
+                states = [reset[0] for reset in resets]
+                observation_valids = [reset[1] for reset in resets]
                 actions = [0.0] * args.num_simulations
+                pending_states = [None] * args.num_simulations
+                pending_actions = [None] * args.num_simulations
                 episode_returns = [0.0] * args.num_simulations
                 episode_steps = [0] * args.num_simulations
+                queued_transitions = []
                 completed_episodes = 0
                 step = 0
+                valid_observation_count = 0
+                next_eval_at = args.eval_every
+                next_train_time = time.monotonic() + args.update_delay_ms / 1000.0
                 start_time = time.time()
 
                 try:
                     while step < args.total_steps:
                         active_count = min(args.num_simulations, args.total_steps - step)
                         active_workers = list(range(active_count))
-                        observations_have_acks = {}
+                        policy_actions = {}
 
                         for worker_id in active_workers:
-                            env = envs[worker_id]
                             state = states[worker_id]
-                            has_acks = env.latest_observation_has_acks(state)
-                            observations_have_acks[worker_id] = has_acks
-                            if has_acks:
+                            policy_actions[worker_id] = observation_valids[worker_id]
+                            if policy_actions[worker_id]:
                                 actions[worker_id] = action_scalar(
                                     agent.get_action(state, use_noise=True)
                                 )
+                                pending_states[worker_id] = state
+                                pending_actions[worker_id] = actions[worker_id]
 
                         futures = {
                             worker_id: executor.submit(
@@ -517,24 +660,50 @@ def main():
                             env = envs[worker_id]
                             state = states[worker_id]
                             action = actions[worker_id]
-                            has_acks = observations_have_acks[worker_id]
-                            next_state, reward, terminal, episode_done = futures[
-                                worker_id
-                            ].result()
+                            action_was_requested = policy_actions[worker_id]
+                            (
+                                next_state,
+                                reward,
+                                terminal,
+                                episode_done,
+                                next_observation_valid,
+                            ) = futures[worker_id].result()
                             step += 1
 
-                            if has_acks:
-                                agent.store_experience(
-                                    state,
-                                    np.array([action], dtype=np.float32),
-                                    np.array([reward], dtype=np.float32),
-                                    next_state,
-                                    np.array([float(terminal)], dtype=np.float32),
+                            if (
+                                pending_states[worker_id] is not None
+                                and next_observation_valid
+                            ):
+                                queued_transitions.append(
+                                    (
+                                        pending_states[worker_id],
+                                        np.array(
+                                            [pending_actions[worker_id]],
+                                            dtype=np.float32,
+                                        ),
+                                        np.array([reward], dtype=np.float32),
+                                        next_state,
+                                        np.array([float(terminal)], dtype=np.float32),
+                                    )
+                                )
+                                pending_states[worker_id] = None
+                                pending_actions[worker_id] = None
+
+                            if next_observation_valid:
+                                valid_observation_count += 1
+
+                            while len(queued_transitions) >= args.dequeue_length:
+                                flush_transitions(
+                                    agent,
+                                    queued_transitions,
+                                    args.dequeue_length,
                                 )
 
-                            episode_returns[worker_id] += reward
+                            if next_observation_valid:
+                                episode_returns[worker_id] += reward
                             episode_steps[worker_id] += 1
                             states[worker_id] = next_state
+                            observation_valids[worker_id] = next_observation_valid
                             latest_obs = next_state[-env.raw_obs_dim:]
 
                             write_scalar(summary_writer, "Rollout/step_reward", reward, step)
@@ -543,7 +712,13 @@ def main():
                             write_scalar(
                                 summary_writer,
                                 "Rollout/observation_has_acks",
-                                float(has_acks),
+                                float(next_observation_valid),
+                                step,
+                            )
+                            write_scalar(
+                                summary_writer,
+                                "Rollout/action_was_requested",
+                                float(action_was_requested),
                                 step,
                             )
                             write_scalar(
@@ -558,6 +733,12 @@ def main():
                                 agent.rp_buffer.length_buf,
                                 step,
                             )
+                            write_scalar(
+                                summary_writer,
+                                "Rollout/queued_transitions",
+                                len(queued_transitions),
+                                step,
+                            )
                             write_scalar(summary_writer, "Rollout/throughput", latest_obs[0], step)
                             write_scalar(summary_writer, "Rollout/pacing_rate", latest_obs[1], step)
                             write_scalar(summary_writer, "Rollout/loss_rate", latest_obs[2], step)
@@ -570,10 +751,42 @@ def main():
                             )
 
                             can_train = agent.rp_buffer.length_buf >= args.train_after
-                            if can_train and step % args.train_every == 0:
+                            train_due = time.monotonic() >= next_train_time
+                            if can_train and train_due and step % args.train_every == 0:
                                 for _ in range(args.updates_per_train):
                                     agent.train_step()
                                     agent.target_update()
+                                next_train_time = (
+                                    time.monotonic() + args.update_delay_ms / 1000.0
+                                )
+
+                            if (
+                                eval_env is not None
+                                and valid_observation_count >= next_eval_at
+                            ):
+                                eval_return, eval_length, eval_valid = evaluate_policy(
+                                    eval_env,
+                                    agent,
+                                    args.eval_steps,
+                                )
+                                print(
+                                    f"evaluation step={step} return={eval_return:.4f} "
+                                    f"steps={eval_length} valid_observations={eval_valid}",
+                                    flush=True,
+                                )
+                                write_scalar(
+                                    summary_writer,
+                                    "Eval/return",
+                                    eval_return,
+                                    valid_observation_count,
+                                )
+                                write_scalar(
+                                    summary_writer,
+                                    "Eval/length",
+                                    eval_length,
+                                    valid_observation_count,
+                                )
+                                next_eval_at += args.eval_every
 
                             hit_template_limit = (
                                 episode_steps[worker_id] >= args.max_episode_steps
@@ -581,13 +794,14 @@ def main():
                             if episode_done or hit_template_limit:
                                 print(
                                     "episode={} worker={} step={} episode_steps={} "
-                                    "return={:.4f} buffer={} elapsed={:.1f}s".format(
+                                    "return={:.4f} buffer={} queued={} elapsed={:.1f}s".format(
                                         completed_episodes,
                                         worker_id,
                                         step,
                                         episode_steps[worker_id],
                                         episode_returns[worker_id],
                                         agent.rp_buffer.length_buf,
+                                        len(queued_transitions),
                                         time.time() - start_time,
                                     )
                                 )
@@ -614,6 +828,9 @@ def main():
                                 episode_returns[worker_id] = 0.0
                                 episode_steps[worker_id] = 0
                                 actions[worker_id] = 0.0
+                                observation_valids[worker_id] = False
+                                pending_states[worker_id] = None
+                                pending_actions[worker_id] = None
                                 if step < args.total_steps:
                                     reset_workers.append(worker_id)
 
@@ -626,6 +843,7 @@ def main():
                                     str(checkpoint_dir / "model.ckpt"),
                                     global_step=step,
                                 )
+                                save_replay_buffer(agent, replay_path)
                                 print(f"Saved checkpoint: {path}")
 
                         if reset_workers:
@@ -634,17 +852,23 @@ def main():
                                 for worker_id in reset_workers
                             }
                             for worker_id, future in reset_futures.items():
-                                states[worker_id] = future.result()
+                                states[worker_id], observation_valids[worker_id] = (
+                                    future.result()
+                                )
                             if agent.actor_noise is not None:
                                 agent.actor_noise.reset()
 
                 finally:
+                    flush_transitions(agent, queued_transitions)
+                    save_replay_buffer(agent, replay_path)
                     final_path = saver.save(
                         sess,
                         str(checkpoint_dir / "model.ckpt"),
                         global_step=args.total_steps,
                     )
                     list(executor.map(lambda env: env.close(), envs))
+                    if eval_env is not None:
+                        eval_env.close()
                     summary_writer.close()
                     print(f"Saved final checkpoint: {final_path}")
 

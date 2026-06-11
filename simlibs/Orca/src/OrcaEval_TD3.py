@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 
-RAYNET_PATH = Path(os.getenv("RAYNET_PATH", "/home/james/raynet"))
+RAYNET_PATH = Path(os.getenv("RAYNET_PATH", Path(__file__).resolve().parents[3]))
 TRAINING_DIR = RAYNET_PATH / "simlibs/Orca/src/training"
 sys.path.insert(0, str(TRAINING_DIR))
 
@@ -59,7 +59,7 @@ class OmnetOrcaEvalEnv:
         self.closed = False
 
         observations = self.runner.reset()
-        states = self._stack_observations(observations)
+        states, observation_valids = self._process_observations(observations)
         if not states:
             self.close()
             raise RuntimeError(
@@ -67,7 +67,7 @@ class OmnetOrcaEvalEnv:
                 f"Returned keys were {list(observations.keys())}."
             )
 
-        return states
+        return states, observation_valids
 
     def step(self, learner_actions):
         actions = {
@@ -75,7 +75,7 @@ class OmnetOrcaEvalEnv:
             for agent_id, action in learner_actions.items()
         }
         observations, rewards, terminateds, info = self.runner.step(actions)
-        states = self._stack_observations(observations)
+        states, observation_valids = self._process_observations(observations)
 
         cleaned_rewards = {}
         for agent_id, reward in rewards.items():
@@ -95,7 +95,13 @@ class OmnetOrcaEvalEnv:
             self.runner.cleanup()
             self.closed = True
 
-        return states, cleaned_rewards, terminateds, terminated or truncated
+        return (
+            states,
+            cleaned_rewards,
+            terminateds,
+            terminated or truncated,
+            observation_valids,
+        )
 
     def close(self):
         if self.closed:
@@ -104,8 +110,9 @@ class OmnetOrcaEvalEnv:
         self.runner.cleanup()
         self.closed = True
 
-    def _stack_observations(self, observations):
+    def _process_observations(self, observations):
         states = {}
+        observation_valids = {}
         for agent_id, observation in observations.items():
             if agent_id in {"__all__", "SIMULATION_END"}:
                 continue
@@ -115,16 +122,17 @@ class OmnetOrcaEvalEnv:
                     np.zeros(self.state_dim, dtype=np.float32),
                     maxlen=self.state_dim,
                 )
-            self.obs_history[agent_id].extend(observation)
+            observation_valids[agent_id] = self.observation_has_acks(observation)
+            if observation_valids[agent_id]:
+                self.obs_history[agent_id].extend(observation)
             states[agent_id] = np.asarray(
                 list(self.obs_history[agent_id]),
                 dtype=np.float32,
             )
-        return states
+        return states, observation_valids
 
-    def latest_observation_has_acks(self, state):
-        latest_obs = np.asarray(state)[-self.raw_obs_dim:]
-        return bool(latest_obs[self.ack_count_index] > 0.0)
+    def observation_has_acks(self, observation):
+        return bool(np.asarray(observation)[self.ack_count_index] > 0.0)
 
 
 def resolve_checkpoint(path):
@@ -210,24 +218,25 @@ def main():
             saver.restore(sess, checkpoint)
 
             try:
-                states = env.reset()
+                states, observation_valids = env.reset()
                 actions = defaultdict(float)
                 episode_done = False
                 while not episode_done:
                     for agent_id, state in states.items():
-                        if env.latest_observation_has_acks(state):
+                        if observation_valids.get(agent_id, False):
                             actions[agent_id] = action_scalar(
                                 agent.get_action(state, use_noise=False)
                             )
 
-                    states, rewards, _, episode_done = env.step(
+                    states, rewards, _, episode_done, observation_valids = env.step(
                         {
                             agent_id: actions[agent_id]
                             for agent_id in states
                         }
                     )
                     for agent_id, reward in rewards.items():
-                        total_rewards[agent_id] += reward
+                        if observation_valids.get(agent_id, False):
+                            total_rewards[agent_id] += reward
                     episode_length += 1
             finally:
                 env.close()
