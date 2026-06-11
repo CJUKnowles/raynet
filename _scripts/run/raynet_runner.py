@@ -23,7 +23,7 @@ BUILD_PATHS = RAYNET_PATH / "build_paths.sh"
 # Protocol registry
 # ------------------------------------------------------------
 runner_paths = {
-    "orca": str(RAYNET_PATH / "simlibs/Orca/src/OrcaEval.py"),
+    "orca": str(RAYNET_PATH / "simlibs/Orca/src/OrcaEval_TD3.py"),
     "cubic": str(RAYNET_PATH / "simlibs/Orca/src/CubicEval.py"),
     "astrea": str(RAYNET_PATH / "simlibs/Astrea/src/AstreaEval.py"),
     "cleanslate": str(RAYNET_PATH / "simlibs/CleanSlate/src/CleanSlateEval.py"),

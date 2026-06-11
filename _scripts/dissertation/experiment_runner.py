@@ -19,7 +19,7 @@ experiment_paths = {
 }
 
 runner_paths = {
-    "Orca": f"{os.getenv('RAYNET_PATH')}/simlibs/Orca/src/OrcaEval.py",
+    "Orca": f"{os.getenv('RAYNET_PATH')}/simlibs/Orca/src/OrcaEval_TD3.py",
     "OrcaPaper": f"{os.getenv('RAYNET_PATH')}/simlibs/Orca/src/OrcaEval_paper.py",
     "Cubic": f"{os.getenv('RAYNET_PATH')}/simlibs/Orca/src/CubicEval.py",
     "Astrea": f"{os.getenv('RAYNET_PATH')}/simlibs/Astrea/src/AstreaEval.py",
@@ -343,35 +343,35 @@ if __name__ == "__main__":
         #         "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
         #         },
         #     "meta": {
-        #         "runs" : 20,
+        #         "runs" : 5,
         #         "bw_range" : (5, 100),
         #         "rtt_range" : (20, 100),
         #         }
         #     },
         
-        # "competing-flows": {
-        #     "protocols": ["Orca"],
-        #     "params": {
-        #         "BANDWIDTH" : ["21Mbps"],
-        #         "DELAY"     : ["5ms", "20ms", "50ms", "100ms", "200ms"],    
-        #         "QSIZE": ["1bdp"],
-        #         },
-        #    "meta": {
-        #        "runs" : 1,
-        #        }
-        #     },
-        
-        "single-flow": {
+        "competing-flows": {
             "protocols": ["Orca"],
             "params": {
-                "BANDWIDTH" : ["51Mbps"],
-                "DELAY"     : ["50ms", "100ms", "200ms"],    
+                "BANDWIDTH" : ["52Mbps"],
+                "DELAY"     : ["5ms", "20ms", "50ms", "100ms", "200ms"],    
                 "QSIZE": ["1bdp"],
                 },
            "meta": {
                "runs" : 1,
                }
             },
+        
+        # "single-flow": {
+        #     "protocols": ["Orca"],
+        #     "params": {
+        #         "BANDWIDTH" : ["51Mbps"],
+        #         "DELAY"     : ["50ms", "100ms", "200ms"],    
+        #         "QSIZE": ["1bdp"],
+        #         },
+        #    "meta": {
+        #        "runs" : 1,
+        #        }
+        #     },
     }
     run_experiments(experiments_to_run)
     

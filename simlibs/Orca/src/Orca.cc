@@ -471,8 +471,8 @@ std::optional<ObsType> Orca::computeObservation(){
         obs[6] = 0.0;                   // Delay metric
     } else {
         // Observation is valid, compute the delay metric (0.0 is poor, 1.0 is optimal. Report as optimal if within the delay budget)
-        if (state->srtt > this->orcaMinDelay * this->delayCoefficient) {                                             
-            this->orcaDelayMetric = this->orcaMinDelay * this->delayCoefficient / state->srtt;
+        if (state->srtt.dbl() > this->orcaMinDelay * this->delayCoefficient) {                                             
+            this->orcaDelayMetric = this->orcaMinDelay * this->delayCoefficient / state->srtt.dbl();
         } else {
             this->orcaDelayMetric = 1.0;
         }
@@ -559,7 +559,7 @@ void Orca::decisionMade(ActionType action) {
     if (debug) cout << "\t" << stringId << " decisionMade()" << endl;
 
     // Compute new cwnd from the given action (cwnd *= 2^action)
-    double multiplier = std::pow(2.0, (double) action);
+    double multiplier = std::pow(4.0, (double) action);
     uint32_t newCwnd = ceil(((double) state->snd_cwnd) * multiplier);
     newCwnd = max(newCwnd, state->snd_mss);
     
