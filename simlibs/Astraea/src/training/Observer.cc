@@ -3,18 +3,15 @@
 #include <cmath>
 #include <cobjects.h>
 
-Define_Module(Observer);
+Define_Module(AstraeaObserver);
 
 // Called at start of simulation
-void Observer::initialize()
+void AstraeaObserver::initialize()
 {
     this->debug = par("printDebugMessages");
-    this->LINK_DELAY = par("AstraeaBottleneckDelay");
-    this->LINK_DELAY *= .001; // ms to s
-    this->BUFFER_SIZE = par("AstraeaDataCapacity");
-    this->BUFFER_SIZE /= 8.0; // bits to bytes
-    this->BANDWIDTH = par("AstraeaBottleneckDatarate");
-    this->BANDWIDTH *= 125000; // Megabits/s to bytes/s
+    this->LINK_DELAY = par("AstraeaBottleneckDelay").doubleValueInUnit("ms") * .001;
+    this->BUFFER_SIZE = par("AstraeaDataCapacity").doubleValueInUnit("b") / 8.0;
+    this->BANDWIDTH = par("AstraeaBottleneckDatarate").doubleValueInUnit("Mbps") * 125000;
     this->globalState = new GlobalState();
 
     getSimulation()->getSystemModule()->subscribe("registerAstraeaAgent", this);     // used to register Astraea agents
@@ -31,7 +28,7 @@ void Observer::initialize()
 }
 
 // Called at end of simulation
-void Observer::finish(){
+void AstraeaObserver::finish(){
     // TODO: cleanup, delete messages and state entries
     getSimulation()->getSystemModule()->unsubscribe("registerAstraeaAgent", this);     // used to register Astraea agents
     getSimulation()->getSystemModule()->unsubscribe("unregisterAstraeaAgent", this);   // used to unregister Astraea agents
@@ -46,7 +43,7 @@ void Observer::finish(){
 */
 
 
-void Observer::receiveSignal(cComponent *source, simsignal_t signalID, const char *value, cObject *obj){
+void AstraeaObserver::receiveSignal(cComponent *source, simsignal_t signalID, const char *value, cObject *obj){
     Enter_Method("schedule a step event(self message)"); // TODO: Change this? 
     const char *signalName = getSignalName(signalID);
 
@@ -74,7 +71,7 @@ void Observer::receiveSignal(cComponent *source, simsignal_t signalID, const cha
     Receives a given agent's localState and adds it to their StateHistory.
     Note that the Observer now takes ownership of the LocalState. It is responsible for eventually freeing that memory.
 */
-void Observer::receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *obj)
+void AstraeaObserver::receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *obj)
 {
     Enter_Method("schedule a step event(self message)"); // TODO: Change this?
     const char *signalName = getSignalName(signalID);
@@ -101,7 +98,7 @@ void Observer::receiveSignal(cComponent *source, simsignal_t signalID, cObject *
 }
 
 // Loop through all agents' most recent state reports to update the global state
-void Observer::computeGlobalState() {
+void AstraeaObserver::computeGlobalState() {
     globalState->reset();
 
     double latencySum = 0;      // Total latency

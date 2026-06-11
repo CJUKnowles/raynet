@@ -170,7 +170,7 @@ struct StateHistory {
   Upon request, the Observer uses these states to compute and return global state metrics, like fairness.
   Astraea agents use these global state metrics as rewards to emphasize global health of the network rather than individual performance.
 */
-class Observer : public cSimpleModule, public cListener
+class AstraeaObserver : public cSimpleModule, public cListener
 {
 protected:
   // State

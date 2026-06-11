@@ -2,6 +2,7 @@ package Astraea.training;
 
 simple Observer
 {
+    @class(AstraeaObserver);
     // Ground-truth network parameters, set by the config.ini. Used for computing rewards.
     double AstraeaBottleneckDatarate @unit("Mbps") = default(3Mbps);
     double AstraeaBottleneckDelay @unit("ms") = default(10ms);
