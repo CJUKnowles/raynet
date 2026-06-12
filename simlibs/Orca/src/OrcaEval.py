@@ -16,15 +16,16 @@ class OmnetGymApiEnv(MultiAgentEnv):
         super().__init__()
         sys.path.insert(0, os.path.join(os.getenv("RAYNET_PATH"), "build"))
         from omnetbind import OmnetGymApi
+        
         self.runner = OmnetGymApi()
         self.env_config = env_config
         self.stacking = env_config["stacking"]
         self.obs_size = 7
         self.random_seed = os.getpid()
         random.seed(self.random_seed)
+        
         # Observation bounds
-        single_obs_min = np.array(
-            [
+        single_obs_min = np.array([
                 0,  # throughput
                 0,  # pacerate
                 0,  # lossrate
@@ -32,23 +33,16 @@ class OmnetGymApiEnv(MultiAgentEnv):
                 0,  # interval duration
                 0,  # srtt
                 0,  # delay metric
-            ],
-            dtype=np.float32,
-        )
-
-        single_obs_max = np.array(
-            [
-                1,
-                10,
-                10,
-                10,
-                1,
-                1,
-                1,
-            ],
-            dtype=np.float32,
-        )
-
+            ], dtype=np.float32,)
+        single_obs_max = np.array([
+                1,  # throughput
+                10, # pacerate
+                10, # lossrate
+                10, # ack count
+                1,  # interval duration
+                1,  # srtt
+                1,  # delay metric
+            ], dtype=np.float32,)
         self.obs_min = np.tile(single_obs_min, self.stacking)
         self.obs_max = np.tile(single_obs_max, self.stacking)
 
