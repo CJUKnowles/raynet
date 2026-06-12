@@ -5,7 +5,7 @@ import sys
 import types
 
 
-if os.getenv("ORCA_TD3_USE_GPU", "0") != "1":
+if os.getenv("ORCA_TD3_USE_GPU", "1") != "1":
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
 os.environ.setdefault("TF_XLA_FLAGS", "--tf_xla_auto_jit=0")
 

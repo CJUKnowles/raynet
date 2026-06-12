@@ -13,7 +13,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import GPUtil
 import numpy as np
+import psutil
 
 ORCA_SRC_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ORCA_SRC_DIR))
@@ -37,7 +39,18 @@ def write_scalars(summary_writer, values, step):
     summary_writer.add_summary(summary, global_step=step)
 
 
-def log_rollout_step(summary_writer, agent, env, worker_id, step, reward, action, observation_valid, state, start_time):
+def get_utilization_percentages():
+    """Return current system CPU and maximum visible GPU utilization percentages."""
+    cpu_utilization = psutil.cpu_percent(interval=None)
+    try:
+        gpus = GPUtil.getGPUs()
+    except Exception:
+        gpus = []
+    gpu_utilization = max((gpu.load * 100.0 for gpu in gpus), default=0.0)
+    return cpu_utilization, gpu_utilization
+
+
+def log_rollout_step(summary_writer, agent, env, worker_id, step, reward, action, observation_valid, state):
     """Log one completed environment step."""
     latest_obs = state[-env.raw_obs_dim:]
     write_scalars(
@@ -53,10 +66,21 @@ def log_rollout_step(summary_writer, agent, env, worker_id, step, reward, action
             "Rollout/pacing_rate": latest_obs[1],
             "Rollout/loss_rate": latest_obs[2],
             "Rollout/delay_metric": latest_obs[6],
-            "Performance/environment_steps_per_second": step / max(time.time() - start_time, 1e-6),
         },
         step,
     )
+
+
+def log_training_performance(summary_writer, step, start_time, timings):
+    """Log utilization, throughput, and phase timings for one simulation wave."""
+    cpu_utilization, gpu_utilization = get_utilization_percentages()
+    values = {
+        "Performance/environment_steps_per_second": step / max(time.time() - start_time, 1e-6),
+        "Performance/cpu_utilization_percent": cpu_utilization,
+        "Performance/gpu_utilization_percent": gpu_utilization,
+    }
+    values.update({f"Performance/{name}_seconds": value for name, value in timings.items()})
+    write_scalars(summary_writer, values, step)
 
 
 def log_completed_episode(summary_writer, agent, episode, worker_id, step, episode_steps, episode_return, start_time):
@@ -127,6 +151,13 @@ def save_checkpoint(saver, session, checkpoint_dir, step, final=False):
     print(f"Saved {'final ' if final else ''}checkpoint: {path}")
 
 
+def build_session_config():
+    """Configure TensorFlow to grow GPU memory usage as needed."""
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    return config
+
+
 # MARK: Core Functionality --------------------------------------------------------------------------------------
 def build_agent(env, args, summary_writer):
     """Create the original Orca TD3 learner. (a single shared learning agent across all environments)"""
@@ -158,25 +189,29 @@ def parse_args():
     """Parse the training configuration."""
     parser = argparse.ArgumentParser(description="Original Orca TD3 learner for OMNeT++")
 
+    # Define network parameter ranges
+    parser.add_argument("--bottleneck-bw-range", type=float, nargs=2, default=(5, 20), metavar=("MIN_MBPS", "MAX_MBPS"))   # 5-20, 48-48
+    parser.add_argument("--minimum-rtt-range", type=float, nargs=2, default=(5, 100), metavar=("MIN_MS", "MAX_MS"))         # 5-100, 20-20
+    parser.add_argument("--buffer-bdp-range", type=float, nargs=2, default=(.2, 10), metavar=("MIN_BDP", "MAX_BDP"))          # .2-10, 2-2
+    parser.add_argument("--buffer-size-range", type=float, nargs=2, default=(240_000, 240_000), metavar=("MIN_BUFFER_BYTES", "MAX_BUFFER_BYTES"))
+    parser.add_argument("--buffers-use-bdp-ranges", action=argparse.BooleanOptionalAction, default=True, help="Derive buffer sizes from BDP multipliers instead of sampling raw byte sizes")
+
+
     # Define general training and output arguments.
-    parser.add_argument("--log-dir", type=str, default=str(Path(os.environ["RAYNET_PATH"]) / "_models_training/Orca-TD3"))
+    parser.add_argument("--log-dir", type=str, default=str(Path(os.environ["RAYNET_PATH"]) / "_models_training/Orca-TD3-GPU-v3-expanded"))
     parser.add_argument("--num-simulations", type=int, default=16, help="Number of OMNeT++ simulations to run in parallel")
     parser.add_argument("--checkpoint-every-seconds", type=float, default=15.0, help="Seconds between periodic learner checkpoints; zero disables them")
+    parser.add_argument("--log-every-steps", type=int, default=100, help="Aggregate steps between rollout-step logs; zero disables them")
     parser.add_argument("--restore", type=str, default="", help="TensorFlow checkpoint prefix to restore before training")
     parser.add_argument("--quiet-env", action="store_true", help="Suppress OrcaEnv status messages")
+    parser.add_argument("--max-episode-steps", type=int, default=64)
 
-    # Define simulation orchestration and randomized link arguments.
+    # Define simulation orchestration
     parser.add_argument("--training-ini", type=Path, default=TRAINING_INI)
     parser.add_argument("--seed", type=int, default=91456211)
     parser.add_argument("--total-steps", type=int, default=1_000_000)
-    parser.add_argument("--max-episode-steps", type=int, default=64)
-    parser.add_argument("--bottleneck-bw-range", type=float, nargs=2, default=(48, 48), metavar=("MIN_MBPS", "MAX_MBPS"))
-    parser.add_argument("--minimum-rtt-range", type=float, nargs=2, default=(20, 20), metavar=("MIN_MS", "MAX_MS"))
-    parser.add_argument("--buffer-bdp-range", type=float, nargs=2, default=(2, 2), metavar=("MIN_BDP", "MAX_BDP"))
-    parser.add_argument("--buffer-size-range", type=float, nargs=2, default=(240_000, 240_000), metavar=("MIN_BUFFER_BYTES", "MAX_BUFFER_BYTES"))
-    parser.add_argument("--buffers-use-bdp-ranges", action=argparse.BooleanOptionalAction, default=True, help="Derive buffer sizes from BDP multipliers instead of sampling raw byte sizes")
     parser.add_argument("--train-after", type=int, default=512)
-    parser.add_argument("--train-every", type=int, default=1)
+    parser.add_argument("--train-every", type=int, default=1) # 1 in original Orca, but that is distributed and real-time. 16 increases step throughput but reduces learning rate.
     parser.add_argument("--updates-per-train", type=int, default=1)
     parser.add_argument("--bootstrap-on-truncation", dest="bootstrap_on_truncation", action="store_true")
     parser.add_argument("--no-bootstrap-on-truncation", dest="bootstrap_on_truncation", action="store_false")
@@ -204,6 +239,8 @@ def validate_args(args):
         raise ValueError("--num-simulations must be at least 1")
     if args.max_episode_steps < 1:
         raise ValueError("--max-episode-steps must be at least 1")
+    if args.log_every_steps < 0:
+        raise ValueError("--log-every-steps must not be negative")
 
     # Validate randomized training ranges.
     for name in ("bottleneck_bw_range", "minimum_rtt_range", "buffer_bdp_range", "buffer_size_range"):
@@ -246,7 +283,7 @@ def main():
         agent.create_tf_summary()
         saver = tf.train.Saver(max_to_keep=5) # Maximum number of checkpoints to keep on disk
 
-        with tf.Session() as sess:
+        with tf.Session(config=build_session_config()) as sess:
             agent.assign_sess(sess)
             sess.run(tf.global_variables_initializer())
 
@@ -271,16 +308,27 @@ def main():
                 step = 0
                 start_time = time.time()
                 last_checkpoint_time = time.monotonic()
+                psutil.cpu_percent(interval=None)
 
                 try:
                     while step < args.total_steps:
+                        # Measure each synchronized wave through action selection, simulation, learning, and logging.
+                        wave_start_time = time.perf_counter()
+                        action_selection_seconds = 0.0
+                        simulation_wait_seconds = 0.0
+                        learner_update_seconds = 0.0
+                        logging_seconds = 0.0
+                        reset_seconds = 0.0
+
                         # Select new actions only for environments with valid observations.
+                        phase_start_time = time.perf_counter()
                         active_count = min(args.num_simulations, args.total_steps - step)
                         active_workers = list(range(active_count))
                         for worker_id in active_workers:
                             decision_state = decision_states[worker_id]
                             if decision_state is not None:
                                 actions[worker_id] = action_scalar(agent.get_action(decision_state, use_noise=True))
+                        action_selection_seconds = time.perf_counter() - phase_start_time
 
                         # Advance all active simulations in parallel.
                         futures = {
@@ -297,7 +345,9 @@ def main():
                             env = envs[worker_id]
                             state = states[worker_id]
                             action = actions[worker_id]
+                            phase_start_time = time.perf_counter()
                             result = futures[worker_id].result()
+                            simulation_wait_seconds += time.perf_counter() - phase_start_time
                             next_state = result.states.get(AGENT_ID, state)
                             reward = result.rewards.get(AGENT_ID, 0.0)
                             terminal = terminal_for_training(result, AGENT_ID, bootstrap_on_truncation=args.bootstrap_on_truncation)
@@ -325,10 +375,13 @@ def main():
 
                             # Train the learner after the replay buffer warmup.
                             can_train = agent.rp_buffer.length_buf >= args.train_after
+                            log_step = args.log_every_steps > 0 and step % args.log_every_steps == 0
                             if can_train and step % args.train_every == 0:
+                                phase_start_time = time.perf_counter()
                                 for _ in range(args.updates_per_train):
                                     agent.train_step()
                                     agent.target_update()
+                                learner_update_seconds += time.perf_counter() - phase_start_time
 
                             # Schedule completed environments for reset.
                             hit_template_limit = episode_steps[worker_id] >= args.max_episode_steps
@@ -350,9 +403,12 @@ def main():
                                     reset_workers.append(worker_id)
 
                             # Log the completed step after all core processing.
-                            log_rollout_step(summary_writer, agent, env, worker_id, step, reward, action, next_observation_valid, next_state, start_time)
+                            phase_start_time = time.perf_counter()
+                            if log_step:
+                                log_rollout_step(summary_writer, agent, env, worker_id, step, reward, action, next_observation_valid, next_state)
                             if completed_episode is not None:
                                 log_completed_episode(summary_writer, agent, *completed_episode)
+                            logging_seconds += time.perf_counter() - phase_start_time
 
                             # Save periodic checkpoints after the completed step.
                             current_checkpoint_time = time.monotonic()
@@ -362,6 +418,7 @@ def main():
 
                         # Reset environments after all current results are processed.
                         if reset_workers:
+                            phase_start_time = time.perf_counter()
                             reset_futures = {
                                 worker_id: executor.submit(
                                     reset_training_env,
@@ -378,6 +435,20 @@ def main():
                                 decision_states[worker_id] = reset_states[AGENT_ID]
                             if agent.actor_noise is not None:
                                 agent.actor_noise.reset()
+                            reset_seconds = time.perf_counter() - phase_start_time
+
+                        # Log synchronized-wave performance after all work is complete.
+                        wave_seconds = time.perf_counter() - wave_start_time
+                        if args.log_every_steps > 0 and step % args.log_every_steps < active_count:
+                            timings = {
+                                "wave": wave_seconds,
+                                "action_selection": action_selection_seconds,
+                                "simulation_wait": simulation_wait_seconds,
+                                "learner_update": learner_update_seconds,
+                                "logging": logging_seconds,
+                                "reset": reset_seconds,
+                            }
+                            log_training_performance(summary_writer, step, start_time, timings)
 
                 finally:
                     # Save the final learner state and close every environment.

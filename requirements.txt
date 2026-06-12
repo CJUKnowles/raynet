@@ -8,3 +8,4 @@ lz4
 matplotlib
 pypdf
 GPUtil
+psutil

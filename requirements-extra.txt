@@ -59,6 +59,7 @@ networkx==3.6.1
 numpy==2.4.1
 nvidia-cublas-cu12==12.8.4.1
 nvidia-cuda-cupti-cu12==12.8.90
+nvidia-cuda-nvcc-cu12==12.8.93
 nvidia-cuda-nvrtc-cu12==12.8.93
 nvidia-cuda-runtime-cu12==12.8.90
 nvidia-cudnn-cu12==9.10.2.21
@@ -97,6 +98,7 @@ pycparser==3.0
 pydantic==2.12.5
 pydantic_core==2.41.5
 Pygments==2.19.2
+psutil==7.2.2
 pyparsing==3.3.2
 pypdf==6.6.0
 python-dateutil==2.9.0.post0
