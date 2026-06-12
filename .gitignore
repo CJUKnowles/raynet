@@ -215,6 +215,6 @@ rl_logging/
 *events.out.tfevents*
 !ndp_simple_sims/*
 *:Zone.Identifier
-_models_training/*
+_models_training/*/*
 
 *__pycache__
