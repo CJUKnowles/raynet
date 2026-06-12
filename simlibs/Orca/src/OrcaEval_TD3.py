@@ -1,137 +1,26 @@
 import argparse
-import math
 import os
 import random
 import sys
-from collections import defaultdict, deque
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 
 
-TRAINING_DIR = os.path.join(os.getenv('RAYNET_PATH'), "simlibs/Orca/src/training")
-sys.path.insert(0, TRAINING_DIR)
+ORCA_SRC_DIR = Path(__file__).resolve().parent
+TRAINING_DIR = ORCA_SRC_DIR / "training"
+sys.path.insert(0, str(ORCA_SRC_DIR))
+sys.path.insert(0, str(TRAINING_DIR))
 
-from OrcaTraining_TD3 import (
-    Agent,
-    action_scalar,
-    tf,
-)
+from OrcaEnv import OrcaEnv, action_scalar  # noqa: E402
+from learner import Agent, tf  # noqa: E402
 
 
 CHECKPOINT_DIR = os.path.join(os.getenv('RAYNET_PATH'), "_models/Orca-papermodel") # Path to the directory containing the checkpoint to evaluate
 HIDDEN_SIZE = 256
 STACKING = 10
 SEED = 91456211
-
-
-class OmnetOrcaEvalEnv:
-    """Direct OMNeT++ adapter matching OrcaEval.py's lifecycle."""
-
-    raw_obs_dim = 7
-    ack_count_index = 3
-
-    def __init__(self, env_config):
-        sys.path.insert(0, os.path.join(os.getenv('RAYNET_PATH'), "build"))
-        from omnetbind import OmnetGymApi
-
-        self.runner = OmnetGymApi()
-        self.env_config = env_config
-        self.stacking = int(env_config["stacking"])
-        self.obs_history = {}
-        self.closed = True
-
-    @property
-    def state_dim(self):
-        return self.stacking * self.raw_obs_dim
-
-    @property
-    def action_dim(self):
-        return 1
-
-    def reset(self):
-        self.obs_history = {}
-        self.runner.initialise(
-            self.env_config["iniPath"],
-            self.env_config["config_section"],
-        )
-        self.closed = False
-
-        observations = self.runner.reset()
-        states, observation_valids = self._process_observations(observations)
-        if not states:
-            self.close()
-            raise RuntimeError(
-                "runner.reset() did not return any Orca observations. "
-                f"Returned keys were {list(observations.keys())}."
-            )
-
-        return states, observation_valids
-
-    def step(self, learner_actions):
-        actions = {
-            agent_id: float(np.clip(action_scalar(action), -1.0, 1.0))
-            for agent_id, action in learner_actions.items()
-        }
-        observations, rewards, terminateds, info = self.runner.step(actions)
-        states, observation_valids = self._process_observations(observations)
-
-        cleaned_rewards = {}
-        for agent_id, reward in rewards.items():
-            reward = float(reward)
-            if math.isnan(reward):
-                print(f"Warning: NaN reward for {agent_id}; replacing with 0.0")
-                reward = 0.0
-            cleaned_rewards[agent_id] = reward
-
-        terminated = bool(terminateds.get("__all__", False))
-        truncated = bool(info.get("simDone", False))
-        if terminated:
-            self.runner.shutdown()
-            self.runner.cleanup()
-            self.closed = True
-        elif truncated:
-            self.runner.cleanup()
-            self.closed = True
-
-        return (
-            states,
-            cleaned_rewards,
-            terminateds,
-            terminated or truncated,
-            observation_valids,
-        )
-
-    def close(self):
-        if self.closed:
-            return
-        self.runner.shutdown()
-        self.runner.cleanup()
-        self.closed = True
-
-    def _process_observations(self, observations):
-        states = {}
-        observation_valids = {}
-        for agent_id, observation in observations.items():
-            if agent_id in {"__all__", "SIMULATION_END"}:
-                continue
-            if agent_id not in self.obs_history:
-                # The paper actor was trained with zero-padded recurrent history.
-                self.obs_history[agent_id] = deque(
-                    np.zeros(self.state_dim, dtype=np.float32),
-                    maxlen=self.state_dim,
-                )
-            observation_valids[agent_id] = self.observation_has_acks(observation)
-            if observation_valids[agent_id]:
-                self.obs_history[agent_id].extend(observation)
-            states[agent_id] = np.asarray(
-                list(self.obs_history[agent_id]),
-                dtype=np.float32,
-            )
-        return states, observation_valids
-
-    def observation_has_acks(self, observation):
-        return bool(np.asarray(observation)[self.ack_count_index] > 0.0)
 
 
 def resolve_checkpoint(path):
@@ -202,7 +91,7 @@ def main():
         "config_section": args.config_section,
         "stacking": STACKING,
     }
-    env = OmnetOrcaEvalEnv(env_config)
+    env = OrcaEnv(env_config)
 
     total_rewards = defaultdict(float)
     episode_length = 0
@@ -227,15 +116,17 @@ def main():
                                 agent.get_action(state, use_noise=False)
                             )
 
-                    states, rewards, _, episode_done, observation_valids = env.step(
+                    result = env.step(
                         {
                             agent_id: actions[agent_id]
                             for agent_id in states
                         }
                     )
-                    for agent_id, reward in rewards.items():
-                        if observation_valids.get(agent_id, False):
-                            total_rewards[agent_id] += reward
+                    states = result.states
+                    observation_valids = result.observation_valids
+                    for agent_id, reward in result.rewards.items():
+                        total_rewards[agent_id] += reward
+                    episode_done = result.episode_done
                     episode_length += 1
             finally:
                 env.close()

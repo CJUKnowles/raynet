@@ -1,0 +1,345 @@
+"""Protocol-specific OMNeT++ environment wrapper for Orca."""
+
+import math
+import multiprocessing
+import os
+import traceback
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+
+IGNORED_AGENT_IDS = {"__all__", "SIMULATION_END"}
+
+
+def action_scalar(action):
+    """Normalize a learner action to the scalar expected by the simulator."""
+    return float(np.asarray(action, dtype=np.float32).reshape(-1)[0])
+
+
+def _serialize_observations(observations):
+    """Convert OmnetBind objects to lists for sending over the Pipe."""
+    serialized = {}
+
+    # Convert each OmnetBind observation into a serializable Python list.
+    for agent_id, observation in observations.items():
+        if hasattr(observation, "to_list"):
+            serialized[agent_id] = observation.to_list()
+        else:
+            serialized[agent_id] = list(observation)
+
+    return serialized
+
+
+def run_episode(connection, ini_path, section_name, primary_agent_id):
+    """Create and run a single OMNeT++ episode."""
+    # Import OmnetBind inside the worker process that will own the simulation.
+    raynet_path = Path(os.environ["RAYNET_PATH"])
+    import sys
+
+    sys.path.insert(0, str(raynet_path / "build"))
+    from omnetbind import OmnetGymApi
+
+    # Create the simulator and track its finalization state.
+    runner = OmnetGymApi()
+    cleaned = False
+    shutdown_required = True
+
+    try:
+        # Initialize the simulation and return its first observations.
+        runner.initialise(ini_path, section_name)
+        connection.send(("reset", _serialize_observations(runner.reset())))
+
+        # Continuously receive and perform commands from the OrcaEnv until the episode is complete
+        while True:
+            command, payload = connection.recv()
+
+            if command == "step":
+                # Advance the simulation and return serializable step results.
+                observations, rewards, terminateds, info = runner.step(payload)
+                result = (
+                    _serialize_observations(observations),
+                    {key: float(value) for key, value in rewards.items()},
+                    {key: bool(value) for key, value in terminateds.items()},
+                    {key: bool(value) for key, value in info.items()},
+                )
+
+                # Finalize natural simulation completion with cleanup only.
+                simulation_ended = info.get("simDone", False)
+                agents_terminated = terminateds.get("__all__", terminateds.get(primary_agent_id, False))
+                if simulation_ended:
+                    shutdown_required = False
+                    runner.cleanup()
+                    cleaned = True
+
+                # Finalize agent-requested termination with shutdown and cleanup.
+                elif agents_terminated:
+                    runner.shutdown()
+                    runner.cleanup()
+                    cleaned = True
+
+                # Return the step only after finalization has completed.
+                connection.send(("step", result))
+                if simulation_ended or agents_terminated:
+                    break
+
+            elif command == "close":
+                # Clean up and acknowledge an explicit close request.
+                runner.shutdown()
+                runner.cleanup()
+                cleaned = True
+                connection.send(("closed", None))
+                break
+
+            else:
+                raise ValueError(f"Unknown episode-worker command: {command}")
+
+    except BaseException:
+        # Forward worker failures to the parent before allowing the process to fail.
+        try:
+            connection.send(("error", traceback.format_exc()))
+        except BaseException:
+            pass
+        raise
+
+    finally:
+        # Clean up unfinished simulations and always close the worker connection.
+        if not cleaned:
+            if shutdown_required:
+                try:
+                    runner.shutdown()
+                except BaseException:
+                    pass
+            try:
+                runner.cleanup()
+            except BaseException:
+                pass
+        connection.close()
+
+
+@dataclass
+class OrcaStep:
+    states: dict
+    rewards: dict
+    terminateds: dict
+    truncated: bool
+    observation_valids: dict
+
+    @property
+    def episode_done(self):
+        """Return whether the episode has terminated or truncated."""
+        return bool(self.terminateds.get("__all__", False) or self.truncated)
+
+
+
+
+
+# MARK: OrcaEnv -------------------------------------------------------------------------------------------------
+class OrcaEnv:
+    """Complete Orca environment interface used by training and evaluation.
+
+    This class is responsible for a single simulation process at a time, and spawns a new one upon each reset.
+    Think of this class as representing a single CPU core, repeatedly spawning and running new simulations as needed.
+    This is synonymous with a Ray worker. In the future, Ray may be reintegrated without RLlib.
+    """
+
+    raw_obs_dim = 7
+    action_dim = 1
+    ack_count_index = 3
+
+    def __init__(self, env_config, verbose=True):
+        """Initialize a persistent Orca environment wrapper."""
+        # Store the environment configuration and protocol-specific settings.
+        self.env_config = env_config
+        self.verbose = verbose
+        self.stacking = int(env_config.get("stacking", 10))
+        self.primary_agent_id = env_config.get("agent_id", "Orca")
+
+        # Initialize the transient simulation process and IPC state.
+        self.mp_context = multiprocessing.get_context("spawn")
+        self.worker_process = None
+        self.worker_connection = None
+
+        # Initialize persistent observation histories.
+        self.obs_histories = {}
+        self.closed = True
+
+    @property
+    def state_dim(self):
+        """Return the flattened recurrent-state dimension."""
+        return self.stacking * self.raw_obs_dim
+
+    def reset(self, ini_path=None):
+        """Start a fresh simulation episode and return its initial states."""
+        # Clean up the previous episode and reset all agent histories.
+        self._log("reset: preparing new OMNeT++ run")
+        self._cleanup_after_previous_episode()
+        self.obs_histories = {}
+
+        # Spawn a new simulation and receive its initial observations.
+        ini_path = ini_path if ini_path is not None else self.env_config["iniPath"]
+        section_name = self.env_config.get("config_section", "General")
+        self._spawn_episode_process(ini_path, section_name)
+        message_type, observations = self._receive_worker_message()
+
+        # Validate and process the reset response.
+        if message_type != "reset":
+            raise RuntimeError(f"Expected reset message from episode worker, got {message_type}")
+        states, observation_valids = self._process_observations(observations, initial=True)
+        if not states:
+            self.close()
+            raise RuntimeError(f"runner.reset() did not return any Orca observations. Returned keys were {list(observations.keys())}.")
+
+        return states, observation_valids
+
+    def step(self, learner_actions):
+        """Apply learner actions and return the processed simulation step."""
+        # Normalize and clip each learner action before sending it to the simulation.
+        actions = {
+            agent_id: float(np.clip(action_scalar(action), -1.0, 1.0))
+            for agent_id, action in learner_actions.items()
+        }
+        self._log(f"step: actions={actions}")
+        self.worker_connection.send(("step", actions)) # Perform the step
+        message_type, result = self._receive_worker_message()
+        if message_type != "step":
+            raise RuntimeError(f"Expected step message from episode worker, got {message_type}")
+
+        # Process observations and sanitize rewards returned by the simulation.
+        observations, rewards, terminateds, info = result
+        states, observation_valids = self._process_observations(observations)
+        cleaned_rewards = {}
+        for agent_id, reward in rewards.items():
+            reward = float(reward)
+            if math.isnan(reward):
+                print(f"Warning: NaN reward for {agent_id}; replacing with 0.0")
+                reward = 0.0
+            cleaned_rewards[agent_id] = reward
+
+        # Discard simulation processes that ended through termination or truncation.
+        truncated = bool(info.get("simDone", False))
+        terminated = bool(terminateds.get("__all__", terminateds.get(self.primary_agent_id, False)))
+        if terminated or truncated:
+            self.closed = True
+            self._join_episode_process()
+
+        # Return the complete processed result to the learner or evaluator.
+        return OrcaStep(
+            states=states,
+            rewards=cleaned_rewards,
+            terminateds=terminateds,
+            truncated=truncated,
+            observation_valids=observation_valids,
+        )
+
+    def close(self):
+        """Close the active simulation episode process."""
+        self._cleanup_after_previous_episode()
+
+    def _process_observations(self, observations, initial=False):
+        """Validate each agent's observation, update its history, and return the stacked state."""
+        states = {}
+        observation_valids = {}
+
+        # Process each returned agent observation independently.
+        for agent_id, observation in observations.items():
+            if agent_id in IGNORED_AGENT_IDS:
+                continue
+            observation = np.asarray(observation, dtype=np.float32)
+
+            # Validate the observation and create a zero-padded history for new agents.
+            if observation.size != self.raw_obs_dim:
+                raise ValueError(f"Expected {self.raw_obs_dim} Orca observations for {agent_id}, got {observation.size}")
+            if agent_id not in self.obs_histories:
+                self.obs_histories[agent_id] = np.zeros((self.stacking, self.raw_obs_dim), dtype=np.float32,)
+
+            # Add initial or ACK-bearing observations to the agent's history.
+            valid = self.observation_has_acks(observation)
+            observation_valids[agent_id] = valid
+            if initial or valid:
+                history = self.obs_histories[agent_id]
+                history[:-1] = history[1:]
+                history[-1] = observation
+
+            # Return a flattened copy that cannot be mutated by future steps.
+            states[agent_id] = self.obs_histories[agent_id].reshape(-1).copy()
+
+        return states, observation_valids
+
+    def observation_has_acks(self, observation):
+        """Return whether an Orca observation contains ACKs."""
+        return bool(observation[self.ack_count_index] > 0.0)
+
+    def _spawn_episode_process(self, ini_path, section_name):
+        """Spawn a simulation process for one episode."""
+        # Create a duplex Pipe for communicating with the simulation worker.
+        parent_connection, child_connection = self.mp_context.Pipe()
+        self.worker_connection = parent_connection
+
+        # Spawn the worker process and transfer ownership of its Pipe endpoint.
+        self.worker_process = self.mp_context.Process(
+            target=run_episode,
+            args=(child_connection, str(ini_path), section_name, self.primary_agent_id),
+            daemon=True,
+        )
+        self.worker_process.start()
+        child_connection.close()
+        self.closed = False
+        self._log(f"reset: spawned episode process pid={self.worker_process.pid}")
+
+    def _receive_worker_message(self):
+        """Receive and validate one message from the simulation worker."""
+        # Receive the next message or report an unexpected worker exit.
+        try:
+            message_type, payload = self.worker_connection.recv()
+        except EOFError as exc:
+            exit_code = self.worker_process.exitcode
+            raise RuntimeError(f"OMNeT++ episode process exited unexpectedly with code {exit_code}") from exc
+
+        # Promote worker errors into exceptions in the parent process.
+        if message_type == "error":
+            raise RuntimeError(f"OMNeT++ episode process failed:\n{payload}")
+        return message_type, payload
+
+    def _cleanup_after_previous_episode(self):
+        """Close and discard the previous episode process."""
+        # Return immediately when there is no active process to clean up.
+        if self.worker_process is None:
+            return
+
+        # Ask unfinished simulations to shut down cleanly.
+        if not self.closed:
+            try:
+                self.worker_connection.send(("close", None))
+                message_type, _ = self._receive_worker_message()
+                if message_type != "closed":
+                    print(f"Warning: expected closed message, got {message_type}")
+            except Exception as exc:
+                print(f"Warning: episode worker cleanup failed: {exc}")
+
+        # Join the worker and mark the environment as closed.
+        self._join_episode_process()
+        self.closed = True
+
+    def _join_episode_process(self):
+        """Join the episode process and close its Pipe endpoint."""
+        # Return immediately when there is no active process to join.
+        if self.worker_process is None:
+            return
+
+        # Wait for a clean exit before terminating a stuck worker.
+        self.worker_process.join(timeout=10)
+        if self.worker_process.is_alive():
+            self.worker_process.terminate()
+            self.worker_process.join(timeout=5)
+
+        # Close the parent Pipe endpoint and discard process references.
+        if self.worker_connection is not None:
+            self.worker_connection.close()
+        self.worker_process = None
+        self.worker_connection = None
+
+    def _log(self, message):
+        """Print an environment log message when verbose output is enabled."""
+        if self.verbose:
+            print(f"[orca-env] {message}", flush=True)

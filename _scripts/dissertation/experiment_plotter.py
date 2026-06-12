@@ -1247,7 +1247,7 @@ but can serve as a template for other experiment/plot automation by future maint
 """
 if __name__ == "__main__":    
     metric_csvs = create_csv_dict()        # dataframe containing [experiment, params, protocol, module, metric, csv_path] for easy access
-    experiments = ["responsiveness"] # List of experiments to generate plots for. Order matters for plot layering (e.g. competing flows should be last so it appears in the foreground of timeseries plots)
+    experiments = ["competing-flows"] # List of experiments to generate plots for. Order matters for plot layering (e.g. competing flows should be last so it appears in the foreground of timeseries plots)
     for exp in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == exp]
         
