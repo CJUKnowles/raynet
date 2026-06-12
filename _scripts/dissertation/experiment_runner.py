@@ -336,33 +336,33 @@ Automation script for running many experiments with different parameter combinat
 - The "meta" section contains other useful information that will not be used for replacement or naming or the itertools product, but can be used for other experiment-specific stuff
 """
 if __name__ == "__main__":
-    random.seed(47901741)
+    random.seed(4793601741)
     
     # Testing params, do what u want with these
     experiments_to_run = {
-        # "responsiveness": {
-        #     "protocols": ["Orca"],
-        #     "params": {
-        #         "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
-        #         },
-        #     "meta": {
-        #         "runs" : 5,
-        #         "bw_range" : (5, 100),
-        #         "rtt_range" : (20, 100),
-        #         }
-        #     },
-        
-        "competing-flows": {
+        "responsiveness": {
             "protocols": ["Orca"],
             "params": {
-                "BANDWIDTH" : ["52Mbps"],
-                "DELAY"     : ["5ms"],    
-                "QSIZE": ["1bdp"],
+                "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
                 },
-           "meta": {
-               "runs" : 1,
-               }
+            "meta": {
+                "runs" : 1,
+                "bw_range" : (5, 100),
+                "rtt_range" : (20, 100),
+                }
             },
+        
+        # "competing-flows": {
+        #     "protocols": ["Orca"],
+        #     "params": {
+        #         "BANDWIDTH" : ["52Mbps"],
+        #         "DELAY"     : ["5ms"],    
+        #         "QSIZE": ["1bdp"],
+        #         },
+        #    "meta": {
+        #        "runs" : 1,
+        #        }
+        #     },
         
         # "single-flow": {
         #     "protocols": ["Orca"],

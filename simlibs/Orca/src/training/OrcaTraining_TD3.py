@@ -185,10 +185,8 @@ def main():
 
             with ThreadPoolExecutor(max_workers=args.num_simulations) as executor:
                 reset_results = list(executor.map(reset_training_env, range(args.num_simulations)))
-                states = [result[0]["Orca"] for result in reset_results]
-                observation_valids = [
-                    result[1].get("Orca", False) for result in reset_results
-                ]
+                states = [result["Orca"] for result in reset_results]
+                decision_states = states.copy()
                 actions = [0.0] * args.num_simulations
                 episode_returns = [0.0] * args.num_simulations
                 episode_steps = [0] * args.num_simulations
@@ -202,17 +200,16 @@ def main():
                         active_workers = list(range(active_count))
 
                         for worker_id in active_workers:
-                            state = states[worker_id]
-                            has_acks = observation_valids[worker_id]
-                            if has_acks:
+                            decision_state = decision_states[worker_id]
+                            if decision_state is not None:
                                 actions[worker_id] = action_scalar(
-                                    agent.get_action(state, use_noise=True)
+                                    agent.get_action(decision_state, use_noise=True)
                                 )
 
                         futures = {
                             worker_id: executor.submit(
                                 envs[worker_id].step,
-                                {"Orca": actions[worker_id]},
+                                {"Orca": actions[worker_id]} if decision_states[worker_id] is not None else {},
                             )
                             for worker_id in active_workers
                         }
@@ -231,13 +228,10 @@ def main():
                                 bootstrap_on_truncation=args.bootstrap_on_truncation,
                             )
                             episode_done = result.episode_done
-                            next_observation_has_acks = result.observation_valids.get(
-                                "Orca",
-                                False,
-                            )
+                            next_observation_valid = "Orca" in result.states
                             step += 1
 
-                            if next_observation_has_acks:
+                            if next_observation_valid:
                                 agent.store_experience(
                                     state,
                                     np.array([action], dtype=np.float32),
@@ -248,8 +242,11 @@ def main():
 
                             episode_returns[worker_id] += reward
                             episode_steps[worker_id] += 1
-                            states[worker_id] = next_state
-                            observation_valids[worker_id] = next_observation_has_acks
+                            if next_observation_valid:
+                                states[worker_id] = next_state
+                                decision_states[worker_id] = next_state
+                            else:
+                                decision_states[worker_id] = None
                             latest_obs = next_state[-env.raw_obs_dim:]
 
                             write_scalar(summary_writer, "Rollout/step_reward", reward, step)
@@ -257,8 +254,8 @@ def main():
                             write_scalar(summary_writer, "Rollout/sim_action", pow(4.0, action), step)
                             write_scalar(
                                 summary_writer,
-                                "Rollout/observation_has_acks",
-                                float(next_observation_has_acks),
+                                "Rollout/observation_valid",
+                                float(next_observation_valid),
                                 step,
                             )
                             write_scalar(
@@ -349,12 +346,9 @@ def main():
                                 for worker_id in reset_workers
                             }
                             for worker_id, future in reset_futures.items():
-                                reset_states, reset_valids = future.result()
+                                reset_states = future.result()
                                 states[worker_id] = reset_states["Orca"]
-                                observation_valids[worker_id] = reset_valids.get(
-                                    "Orca",
-                                    False,
-                                )
+                                decision_states[worker_id] = reset_states["Orca"]
                             if agent.actor_noise is not None:
                                 agent.actor_noise.reset()
 

@@ -1,44 +1,32 @@
 import argparse
 import os
-import random
-import sys
 from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 
-
-ORCA_SRC_DIR = Path(__file__).resolve().parent
-TRAINING_DIR = ORCA_SRC_DIR / "training"
-sys.path.insert(0, str(ORCA_SRC_DIR))
-sys.path.insert(0, str(TRAINING_DIR))
-
-from OrcaEnv import OrcaEnv, action_scalar  # noqa: E402
-from learner import Agent, tf  # noqa: E402
+from OrcaEnv import OrcaEnv, action_scalar
+from training.learner import Agent, tf
 
 
-CHECKPOINT_DIR = os.path.join(os.getenv('RAYNET_PATH'), "_models/Orca-papermodel") # Path to the directory containing the checkpoint to evaluate
+CHECKPOINT_DIR = Path(os.environ["RAYNET_PATH"]) / "_models/Orca-papermodel"
 HIDDEN_SIZE = 256
 STACKING = 10
 SEED = 91456211
 
 
 def resolve_checkpoint(path):
+    """Resolve a checkpoint directory or checkpoint file to its prefix."""
+    # Search the provided directory and its checkpoints subdirectory.
     candidate = Path(path).expanduser().resolve()
-
     if candidate.is_dir():
-        direct = tf.train.latest_checkpoint(str(candidate))
-        if direct:
-            return direct
-
-        nested = candidate / "checkpoints"
-        if nested.is_dir():
-            nested_checkpoint = tf.train.latest_checkpoint(str(nested))
-            if nested_checkpoint:
-                return nested_checkpoint
-
+        for directory in (candidate, candidate / "checkpoints"):
+            checkpoint = tf.train.latest_checkpoint(str(directory))
+            if checkpoint:
+                return checkpoint
         raise FileNotFoundError(f"No TensorFlow checkpoint found under {candidate}")
 
+    # Remove TensorFlow metadata suffixes and validate the checkpoint prefix.
     checkpoint_prefix = str(candidate)
     if candidate.suffix in {".meta", ".index"}:
         checkpoint_prefix = str(candidate.with_suffix(""))
@@ -49,26 +37,20 @@ def resolve_checkpoint(path):
 
 
 def parse_args():
+    """Parse the evaluation configuration."""
     parser = argparse.ArgumentParser(description="Evaluate an original Orca TD3 checkpoint")
-    parser.add_argument(
-        "ini_path",
-        help="Path to the OMNeT++ ini file to run",
-    )
-    parser.add_argument(
-        "config_section",
-        nargs="?",
-        default="Orca",
-        help="OMNeT++ config section to run (default: Orca)",
-    )
+    parser.add_argument("ini_path", help="Path to the OMNeT++ ini file to run")
+    parser.add_argument("config_section", nargs="?", default="Orca", help="OMNeT++ config section to run")
     return parser.parse_args()
 
 
-def build_inference_agent(env, hidden_size):
+def build_inference_agent(env):
+    """Create the original Orca TD3 learner for inference."""
     return Agent(
         env.state_dim,
         env.action_dim,
-        h1_shape=hidden_size,
-        h2_shape=hidden_size,
+        h1_shape=HIDDEN_SIZE,
+        h2_shape=HIDDEN_SIZE,
         batch_size=1,
         summary=None,
         mem_size=1,
@@ -79,26 +61,22 @@ def build_inference_agent(env, hidden_size):
 
 
 def main():
+    """Evaluate the original Orca paper model in one simulation."""
+    # Resolve the requested simulation and paper-model checkpoint.
     args = parse_args()
     checkpoint = resolve_checkpoint(CHECKPOINT_DIR)
     print(f"Loading checkpoint: {checkpoint}", flush=True)
 
-    random.seed(SEED)
+    # Seed the learner and construct the protocol-specific environment.
     np.random.seed(SEED)
-
-    env_config = {
-        "iniPath": args.ini_path,
-        "config_section": args.config_section,
-        "stacking": STACKING,
-    }
-    env = OrcaEnv(env_config)
-
+    env = OrcaEnv({"iniPath": args.ini_path, "config_section": args.config_section, "stacking": STACKING})
     total_rewards = defaultdict(float)
     episode_length = 0
 
+    # Restore the learner and evaluate until the simulation completes.
     with tf.Graph().as_default():
         tf.set_random_seed(SEED)
-        agent = build_inference_agent(env, HIDDEN_SIZE)
+        agent = build_inference_agent(env)
         saver = tf.train.Saver()
 
         with tf.Session() as sess:
@@ -106,24 +84,12 @@ def main():
             saver.restore(sess, checkpoint)
 
             try:
-                states, observation_valids = env.reset()
-                actions = defaultdict(float)
+                states = env.reset()
                 episode_done = False
                 while not episode_done:
-                    for agent_id, state in states.items():
-                        if observation_valids.get(agent_id, False):
-                            actions[agent_id] = action_scalar(
-                                agent.get_action(state, use_noise=False)
-                            )
-
-                    result = env.step(
-                        {
-                            agent_id: actions[agent_id]
-                            for agent_id in states
-                        }
-                    )
+                    actions = {agent_id: action_scalar(agent.get_action(state, use_noise=False)) for agent_id, state in states.items()}
+                    result = env.step(actions)
                     states = result.states
-                    observation_valids = result.observation_valids
                     for agent_id, reward in result.rewards.items():
                         total_rewards[agent_id] += reward
                     episode_done = result.episode_done
@@ -131,6 +97,7 @@ def main():
             finally:
                 env.close()
 
+    # Report the total return collected by each Orca agent.
     print(f"Evaluation complete: length={episode_length}")
     for agent_id, reward in sorted(total_rewards.items()):
         print(f"{agent_id}: return={reward:.6f}")

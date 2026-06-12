@@ -123,7 +123,6 @@ class OrcaStep:
     rewards: dict
     terminateds: dict
     truncated: bool
-    observation_valids: dict
 
     @property
     def episode_done(self):
@@ -145,7 +144,7 @@ class OrcaEnv:
 
     raw_obs_dim = 7
     action_dim = 1
-    ack_count_index = 3
+    srtt_index = 5
 
     def __init__(self, env_config, verbose=True):
         """Initialize a persistent Orca environment wrapper."""
@@ -162,6 +161,8 @@ class OrcaEnv:
 
         # Initialize persistent observation histories.
         self.obs_histories = {}
+        self.last_actions = {}
+        self.pending_agent_ids = set()
         self.closed = True
 
     @property
@@ -175,6 +176,8 @@ class OrcaEnv:
         self._log("reset: preparing new OMNeT++ run")
         self._cleanup_after_previous_episode()
         self.obs_histories = {}
+        self.last_actions = {}
+        self.pending_agent_ids = set()
 
         # Spawn a new simulation and receive its initial observations.
         ini_path = ini_path if ini_path is not None else self.env_config["iniPath"]
@@ -185,20 +188,29 @@ class OrcaEnv:
         # Validate and process the reset response.
         if message_type != "reset":
             raise RuntimeError(f"Expected reset message from episode worker, got {message_type}")
-        states, observation_valids = self._process_observations(observations, initial=True)
+        states = self._process_observations(observations, initial=True)
         if not states:
             self.close()
             raise RuntimeError(f"runner.reset() did not return any Orca observations. Returned keys were {list(observations.keys())}.")
 
-        return states, observation_valids
+        return states
 
     def step(self, learner_actions):
         """Apply learner actions and return the processed simulation step."""
-        # Normalize and clip each learner action before sending it to the simulation.
-        actions = {
-            agent_id: float(np.clip(action_scalar(action), -1.0, 1.0))
-            for agent_id, action in learner_actions.items()
-        }
+        # Reject actions for agents that did not produce the latest observations.
+        unexpected_agent_ids = set(learner_actions) - self.pending_agent_ids
+        if unexpected_agent_ids:
+            raise ValueError(f"Received actions for agents without pending observations: {sorted(unexpected_agent_ids)}")
+
+        # Normalize new actions and repeat cached actions for invalid observations.
+        actions = {}
+        for agent_id in self.pending_agent_ids:
+            if agent_id in learner_actions:
+                self.last_actions[agent_id] = float(np.clip(action_scalar(learner_actions[agent_id]), -1.0, 1.0))
+            if agent_id not in self.last_actions:
+                raise ValueError(f"No action has been provided for agent {agent_id}")
+            actions[agent_id] = self.last_actions[agent_id]
+
         self._log(f"step: actions={actions}")
         self.worker_connection.send(("step", actions)) # Perform the step
         message_type, result = self._receive_worker_message()
@@ -207,9 +219,11 @@ class OrcaEnv:
 
         # Process observations and sanitize rewards returned by the simulation.
         observations, rewards, terminateds, info = result
-        states, observation_valids = self._process_observations(observations)
+        states = self._process_observations(observations)
         cleaned_rewards = {}
         for agent_id, reward in rewards.items():
+            if agent_id not in states:
+                continue
             reward = float(reward)
             if math.isnan(reward):
                 print(f"Warning: NaN reward for {agent_id}; replacing with 0.0")
@@ -229,7 +243,6 @@ class OrcaEnv:
             rewards=cleaned_rewards,
             terminateds=terminateds,
             truncated=truncated,
-            observation_valids=observation_valids,
         )
 
     def close(self):
@@ -237,14 +250,15 @@ class OrcaEnv:
         self._cleanup_after_previous_episode()
 
     def _process_observations(self, observations, initial=False):
-        """Validate each agent's observation, update its history, and return the stacked state."""
+        """Validate observations and return states that require new learner actions."""
         states = {}
-        observation_valids = {}
+        self.pending_agent_ids = set()
 
         # Process each returned agent observation independently.
         for agent_id, observation in observations.items():
             if agent_id in IGNORED_AGENT_IDS:
                 continue
+            self.pending_agent_ids.add(agent_id)
             observation = np.asarray(observation, dtype=np.float32)
 
             # Validate the observation and create a zero-padded history for new agents.
@@ -253,22 +267,21 @@ class OrcaEnv:
             if agent_id not in self.obs_histories:
                 self.obs_histories[agent_id] = np.zeros((self.stacking, self.raw_obs_dim), dtype=np.float32,)
 
-            # Add initial or ACK-bearing observations to the agent's history.
-            valid = self.observation_has_acks(observation)
-            observation_valids[agent_id] = valid
-            if initial or valid:
-                history = self.obs_histories[agent_id]
-                history[:-1] = history[1:]
-                history[-1] = observation
+            # Omit invalid observations so the previous action and state are retained.
+            if not initial and not self.observation_has_valid_rtt(observation):
+                continue
 
-            # Return a flattened copy that cannot be mutated by future steps.
+            # Add valid observations and return a copy that cannot be mutated by future steps.
+            history = self.obs_histories[agent_id]
+            history[:-1] = history[1:]
+            history[-1] = observation
             states[agent_id] = self.obs_histories[agent_id].reshape(-1).copy()
 
-        return states, observation_valids
+        return states
 
-    def observation_has_acks(self, observation):
-        """Return whether an Orca observation contains ACKs."""
-        return bool(observation[self.ack_count_index] > 0.0)
+    def observation_has_valid_rtt(self, observation):
+        """Return whether an Orca observation contains valid RTT data."""
+        return bool(observation[self.srtt_index] > 0.0)
 
     def _spawn_episode_process(self, ini_path, section_name):
         """Spawn a simulation process for one episode."""
