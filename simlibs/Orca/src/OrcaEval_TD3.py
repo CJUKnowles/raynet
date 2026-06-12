@@ -9,9 +9,8 @@ from pathlib import Path
 import numpy as np
 
 
-RAYNET_PATH = Path(os.getenv("RAYNET_PATH", Path(__file__).resolve().parents[3]))
-TRAINING_DIR = RAYNET_PATH / "simlibs/Orca/src/training"
-sys.path.insert(0, str(TRAINING_DIR))
+TRAINING_DIR = os.path.join(os.getenv('RAYNET_PATH'), "simlibs/Orca/src/training")
+sys.path.insert(0, TRAINING_DIR)
 
 from OrcaTraining_TD3 import (
     Agent,
@@ -20,7 +19,7 @@ from OrcaTraining_TD3 import (
 )
 
 
-CHECKPOINT_DIR = RAYNET_PATH / "_models/Orca-papermodel"  # Path to the directory containing the checkpoint to evaluate
+CHECKPOINT_DIR = os.path.join(os.getenv('RAYNET_PATH'), "_models/Orca-papermodel") # Path to the directory containing the checkpoint to evaluate
 HIDDEN_SIZE = 256
 STACKING = 10
 SEED = 91456211
@@ -33,7 +32,7 @@ class OmnetOrcaEvalEnv:
     ack_count_index = 3
 
     def __init__(self, env_config):
-        sys.path.insert(0, str(RAYNET_PATH / "build"))
+        sys.path.insert(0, os.path.join(os.getenv('RAYNET_PATH'), "build"))
         from omnetbind import OmnetGymApi
 
         self.runner = OmnetGymApi()

@@ -126,14 +126,9 @@ tf.layers = types.SimpleNamespace(
 )
 sys.modules["tensorflow"] = tf
 
+sys.path.insert(0, os.path.join(os.getenv('RAYNET_PATH'), "build"))
 
-RAYNET_PATH = Path(os.getenv("RAYNET_PATH", "/home/james/raynet"))
-ORCA_RL_MODULE = Path(os.getenv("ORCA_RL_MODULE", "/home/james/orca/rl-module"))
-
-sys.path.insert(0, str(ORCA_RL_MODULE))
-sys.path.insert(0, str(RAYNET_PATH / "build"))
-
-from agent import Agent  # noqa: E402
+from learner import Agent  # noqa: E402
 from OrcaEpisodeWorker import run_episode  # noqa: E402
 
 
@@ -403,7 +398,7 @@ def parse_args():
     parser.add_argument("--train-every", type=int, default=1)
     parser.add_argument("--updates-per-train", type=int, default=1)
     parser.add_argument("--checkpoint-every", type=int, default=50_000)
-    parser.add_argument("--log-dir", type=str, default=str(RAYNET_PATH / "_models" / "Orca-original-td3"))
+    parser.add_argument("--log-dir", type=str, default=os.getenv('RAYNET_PATH') + "/_models_training" + "/Orca-TD3")
     parser.add_argument("--restore", type=str, default="")
     parser.add_argument("--bootstrap-on-truncation", dest="bootstrap_on_truncation", action="store_true")
     parser.add_argument("--no-bootstrap-on-truncation", dest="bootstrap_on_truncation", action="store_false")
@@ -434,7 +429,7 @@ def main():
     tf.set_random_seed(args.seed)
 
     base_env_config = {
-        "iniPath": str(RAYNET_PATH / "simlibs/Orca/src/training/OrcaTraining.ini"),
+        "iniPath": os.getenv('RAYNET_PATH') + "/simlibs/Orca/src/training/OrcaTraining.ini",
         "bottleneck_bw_range": (5, 20),
         "minimum_rtt_range": (5, 100),
         "bottleneck_buffer_range": (25_000, 4_000_000),

@@ -275,7 +275,10 @@ def run_experiments(experiments_dict, create_output_csv=True):
                         #     scenario_string,
                         #     count=2
                         # )
-                        modified_scenario_file = f"{ini_variants_base.rsplit("/", 1)[0]}/scenario.xml_" + params_suffix + f"_RUN{run}"
+                        output_dir = ini_variants_base.rsplit("/", 1)[0]
+                        Path(output_dir).mkdir(parents=True, exist_ok=True)
+                        print(output_dir)
+                        modified_scenario_file = f"{output_dir}/scenario.xml_" + params_suffix + f"_RUN{run}"
                         with open(modified_scenario_file, 'w') as fout:
                             fout.write(scenario_string)
                         
