@@ -8,7 +8,6 @@ Orca environment wrapper and this training loop.
 
 import argparse
 import os
-import random
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -20,27 +19,78 @@ ORCA_SRC_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ORCA_SRC_DIR))
 
 from OrcaEnv import OrcaEnv, action_scalar  # noqa: E402
-from learner import Agent, tf  # noqa: E402
+from training.learner import Agent, tf  # noqa: E402
 
 
-def write_scalar(summary_writer, tag, value, step):
-    """Write one scalar value to TensorBoard."""
-    value = np.asarray(value).reshape(-1)[0]
+AGENT_ID = "Orca"
+STACKING = 10
+TRAINING_INI = Path(os.environ["RAYNET_PATH"]) / "simlibs/Orca/src/training/OrcaTraining.ini"
+
+
+# MARK: Logging -------------------------------------------------------------------------------------------------
+def write_scalars(summary_writer, values, step):
+    """Write multiple scalar values to one TensorBoard step."""
     summary = tf.Summary()
-    summary.value.add(tag=tag, simple_value=float(value))
+    for tag, value in values.items():
+        value = np.asarray(value).reshape(-1)[0]
+        summary.value.add(tag=tag, simple_value=float(value))
     summary_writer.add_summary(summary, global_step=step)
 
 
-def prepare_training_ini(training_config, rng, worker_id):
+def log_rollout_step(summary_writer, agent, env, worker_id, step, reward, action, observation_valid, state, start_time):
+    """Log one completed environment step."""
+    latest_obs = state[-env.raw_obs_dim:]
+    write_scalars(
+        summary_writer,
+        {
+            "Rollout/step_reward": reward,
+            "Rollout/learner_action": action,
+            "Rollout/sim_action": pow(4.0, action),
+            "Rollout/observation_valid": observation_valid,
+            "Rollout/worker_id": worker_id,
+            "Rollout/replay_size": agent.rp_buffer.length_buf,
+            "Rollout/throughput": latest_obs[0],
+            "Rollout/pacing_rate": latest_obs[1],
+            "Rollout/loss_rate": latest_obs[2],
+            "Rollout/delay_metric": latest_obs[6],
+            "Performance/environment_steps_per_second": step / max(time.time() - start_time, 1e-6),
+        },
+        step,
+    )
+
+
+def log_completed_episode(summary_writer, agent, episode, worker_id, step, episode_steps, episode_return, start_time):
+    """Log one completed training episode."""
+    print(
+        f"episode={episode} worker={worker_id} step={step} episode_steps={episode_steps} "
+        f"return={episode_return:.4f} buffer={agent.rp_buffer.length_buf} elapsed={time.time() - start_time:.1f}s"
+    )
+    write_scalars(
+        summary_writer,
+        {
+            "Episode/return": episode_return,
+            "Episode/length": episode_steps,
+            "Episode/worker_id": worker_id,
+        },
+        episode,
+    )
+    summary_writer.flush()
+
+# MARK: Utilities -----------------------------------------------------------------------------------------------
+def prepare_training_ini(args, rng, worker_id):
     """Create one randomized INI variant for a training episode."""
-    # Sample the randomized link and episode parameters.
-    bw = round(rng.uniform(*training_config["bottleneck_bw_range"]))
-    base_rtt = round(rng.uniform(*training_config["minimum_rtt_range"]), 2)
-    buffer_size = round(bw * base_rtt * rng.uniform(0.2, 4.0) * 1000)
-    max_steps = round(rng.uniform(*training_config["max_steps_range"]))
+    # Sample the randomized bandwidth and RTT parameters.
+    bw = round(rng.uniform(*args.bottleneck_bw_range))
+    base_rtt = round(rng.uniform(*args.minimum_rtt_range), 2)
+
+    # Calculate the buffer in bits from either a BDP multiplier or a raw byte size.
+    if args.buffers_use_bdp_ranges:
+        buffer_size_bits = round(bw * base_rtt * rng.uniform(*args.buffer_bdp_range) * 1000)
+    else:
+        buffer_size_bits = round(rng.uniform(*args.buffer_size_range) * 8)
 
     # Create a unique INI variant for this training worker.
-    original_ini_file = Path(training_config["iniPath"])
+    original_ini_file = args.training_ini
     ini_variants_dir = original_ini_file.parent / "ini_variants"
     ini_variants_dir.mkdir(parents=True, exist_ok=True)
     worker_ini_file = ini_variants_dir / f"{original_ini_file.name}.worker{os.getpid()}-{worker_id}"
@@ -50,10 +100,19 @@ def prepare_training_ini(training_config, rng, worker_id):
     ini_string = ini_string.replace("HOME", os.getenv("HOME", str(Path.home())))
     ini_string = ini_string.replace("ORCA_BOTTLENECK_BW", f"{bw}Mbps")
     ini_string = ini_string.replace("ORCA_BASE_RTT", f"{base_rtt / 2.0}ms")
-    ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{buffer_size}b")
-    ini_string = ini_string.replace("MAX_RL_STEPS", str(max_steps))
+    ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{buffer_size_bits}b")
+    ini_string = ini_string.replace("MAX_RL_STEPS", str(args.max_episode_steps))
     worker_ini_file.write_text(ini_string, encoding="utf-8")
     return worker_ini_file
+
+
+def reset_training_env(env, args, rng, worker_id):
+    """Reset one training environment with a randomized temporary INI."""
+    ini_path = prepare_training_ini(args, rng, worker_id)
+    try:
+        return env.reset(ini_path)
+    finally:
+        ini_path.unlink(missing_ok=True)
 
 
 def terminal_for_training(step, agent_id, bootstrap_on_truncation=True):
@@ -62,8 +121,15 @@ def terminal_for_training(step, agent_id, bootstrap_on_truncation=True):
     return terminated or (step.truncated and not bootstrap_on_truncation)
 
 
+def save_checkpoint(saver, session, checkpoint_dir, step, final=False):
+    """Save and report one learner checkpoint."""
+    path = saver.save(session, str(checkpoint_dir / "model.ckpt"), global_step=step)
+    print(f"Saved {'final ' if final else ''}checkpoint: {path}")
+
+
+# MARK: Core Functionality --------------------------------------------------------------------------------------
 def build_agent(env, args, summary_writer):
-    """Create the original Orca TD3 learner."""
+    """Create the original Orca TD3 learner. (a single shared learning agent across all environments)"""
     return Agent(
         env.state_dim,
         env.action_dim,
@@ -87,28 +153,36 @@ def build_agent(env, args, summary_writer):
     )
 
 
+# MARK: Configuration -------------------------------------------------------------------------------------------
 def parse_args():
+    """Parse the training configuration."""
     parser = argparse.ArgumentParser(description="Original Orca TD3 learner for OMNeT++")
+
+    # Define general training and output arguments.
+    parser.add_argument("--log-dir", type=str, default=str(Path(os.environ["RAYNET_PATH"]) / "_models_training/Orca-TD3"))
+    parser.add_argument("--num-simulations", type=int, default=16, help="Number of OMNeT++ simulations to run in parallel")
+    parser.add_argument("--checkpoint-every-seconds", type=float, default=15.0, help="Seconds between periodic learner checkpoints; zero disables them")
+    parser.add_argument("--restore", type=str, default="", help="TensorFlow checkpoint prefix to restore before training")
+    parser.add_argument("--quiet-env", action="store_true", help="Suppress OrcaEnv status messages")
+
+    # Define simulation orchestration and randomized link arguments.
+    parser.add_argument("--training-ini", type=Path, default=TRAINING_INI)
     parser.add_argument("--seed", type=int, default=91456211)
     parser.add_argument("--total-steps", type=int, default=1_000_000)
-    parser.add_argument(
-        "--num-simulations",
-        type=int,
-        default=16,
-        help="Number of OMNeT++ simulations to run in parallel",
-    )
-    parser.add_argument("--max-episode-steps", type=int, default=500)
+    parser.add_argument("--max-episode-steps", type=int, default=64)
+    parser.add_argument("--bottleneck-bw-range", type=float, nargs=2, default=(48, 48), metavar=("MIN_MBPS", "MAX_MBPS"))
+    parser.add_argument("--minimum-rtt-range", type=float, nargs=2, default=(20, 20), metavar=("MIN_MS", "MAX_MS"))
+    parser.add_argument("--buffer-bdp-range", type=float, nargs=2, default=(2, 2), metavar=("MIN_BDP", "MAX_BDP"))
+    parser.add_argument("--buffer-size-range", type=float, nargs=2, default=(240_000, 240_000), metavar=("MIN_BUFFER_BYTES", "MAX_BUFFER_BYTES"))
+    parser.add_argument("--buffers-use-bdp-ranges", action=argparse.BooleanOptionalAction, default=True, help="Derive buffer sizes from BDP multipliers instead of sampling raw byte sizes")
     parser.add_argument("--train-after", type=int, default=512)
     parser.add_argument("--train-every", type=int, default=1)
     parser.add_argument("--updates-per-train", type=int, default=1)
-    parser.add_argument("--checkpoint-every", type=int, default=50_000)
-    parser.add_argument("--log-dir", type=str, default=os.getenv('RAYNET_PATH') + "/_models_training" + "/Orca-TD3")
-    parser.add_argument("--restore", type=str, default="")
     parser.add_argument("--bootstrap-on-truncation", dest="bootstrap_on_truncation", action="store_true")
     parser.add_argument("--no-bootstrap-on-truncation", dest="bootstrap_on_truncation", action="store_false")
     parser.set_defaults(bootstrap_on_truncation=True)
-    parser.add_argument("--quiet-env", action="store_true")
 
+    # Define original Orca TD3 learner hyperparameters.
     parser.add_argument("--batch-size", type=int, default=512)
     parser.add_argument("--replay-size", type=int, default=2_553_600)
     parser.add_argument("--hidden-size", type=int, default=256)
@@ -123,56 +197,54 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    args = parse_args()
+def validate_args(args):
+    """Validate training arguments before constructing simulations."""
+    # Validate scalar counts and intervals.
     if args.num_simulations < 1:
         raise ValueError("--num-simulations must be at least 1")
+    if args.max_episode_steps < 1:
+        raise ValueError("--max-episode-steps must be at least 1")
 
-    random.seed(args.seed)
+    # Validate randomized training ranges.
+    for name in ("bottleneck_bw_range", "minimum_rtt_range", "buffer_bdp_range", "buffer_size_range"):
+        lower, upper = getattr(args, name)
+        if lower > upper:
+            raise ValueError(f"--{name.replace('_', '-')} minimum must not exceed its maximum")
+
+
+# MARK: Training Loop -----------------------------------------------------------------------------------
+def main():
+    """Train the original Orca TD3 learner across parallel simulations."""
+    # Parse arguments and seed the learner.
+    args = parse_args()
+    validate_args(args)
     np.random.seed(args.seed)
     tf.set_random_seed(args.seed)
 
-    training_config = {
-        "iniPath": os.getenv('RAYNET_PATH') + "/simlibs/Orca/src/training/OrcaTraining.ini",
-        "bottleneck_bw_range": (5, 20),
-        "minimum_rtt_range": (5, 100),
-        "bottleneck_buffer_range": (25_000, 4_000_000),
-        "max_steps_range": (args.max_episode_steps, args.max_episode_steps),
-    }
+    # Construct the shared environment configuration.
     env_config = {
-        "iniPath": training_config["iniPath"],
+        "iniPath": str(args.training_ini),
         "config_section": "General",
-        "stacking": 10,
+        "stacking": STACKING,
     }
 
+    # Create output directories and persistent environment wrappers.
     log_dir = Path(args.log_dir)
     checkpoint_dir = log_dir / "checkpoints"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-
     envs = [OrcaEnv(env_config, verbose=not args.quiet_env) for _ in range(args.num_simulations)]
     env_rngs = [np.random.default_rng(args.seed + worker_id) for worker_id in range(args.num_simulations)]
 
-    # Generate a randomized INI before resetting each persistent environment.
-    def reset_training_env(worker_id):
-        ini_path = prepare_training_ini(training_config, env_rngs[worker_id], worker_id)
-        try:
-            return envs[worker_id].reset(ini_path)
-        finally:
-            ini_path.unlink(missing_ok=True)
+    print(f"Running {args.num_simulations} parallel simulation(s) for {args.total_steps} aggregate steps.", flush=True)
 
-    print(
-        f"Running {args.num_simulations} parallel simulation(s) "
-        f"for {args.total_steps} aggregate steps.",
-        flush=True,
-    )
-
+    # Build and initialize the learner graph.
     with tf.Graph().as_default():
         tf.set_random_seed(args.seed)
         summary_writer = tf.summary.FileWriter(str(log_dir))
         agent = build_agent(envs[0], args, summary_writer)
         agent.build_learn()
         agent.create_tf_summary()
-        saver = tf.train.Saver(max_to_keep=5)
+        saver = tf.train.Saver(max_to_keep=5) # Maximum number of checkpoints to keep on disk
 
         with tf.Session() as sess:
             agent.assign_sess(sess)
@@ -184,8 +256,13 @@ def main():
                 agent.init_target()
 
             with ThreadPoolExecutor(max_workers=args.num_simulations) as executor:
-                reset_results = list(executor.map(reset_training_env, range(args.num_simulations)))
-                states = [result["Orca"] for result in reset_results]
+                # Reset every environment and initialize persistent rollout state.
+                reset_futures = [
+                    executor.submit(reset_training_env, envs[worker_id], args, env_rngs[worker_id], worker_id)
+                    for worker_id in range(args.num_simulations)
+                ]
+                reset_results = [future.result() for future in reset_futures]
+                states = [result[AGENT_ID] for result in reset_results]
                 decision_states = states.copy()
                 actions = [0.0] * args.num_simulations
                 episode_returns = [0.0] * args.num_simulations
@@ -193,44 +270,42 @@ def main():
                 completed_episodes = 0
                 step = 0
                 start_time = time.time()
+                last_checkpoint_time = time.monotonic()
 
                 try:
                     while step < args.total_steps:
+                        # Select new actions only for environments with valid observations.
                         active_count = min(args.num_simulations, args.total_steps - step)
                         active_workers = list(range(active_count))
-
                         for worker_id in active_workers:
                             decision_state = decision_states[worker_id]
                             if decision_state is not None:
-                                actions[worker_id] = action_scalar(
-                                    agent.get_action(decision_state, use_noise=True)
-                                )
+                                actions[worker_id] = action_scalar(agent.get_action(decision_state, use_noise=True))
 
+                        # Advance all active simulations in parallel.
                         futures = {
                             worker_id: executor.submit(
                                 envs[worker_id].step,
-                                {"Orca": actions[worker_id]} if decision_states[worker_id] is not None else {},
+                                {AGENT_ID: actions[worker_id]} if decision_states[worker_id] is not None else {},
                             )
                             for worker_id in active_workers
                         }
                         reset_workers = []
 
+                        # Process each completed simulation step.
                         for worker_id in active_workers:
                             env = envs[worker_id]
                             state = states[worker_id]
                             action = actions[worker_id]
                             result = futures[worker_id].result()
-                            next_state = result.states.get("Orca", state)
-                            reward = result.rewards.get("Orca", 0.0)
-                            terminal = terminal_for_training(
-                                result,
-                                "Orca",
-                                bootstrap_on_truncation=args.bootstrap_on_truncation,
-                            )
+                            next_state = result.states.get(AGENT_ID, state)
+                            reward = result.rewards.get(AGENT_ID, 0.0)
+                            terminal = terminal_for_training(result, AGENT_ID, bootstrap_on_truncation=args.bootstrap_on_truncation)
                             episode_done = result.episode_done
-                            next_observation_valid = "Orca" in result.states
+                            next_observation_valid = AGENT_ID in result.states
                             step += 1
 
+                            # Store valid transitions and update persistent rollout state.
                             if next_observation_valid:
                                 agent.store_experience(
                                     state,
@@ -247,81 +322,26 @@ def main():
                                 decision_states[worker_id] = next_state
                             else:
                                 decision_states[worker_id] = None
-                            latest_obs = next_state[-env.raw_obs_dim:]
 
-                            write_scalar(summary_writer, "Rollout/step_reward", reward, step)
-                            write_scalar(summary_writer, "Rollout/learner_action", action, step)
-                            write_scalar(summary_writer, "Rollout/sim_action", pow(4.0, action), step)
-                            write_scalar(
-                                summary_writer,
-                                "Rollout/observation_valid",
-                                float(next_observation_valid),
-                                step,
-                            )
-                            write_scalar(
-                                summary_writer,
-                                "Rollout/worker_id",
-                                worker_id,
-                                step,
-                            )
-                            write_scalar(
-                                summary_writer,
-                                "Rollout/replay_size",
-                                agent.rp_buffer.length_buf,
-                                step,
-                            )
-                            write_scalar(summary_writer, "Rollout/throughput", latest_obs[0], step)
-                            write_scalar(summary_writer, "Rollout/pacing_rate", latest_obs[1], step)
-                            write_scalar(summary_writer, "Rollout/loss_rate", latest_obs[2], step)
-                            write_scalar(summary_writer, "Rollout/delay_metric", latest_obs[6], step)
-                            write_scalar(
-                                summary_writer,
-                                "Performance/environment_steps_per_second",
-                                step / max(time.time() - start_time, 1e-6),
-                                step,
-                            )
-
+                            # Train the learner after the replay buffer warmup.
                             can_train = agent.rp_buffer.length_buf >= args.train_after
                             if can_train and step % args.train_every == 0:
                                 for _ in range(args.updates_per_train):
                                     agent.train_step()
                                     agent.target_update()
 
-                            hit_template_limit = (
-                                episode_steps[worker_id] >= args.max_episode_steps
-                            )
+                            # Schedule completed environments for reset.
+                            hit_template_limit = episode_steps[worker_id] >= args.max_episode_steps
+                            completed_episode = None
                             if episode_done or hit_template_limit:
-                                print(
-                                    "episode={} worker={} step={} episode_steps={} "
-                                    "return={:.4f} buffer={} elapsed={:.1f}s".format(
-                                        completed_episodes,
-                                        worker_id,
-                                        step,
-                                        episode_steps[worker_id],
-                                        episode_returns[worker_id],
-                                        agent.rp_buffer.length_buf,
-                                        time.time() - start_time,
-                                    )
-                                )
-                                write_scalar(
-                                    summary_writer,
-                                    "Episode/return",
-                                    episode_returns[worker_id],
+                                completed_episode = (
                                     completed_episodes,
-                                )
-                                write_scalar(
-                                    summary_writer,
-                                    "Episode/length",
-                                    episode_steps[worker_id],
-                                    completed_episodes,
-                                )
-                                write_scalar(
-                                    summary_writer,
-                                    "Episode/worker_id",
                                     worker_id,
-                                    completed_episodes,
+                                    step,
+                                    episode_steps[worker_id],
+                                    episode_returns[worker_id],
+                                    start_time,
                                 )
-                                summary_writer.flush()
                                 completed_episodes += 1
                                 episode_returns[worker_id] = 0.0
                                 episode_steps[worker_id] = 0
@@ -329,38 +349,41 @@ def main():
                                 if step < args.total_steps:
                                     reset_workers.append(worker_id)
 
-                            if (
-                                args.checkpoint_every > 0
-                                and step % args.checkpoint_every == 0
-                            ):
-                                path = saver.save(
-                                    sess,
-                                    str(checkpoint_dir / "model.ckpt"),
-                                    global_step=step,
-                                )
-                                print(f"Saved checkpoint: {path}")
+                            # Log the completed step after all core processing.
+                            log_rollout_step(summary_writer, agent, env, worker_id, step, reward, action, next_observation_valid, next_state, start_time)
+                            if completed_episode is not None:
+                                log_completed_episode(summary_writer, agent, *completed_episode)
 
+                            # Save periodic checkpoints after the completed step.
+                            current_checkpoint_time = time.monotonic()
+                            if args.checkpoint_every_seconds > 0 and current_checkpoint_time - last_checkpoint_time >= args.checkpoint_every_seconds:
+                                save_checkpoint(saver, sess, checkpoint_dir, step)
+                                last_checkpoint_time = current_checkpoint_time
+
+                        # Reset environments after all current results are processed.
                         if reset_workers:
                             reset_futures = {
-                                worker_id: executor.submit(reset_training_env, worker_id)
+                                worker_id: executor.submit(
+                                    reset_training_env,
+                                    envs[worker_id],
+                                    args,
+                                    env_rngs[worker_id],
+                                    worker_id,
+                                )
                                 for worker_id in reset_workers
                             }
                             for worker_id, future in reset_futures.items():
                                 reset_states = future.result()
-                                states[worker_id] = reset_states["Orca"]
-                                decision_states[worker_id] = reset_states["Orca"]
+                                states[worker_id] = reset_states[AGENT_ID]
+                                decision_states[worker_id] = reset_states[AGENT_ID]
                             if agent.actor_noise is not None:
                                 agent.actor_noise.reset()
 
                 finally:
-                    final_path = saver.save(
-                        sess,
-                        str(checkpoint_dir / "model.ckpt"),
-                        global_step=args.total_steps,
-                    )
+                    # Save the final learner state and close every environment.
+                    save_checkpoint(saver, sess, checkpoint_dir, args.total_steps, final=True)
                     list(executor.map(lambda env: env.close(), envs))
                     summary_writer.close()
-                    print(f"Saved final checkpoint: {final_path}")
 
 
 if __name__ == "__main__":
