@@ -137,6 +137,7 @@ public: // General use
     // TcpCubic Overrides (These are mostly unchanged, and just used to gather statistic or disable automatic pacing)
     virtual void rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) override;  // Used to track rtt-related stats for observations
     virtual void receivedDataAck(uint32_t firstSeqAcked) override;
+    virtual void receivedDuplicateAck() override;
     virtual void established(bool active) override; // Called when the TCP CONNECTION is established (some time AFTER startup!)
 
     // RLInterface Overrides (Required by the RL agent)
@@ -171,6 +172,8 @@ public: // General use
 
     // Orca helper variables (mostly used to facilitate computing the observations)
     simtime_t lastIntervalTime = 0.0;
+    double deliveryRateSampleSum = 0.0;
+    uint32_t deliveryRateSampleCount = 0;
 
     // State variables
     double delta_snd_max;
@@ -189,5 +192,8 @@ public: // General use
     double bytesDelivered=0.0; // Sum of all bytes delivered this interval
     double bytesLost=0.0;      // Sum of all bytes lost this interval
     double lossRate=0.0;       // The rate at which bytes were lost this interval (bytes/s)
+
+private:
+    void recordDeliveryRateSample();
   };
 #endif

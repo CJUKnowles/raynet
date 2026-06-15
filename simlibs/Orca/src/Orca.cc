@@ -110,7 +110,7 @@ std::optional<ObsType> Orca::computeObservation(){
     this->bytesLost = pacedConnection->getTotalDetectedLostBytes();
     this->delta_bytes_delivered = this->bytesDelivered - this->last_bytes_delivered;
     this->delta_bytes_lost = this->bytesLost - this->last_bytes_lost;
-    this->orcaThroughput = lastIntervalDuration > 0.0 ? this->delta_bytes_delivered / lastIntervalDuration : 0.0;
+    this->orcaThroughput = this->deliveryRateSampleCount > 0 ? this->deliveryRateSampleSum / this->deliveryRateSampleCount : 0.0;
     this->lossRate = lastIntervalDuration > 0.0 ? this->delta_bytes_lost / lastIntervalDuration : 0.0;
     this->delta_snd_max = state->snd_max - this->last_snd_max;
     this->delta_snd_una = state->snd_una - this->last_snd_una;
@@ -149,7 +149,7 @@ std::optional<ObsType> Orca::computeObservation(){
     // Emit throughput for OMNeT++ result recording.
     owner->emit(throughputSignal, this->orcaThroughput);
 
-    return ObsType({
+    ObsType observation({
         averageDelayMs,
         this->orcaThroughput,
         this->rttReportCount,
@@ -166,6 +166,15 @@ std::optional<ObsType> Orca::computeObservation(){
         state->snd_mss,
         minRttMs
     });
+
+    // Original Orca clears throughput and loss accounting on every poll, even
+    // when the poll has no RTT sample and is withheld from the learner.
+    this->deliveryRateSampleSum = 0.0;
+    this->deliveryRateSampleCount = 0;
+    this->last_bytes_lost = this->bytesLost;
+    this->last_bytes_delivered = this->bytesDelivered;
+
+    return observation;
 }
 
 RewardType Orca::computeReward(){
@@ -179,7 +188,7 @@ void Orca::decisionMade(ActionType action) {
     // Compute new cwnd from the given action (cwnd *= 2^action)
     double multiplier = std::pow(4.0, (double) action);
     uint32_t newCwnd = ceil(((double) state->snd_cwnd) * multiplier);
-    newCwnd = max(newCwnd, state->snd_mss);
+    newCwnd = max(newCwnd, 4 * state->snd_mss);
     
     // Apply actions only after Cubic exits slow start and the interval contains valid RTT data.
     if (this->takeActions && this->slowStartPassed && this->rttReportCount > 0) {
@@ -226,8 +235,6 @@ void Orca::resetStepVariables()
     this->last_snd_max = state->snd_max;
     this->last_snd_una = state->snd_una;
     this->last_ack_cnt = state->ack_cnt;
-    this->last_bytes_lost = this->bytesLost;
-    this->last_bytes_delivered = this->bytesDelivered;  
     this->lastIntervalTime = simTime();
 }
 
@@ -272,6 +279,19 @@ void Orca::rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) {
 // Override to track bytes delivered
 void Orca::receivedDataAck(uint32_t firstSeqAcked) {
     TcpCubic::receivedDataAck(firstSeqAcked);
-    
-    // this->bytesDelivered += state->snd_mss; // Number of bytes sent so far this interval
+    recordDeliveryRateSample();
+}
+
+void Orca::receivedDuplicateAck() {
+    TcpCubic::receivedDuplicateAck();
+    recordDeliveryRateSample();
+}
+
+void Orca::recordDeliveryRateSample() {
+    TcpPacedConnection *pacedConnection = dynamic_cast<TcpPacedConnection *>(conn);
+    TcpPacedConnection::RateSample sample = pacedConnection->getRateSample();
+    if (sample.m_interval > SIMTIME_ZERO) {
+        this->deliveryRateSampleSum += sample.m_deliveryRate;
+        this->deliveryRateSampleCount += 1;
+    }
 }
