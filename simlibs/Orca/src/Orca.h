@@ -64,8 +64,7 @@
 //     // Orca configurable params
 //     double delayCoefficient; // Beta term from Orca paper. Delay only degrades reward if RTT > baseRTT*delayCoefficient. Larger values emphasize aggressive throughputs by forgiving delay increases.
 //     double lossCoefficient;   // Zeta term from Orca paper. Throughput is substracted by lossRate*lossCoefficient in reward computation.  Larger values emphasize conservative throughputs by punishing loss. 
-//     bool fixedIntervals; // Fixed step lengths, or adjust based on SRTT
-//     double fixedIntervalDuration;  // The simtime elapsed over the last interval
+//     double fixedIntervalDuration;  // The fixed duration of each monitor interval
 
 //     // Orca observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
 //     double orcaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
@@ -152,16 +151,14 @@ public: // General use
     virtual void cleanup() override;
 
     // Meta variables for RL stuff
-    int RLStepsTaken = 0; // How many RLSteps have been completed so far.
-    int maxRLSteps = 10000; // How many training steps should be taken before this agent reports itself as done.
     bool debug = false; // Prints debug messages if true
     bool takeActions = true; // Skips Orca actions if false
+    bool slowStartPassed = false; // Tracks whether Cubic has completed the initial slow-start phase.
 
     // Orca configurable params
     double delayCoefficient; // Beta term from Orca paper. Delay only degrades reward if RTT > baseRTT*delayCoefficient. Larger values emphasize aggressive throughputs by forgiving delay increases.
     double lossCoefficient;   // Zeta term from Orca paper. Throughput is substracted by lossRate*lossCoefficient in reward computation.  Larger values emphasize conservative throughputs by punishing loss. 
-    bool fixedIntervals; // Fixed step lengths, or adjust based on SRTT
-    double fixedIntervalDuration;  // The simtime elapsed over the last interval
+    double fixedIntervalDuration;  // The fixed duration of each monitor interval
 
     // Orca observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
     double orcaThroughput=0.0;    // The average delivery rate (throughput) over the last interval

@@ -11,9 +11,8 @@ simple OrcaTcp extends TcpPaced
 
         bool printDebugMessages = default(false);                            // used to print debug messages
         bool takeActions = default(true);                                   // Skips actions if set to false. Useful for comparing against the base case without altering code.
-        int maxRLSteps = default(0);                                     // how many training steps should take place before the agent reports as done
-        bool fixedIntervals = default(true);         // If false, monitor intervals will adjust to SRTT dynamically
-        double fixedIntervalDuration = default(.02);         // How many seconds a fixed monitor interval should last. If not fixed, MTPs will be set to SRTT dynamically
+        int maxRLSteps = default(0);                                         // Deprecated compatibility parameter; Python owns episode step limits.
+        double fixedIntervalDuration = default(.02);                          // Duration of every monitor interval in seconds.
         double delayWeight = default(5);                    // Beta term from Orca paper. Reward degrades when RTT > baseRTT*delayWeight. Larger values emphasize throughput in reward calculation.
         @signal[stepData];				                    // step data signal
         @signal[actionQuery];			                    // action query signal

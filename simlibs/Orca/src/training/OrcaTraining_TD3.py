@@ -125,7 +125,6 @@ def prepare_training_ini(args, rng, worker_id):
     ini_string = ini_string.replace("ORCA_BOTTLENECK_BW", f"{bw}Mbps")
     ini_string = ini_string.replace("ORCA_BASE_RTT", f"{base_rtt / 2.0}ms")
     ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{buffer_size_bits}b")
-    ini_string = ini_string.replace("MAX_RL_STEPS", str(args.max_episode_steps))
     worker_ini_file.write_text(ini_string, encoding="utf-8")
     return worker_ini_file
 
@@ -314,6 +313,7 @@ def main():
                     while step < args.total_steps:
                         # Measure each synchronized wave through action selection, simulation, learning, and logging.
                         wave_start_time = time.perf_counter()
+                        wave_start_step = step
                         action_selection_seconds = 0.0
                         simulation_wait_seconds = 0.0
                         learner_update_seconds = 0.0
@@ -353,9 +353,13 @@ def main():
                             terminal = terminal_for_training(result, AGENT_ID, bootstrap_on_truncation=args.bootstrap_on_truncation)
                             episode_done = result.episode_done
                             next_observation_valid = AGENT_ID in result.states
-                            step += 1
 
-                            # Store valid transitions and update persistent rollout state.
+                            # Treat the Python valid-step limit as a truncation for replay bootstrapping.
+                            hit_template_limit = next_observation_valid and episode_steps[worker_id] + 1 >= args.max_episode_steps
+                            if hit_template_limit and not args.bootstrap_on_truncation:
+                                terminal = True
+
+                            # Store valid transitions and advance learner-facing step counters.
                             if next_observation_valid:
                                 agent.store_experience(
                                     state,
@@ -364,19 +368,18 @@ def main():
                                     next_state,
                                     np.array([float(terminal)], dtype=np.float32),
                                 )
-
-                            episode_returns[worker_id] += reward
-                            episode_steps[worker_id] += 1
-                            if next_observation_valid:
+                                step += 1
+                                episode_returns[worker_id] += reward
+                                episode_steps[worker_id] += 1
                                 states[worker_id] = next_state
                                 decision_states[worker_id] = next_state
                             else:
                                 decision_states[worker_id] = None
 
-                            # Train the learner after the replay buffer warmup.
+                            # Train and log only after valid learner observations.
                             can_train = agent.rp_buffer.length_buf >= args.train_after
-                            log_step = args.log_every_steps > 0 and step % args.log_every_steps == 0
-                            if can_train and step % args.train_every == 0:
+                            log_step = next_observation_valid and args.log_every_steps > 0 and step % args.log_every_steps == 0
+                            if next_observation_valid and can_train and step % args.train_every == 0:
                                 phase_start_time = time.perf_counter()
                                 for _ in range(args.updates_per_train):
                                     agent.train_step()
@@ -384,7 +387,6 @@ def main():
                                 learner_update_seconds += time.perf_counter() - phase_start_time
 
                             # Schedule completed environments for reset.
-                            hit_template_limit = episode_steps[worker_id] >= args.max_episode_steps
                             completed_episode = None
                             if episode_done or hit_template_limit:
                                 completed_episode = (
@@ -439,7 +441,8 @@ def main():
 
                         # Log synchronized-wave performance after all work is complete.
                         wave_seconds = time.perf_counter() - wave_start_time
-                        if args.log_every_steps > 0 and step % args.log_every_steps < active_count:
+                        crossed_logging_interval = args.log_every_steps > 0 and step // args.log_every_steps > wave_start_step // args.log_every_steps
+                        if crossed_logging_interval:
                             timings = {
                                 "wave": wave_seconds,
                                 "action_selection": action_selection_seconds,

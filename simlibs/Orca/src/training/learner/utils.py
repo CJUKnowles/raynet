@@ -25,24 +25,24 @@ import json
 import random
 
 
-def configure_logging(path_to_log_directory):
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
+# def configure_logging(path_to_log_directory):
+#     logger = logging.getLogger(__name__)
+#     logger.setLevel(logging.INFO)
 
-    if not os.path.exists(path_to_log_directory):
-        os.makedirs(path_to_log_directory)
-    handler = logging.FileHandler(filename=os.path.join(path_to_log_directory, "result.log"))
+#     if not os.path.exists(path_to_log_directory):
+#         os.makedirs(path_to_log_directory)
+#     handler = logging.FileHandler(filename=os.path.join(path_to_log_directory, "result.log"))
 
-    handler.setLevel(logging.INFO)
+#     handler.setLevel(logging.INFO)
 
-    formatter = logging.Formatter('%(asctime)s - %(message)s')
-    handler.setFormatter(formatter)
+#     formatter = logging.Formatter('%(asctime)s - %(message)s')
+#     handler.setFormatter(formatter)
 
-    logger.addHandler(handler)
+#     logger.addHandler(handler)
 
-    return logger
+#     return logger
 
-logger = configure_logging("./rl_logging")
+# logger = configure_logging("./rl_logging")
 
 
 

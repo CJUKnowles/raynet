@@ -142,9 +142,17 @@ class OrcaEnv:
     This is synonymous with a Ray worker. In the future, Ray may be reintegrated without RLlib.
     """
 
+    simulator_obs_dim = 15
     raw_obs_dim = 7
     action_dim = 1
-    srtt_index = 5
+    delay_index = 0
+    samples_index = 2
+    cwnd_index = 5
+    srtt_index = 8
+    ssthresh_index = 9
+    min_rtt_index = 14
+    delay_margin_coefficient = 1.25
+    loss_coefficient = 5.0
 
     def __init__(self, env_config, verbose=True):
         """Initialize a persistent Orca environment wrapper."""
@@ -161,6 +169,8 @@ class OrcaEnv:
 
         # Initialize persistent observation histories.
         self.obs_histories = {}
+        self.max_throughputs = {}
+        self.learner_ready_agent_ids = set()
         self.last_actions = {}
         self.pending_agent_ids = set()
         self.closed = True
@@ -176,6 +186,8 @@ class OrcaEnv:
         self._log("reset: preparing new OMNeT++ run")
         self._cleanup_after_previous_episode()
         self.obs_histories = {}
+        self.max_throughputs = {}
+        self.learner_ready_agent_ids = set()
         self.last_actions = {}
         self.pending_agent_ids = set()
 
@@ -188,10 +200,22 @@ class OrcaEnv:
         # Validate and process the reset response.
         if message_type != "reset":
             raise RuntimeError(f"Expected reset message from episode worker, got {message_type}")
-        states = self._process_observations(observations, initial=True)
-        if not states:
-            self.close()
-            raise RuntimeError(f"runner.reset() did not return any Orca observations. Returned keys were {list(observations.keys())}.")
+        states, _ = self._process_observations(observations)
+
+        # Keep Cubic in control until the first agent has completed initial slow start.
+        while not states:
+            actions = {agent_id: 0.0 for agent_id in self.pending_agent_ids}
+            self.last_actions.update(actions)
+            self.worker_connection.send(("step", actions))
+            message_type, result = self._receive_worker_message()
+            if message_type != "step":
+                raise RuntimeError(f"Expected step message while waiting for Orca startup, got {message_type}")
+            observations, _, terminateds, info = result
+            if info.get("simDone", False) or terminateds.get("__all__", False):
+                self.closed = True
+                self._join_episode_process()
+                raise RuntimeError("Simulation ended before any Orca agent completed initial slow start")
+            states, _ = self._process_observations(observations)
 
         return states
 
@@ -208,7 +232,7 @@ class OrcaEnv:
             if agent_id in learner_actions:
                 self.last_actions[agent_id] = float(np.clip(action_scalar(learner_actions[agent_id]), -1.0, 1.0))
             if agent_id not in self.last_actions:
-                raise ValueError(f"No action has been provided for agent {agent_id}")
+                self.last_actions[agent_id] = 0.0
             actions[agent_id] = self.last_actions[agent_id]
 
         self._log(f"step: actions={actions}")
@@ -217,18 +241,9 @@ class OrcaEnv:
         if message_type != "step":
             raise RuntimeError(f"Expected step message from episode worker, got {message_type}")
 
-        # Process observations and sanitize rewards returned by the simulation.
-        observations, rewards, terminateds, info = result
-        states = self._process_observations(observations)
-        cleaned_rewards = {}
-        for agent_id, reward in rewards.items():
-            if agent_id not in states:
-                continue
-            reward = float(reward)
-            if math.isnan(reward):
-                print(f"Warning: NaN reward for {agent_id}; replacing with 0.0")
-                reward = 0.0
-            cleaned_rewards[agent_id] = reward
+        # Derive learner states and rewards from the simulator's raw metrics.
+        observations, _, terminateds, info = result
+        states, rewards = self._process_observations(observations)
 
         # Discard simulation processes that ended through termination or truncation.
         truncated = bool(info.get("simDone", False))
@@ -240,7 +255,7 @@ class OrcaEnv:
         # Return the complete processed result to the learner or evaluator.
         return OrcaStep(
             states=states,
-            rewards=cleaned_rewards,
+            rewards=rewards,
             terminateds=terminateds,
             truncated=truncated,
         )
@@ -249,9 +264,10 @@ class OrcaEnv:
         """Close the active simulation episode process."""
         self._cleanup_after_previous_episode()
 
-    def _process_observations(self, observations, initial=False):
-        """Validate observations and return states that require new learner actions."""
+    def _process_observations(self, observations):
+        """Validate raw simulator observations and derive learner states and rewards."""
         states = {}
+        rewards = {}
         self.pending_agent_ids = set()
 
         # Process each returned agent observation independently.
@@ -261,27 +277,87 @@ class OrcaEnv:
             self.pending_agent_ids.add(agent_id)
             observation = np.asarray(observation, dtype=np.float32)
 
-            # Validate the observation and create a zero-padded history for new agents.
-            if observation.size != self.raw_obs_dim:
-                raise ValueError(f"Expected {self.raw_obs_dim} Orca observations for {agent_id}, got {observation.size}")
+            # Validate the raw shape and create a zero-padded history for new agents.
+            if observation.size != self.simulator_obs_dim:
+                raise ValueError(f"Expected {self.simulator_obs_dim} raw Orca metrics for {agent_id}, got {observation.size}")
             if agent_id not in self.obs_histories:
                 self.obs_histories[agent_id] = np.zeros((self.stacking, self.raw_obs_dim), dtype=np.float32,)
 
-            # Omit invalid observations so the previous action and state are retained.
-            if not initial and not self.observation_has_valid_rtt(observation):
+            # Permanently enable learner interaction after this agent first exits Cubic slow start.
+            if self.observation_has_valid_rtt(observation) and observation[self.cwnd_index] > observation[self.ssthresh_index]:
+                self.learner_ready_agent_ids.add(agent_id)
+
+            # Omit pre-handoff and invalid observations so Cubic remains responsible for startup.
+            if agent_id not in self.learner_ready_agent_ids or not self.observation_has_valid_rtt(observation):
                 continue
 
-            # Add valid observations and return a copy that cannot be mutated by future steps.
+            # Derive the original Orca learner observation and reward from the raw metrics.
+            learner_observation, reward = self._derive_observation_and_reward(agent_id, observation)
+
+            # Add the derived observation and return a copy that cannot be mutated by future steps.
             history = self.obs_histories[agent_id]
             history[:-1] = history[1:]
-            history[-1] = observation
+            history[-1] = learner_observation
             states[agent_id] = self.obs_histories[agent_id].reshape(-1).copy()
+            rewards[agent_id] = reward
 
-        return states
+        return states, rewards
+
+    def _derive_observation_and_reward(self, agent_id, raw_observation):
+        """Reproduce the original Orca wrapper's seven-feature state and reward."""
+        # Return a neutral state for startup observations that contain no valid RTT measurement.
+        if not self.observation_has_valid_rtt(raw_observation):
+            return np.zeros(self.raw_obs_dim, dtype=np.float32), 0.0
+
+        # Read the raw metrics used by the original Orca state calculation.
+        throughput = float(raw_observation[1])
+        samples = float(raw_observation[2])
+        interval_duration = float(raw_observation[3])
+        cwnd = float(raw_observation[5])
+        pacing_rate = float(raw_observation[6])
+        loss_rate = float(raw_observation[7])
+        srtt = float(raw_observation[8])
+        min_rtt = float(raw_observation[14])
+
+        # Track the maximum throughput independently for each Orca flow.
+        max_throughput = max(self.max_throughputs.get(agent_id, 0.0), throughput)
+        self.max_throughputs[agent_id] = max_throughput
+
+        # Compute the original delay metric and throughput-normalized values.
+        delay_metric = min(1.0, min_rtt * self.delay_margin_coefficient / srtt)
+        if max_throughput > 0.0:
+            normalized_throughput = throughput / max_throughput
+            normalized_pacing_rate = min(10.0, pacing_rate / max_throughput)
+            normalized_loss_rate = self.loss_coefficient * loss_rate / max_throughput
+            reward = (throughput - self.loss_coefficient * loss_rate) / max_throughput * delay_metric
+        else:
+            normalized_throughput = 0.0
+            normalized_pacing_rate = 0.0
+            normalized_loss_rate = 0.0
+            reward = 0.0
+
+        # Assemble the seven features consumed by the original Orca learner.
+        observation = np.asarray([
+            normalized_throughput,
+            normalized_pacing_rate,
+            normalized_loss_rate,
+            samples / cwnd if cwnd > 0.0 else 0.0,
+            interval_duration,
+            min_rtt / srtt,
+            delay_metric,
+        ], dtype=np.float32)
+
+        # Replace non-finite results defensively before exposing them to the learner.
+        if not np.all(np.isfinite(observation)) or not math.isfinite(reward):
+            print(f"Warning: non-finite derived observation or reward for {agent_id}; replacing invalid values with 0.0")
+            observation = np.nan_to_num(observation, nan=0.0, posinf=0.0, neginf=0.0)
+            reward = reward if math.isfinite(reward) else 0.0
+
+        return observation, float(reward)
 
     def observation_has_valid_rtt(self, observation):
-        """Return whether an Orca observation contains valid RTT data."""
-        return bool(observation[self.srtt_index] > 0.0)
+        """Return whether a raw Orca observation contains valid RTT data."""
+        return bool(observation[self.delay_index] > 0.0 and observation[self.samples_index] > 0.0 and observation[self.srtt_index] > 0.0 and observation[self.min_rtt_index] > 0.0)
 
     def _spawn_episode_process(self, ini_path, section_name):
         """Spawn a simulation process for one episode."""

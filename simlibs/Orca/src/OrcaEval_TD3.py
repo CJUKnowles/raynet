@@ -41,6 +41,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate an original Orca TD3 checkpoint")
     parser.add_argument("ini_path", help="Path to the OMNeT++ ini file to run")
     parser.add_argument("config_section", nargs="?", default="Orca", help="OMNeT++ config section to run")
+    parser.add_argument("--max-episode-steps", type=int, default=0, help="Maximum valid learner observations before ending early; zero runs until natural completion")
     return parser.parse_args()
 
 
@@ -64,6 +65,8 @@ def main():
     """Evaluate the original Orca paper model in one simulation."""
     # Resolve the requested simulation and paper-model checkpoint.
     args = parse_args()
+    if args.max_episode_steps < 0:
+        raise ValueError("--max-episode-steps must not be negative")
     checkpoint = resolve_checkpoint(CHECKPOINT_DIR)
     print(f"Loading checkpoint: {checkpoint}", flush=True)
 
@@ -92,8 +95,9 @@ def main():
                     states = result.states
                     for agent_id, reward in result.rewards.items():
                         total_rewards[agent_id] += reward
-                    episode_done = result.episode_done
-                    episode_length += 1
+                    episode_length += int(bool(states))
+                    reached_step_limit = args.max_episode_steps > 0 and episode_length >= args.max_episode_steps
+                    episode_done = result.episode_done or reached_step_limit
             finally:
                 env.close()
 
