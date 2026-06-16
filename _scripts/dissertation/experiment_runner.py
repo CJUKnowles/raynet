@@ -22,7 +22,7 @@ runner_paths = {
     "Orca": f"{os.getenv('RAYNET_PATH')}/simlibs/Orca/src/OrcaEval_TD3.py",
     "OrcaPaper": f"{os.getenv('RAYNET_PATH')}/simlibs/Orca/src/OrcaEval_paper.py",
     "Cubic": f"{os.getenv('RAYNET_PATH')}/simlibs/Orca/src/CubicEval.py",
-    "Astrea": f"{os.getenv('RAYNET_PATH')}/simlibs/Astrea/src/AstreaEval.py",
+    "Astraea": f"{os.getenv('RAYNET_PATH')}/simlibs/Astraea/src/AstraeaEval_TF.py",
     "CleanSlate": f"{os.getenv('RAYNET_PATH')}/simlibs/CleanSlate/src/CleanSlateEval.py",
 }
 
@@ -341,7 +341,7 @@ if __name__ == "__main__":
     # Testing params, do what u want with these
     experiments_to_run = {
         "responsiveness": {
-            "protocols": ["Orca"],
+            "protocols": ["Astraea"],
             "params": {
                 "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
                 },
@@ -353,7 +353,7 @@ if __name__ == "__main__":
             },
         
         # "competing-flows": {
-        #     "protocols": ["Orca"],
+        #     "protocols": ["Astraea"],
         #     "params": {
         #         "BANDWIDTH" : ["52Mbps"],
         #         "DELAY"     : ["5ms"],    

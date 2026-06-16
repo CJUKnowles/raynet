@@ -26,15 +26,67 @@ protocol_colors = {
     "Cubic": "#ff7f0e",
     "CleanSlate": "#2ca02c",
     "Orca": "#1f77b4",
-    "Astrea": "#8736a4",
+    "Astraea": "#8736a4",
 }
 
 protocol_markers = {
     "Cubic": "o",
     "CleanSlate": "s",
     "Orca": "P",
-    "Astrea": "^",
+    "Astraea": "^",
 }
+
+FLOW_COLOR_MODE_SHARED = "shared-primary"
+FLOW_COLOR_MODE_UNIQUE = "unique-flow"
+FLOW_COLOR_MODES = {FLOW_COLOR_MODE_SHARED, FLOW_COLOR_MODE_UNIQUE}
+FLOW_COLOR_CYCLE = list(plt.get_cmap("tab20").colors) + list(plt.get_cmap("tab20b").colors) + list(plt.get_cmap("tab20c").colors)
+
+def get_flow_id(module):
+    matches = re.findall(r"\[(\d+)\]", str(module))
+    if matches:
+        return matches[0]
+    match = re.search(r"(\d+)", str(module))
+    return match.group(1) if match else "0"
+
+def is_primary_flow(module):
+    return get_flow_id(module) == "0"
+
+def get_flow_key(row):
+    return f"{row['protocol']}:{get_flow_id(row['module'])}"
+
+def build_flow_color_map(csv_df):
+    flow_df = csv_df[csv_df["module_type"].str.contains("client|server")]
+    flow_df = flow_df[flow_df["module"].str.contains("conn|app")]
+    flow_keys = sorted({get_flow_key(row) for _, row in flow_df.iterrows()})
+    return {
+        flow_key: FLOW_COLOR_CYCLE[i % len(FLOW_COLOR_CYCLE)]
+        for i, flow_key in enumerate(flow_keys)
+    }
+
+def get_timeseries_style(row, flow_color_mode=FLOW_COLOR_MODE_SHARED, flow_color_map=None):
+    if flow_color_mode not in FLOW_COLOR_MODES:
+        raise ValueError(f"Unknown flow_color_mode '{flow_color_mode}'. Expected one of {sorted(FLOW_COLOR_MODES)}")
+
+    primary = is_primary_flow(row["module"])
+    if flow_color_mode == FLOW_COLOR_MODE_UNIQUE:
+        flow_color_map = flow_color_map or {}
+        color = flow_color_map.get(get_flow_key(row), protocol_colors[row["protocol"]])
+        label = f"{row['protocol']} flow {get_flow_id(row['module'])}"
+        linestyle = "-"
+        alpha = 1.0
+    else:
+        color = protocol_colors[row["protocol"]]
+        label = row["protocol"] if primary else None
+        linestyle = "-" if primary else (0, (1, .5))
+        alpha = 1.0 if primary else 0.7
+
+    return {
+        "color": color,
+        "label": label,
+        "linestyle": linestyle,
+        "alpha": alpha,
+        "is_primary": primary,
+    }
 
 def percentile_clip(series, lower=1, upper=99):
     """
@@ -171,7 +223,7 @@ def time_weighted_mean(df, startup_time=0, end_time=None):
 
     return total_weighted / total_time
 
-def plot_pacerate_timeseries(csv_df, ax=None, show_competition=True, startup_time=0, end_time=None):
+def plot_pacerate_timeseries(csv_df, ax=None, show_competition=True, startup_time=0, end_time=None, flow_color_mode=FLOW_COLOR_MODE_SHARED, flow_color_map=None):
     """
     Overlays results from several experiments to create a single pacerate plot for comparison.
     - Expects a single experiment's dataframe as input
@@ -196,8 +248,8 @@ def plot_pacerate_timeseries(csv_df, ax=None, show_competition=True, startup_tim
         data = data[data["time"] > startup_time]
         if end_time:
             data = data[data["time"] < end_time]
-        is_primary_flow = "0" in row["module"]
-        if(show_competition or is_primary_flow):
+        style = get_timeseries_style(row, flow_color_mode, flow_color_map)
+        if(show_competition or style["is_primary"]):
             x = data["time"]
             y = data["paceRate"]
             
@@ -206,10 +258,10 @@ def plot_pacerate_timeseries(csv_df, ax=None, show_competition=True, startup_tim
             rolling_std = y.rolling(window, center=True).std()
 
             # Raw data
-            ax.plot(x, y, alpha=0.2, linewidth=0.8, color=protocol_colors[row["protocol"]])
+            ax.plot(x, y, alpha=0.2, linewidth=0.8, color=style["color"])
 
             # Smoothed mean
-            ax.plot(x, rolling_mean, linewidth=2, label=row["protocol"], color=protocol_colors[row["protocol"]], linestyle='-' if is_primary_flow else '--')
+            ax.plot(x, rolling_mean, linewidth=2, label=style["label"], color=style["color"], linestyle=style["linestyle"], alpha=style["alpha"])
             all_y_values.extend(data["paceRate"].values)
 
     ax.set_ylabel("paceRate (Mbps)")
@@ -270,7 +322,7 @@ def plot_qsize_timeseries(csv_df, ax=None, startup_time=0, end_time=None):
         ax.set_xlim(right=end_time)
     return ax
         
-def plot_cwnd_timeseries(csv_df, ax=None, show_competition=True, startup_time=0, end_time=None):
+def plot_cwnd_timeseries(csv_df, ax=None, show_competition=True, startup_time=0, end_time=None, flow_color_mode=FLOW_COLOR_MODE_SHARED, flow_color_map=None):
     """
     Overlays results from several experiments to create a single cwnd plot for comparison.
     - Expects a single experiment's dataframe as input
@@ -299,8 +351,8 @@ def plot_cwnd_timeseries(csv_df, ax=None, show_competition=True, startup_time=0,
         data = data[data["time"] > startup_time]
         if end_time:
             data = data[data["time"] < end_time]
-        is_primary_flow = "0" in row["module"]
-        if(show_competition or is_primary_flow):
+        style = get_timeseries_style(row, flow_color_mode, flow_color_map)
+        if(show_competition or style["is_primary"]):
             x = data["time"]
             y = data["cwnd"]
             all_y_values.extend(data["cwnd"].values)
@@ -314,18 +366,18 @@ def plot_cwnd_timeseries(csv_df, ax=None, show_competition=True, startup_time=0,
                 y, 
                 alpha=0.2, 
                 linewidth=0.8, 
-                color=protocol_colors[row["protocol"]],
+                color=style["color"],
                 )
 
             # Smoothed mean
             ax.plot(
                 x, 
                 rolling_mean, 
-                label=row["protocol"] if is_primary_flow else None, 
-                color=protocol_colors[row["protocol"]], 
-                linestyle='-' if is_primary_flow else (0, (1, .5)),
-                lw= 1 if is_primary_flow else 1,
-                alpha= 1.0 if is_primary_flow else 0.7,
+                label=style["label"],
+                color=style["color"],
+                linestyle=style["linestyle"],
+                lw= 1,
+                alpha= style["alpha"],
                 path_effects=[
                     pe.Stroke(linewidth=2, foreground='white', alpha=0.8),
                     pe.Normal()
@@ -341,7 +393,7 @@ def plot_cwnd_timeseries(csv_df, ax=None, show_competition=True, startup_time=0,
         ax.set_xlim(right=end_time)
     return ax
 
-def plot_srtt_timeseries(csv_df, ax=None, show_competition=True, startup_time=0, end_time=None):
+def plot_srtt_timeseries(csv_df, ax=None, show_competition=True, startup_time=0, end_time=None, flow_color_mode=FLOW_COLOR_MODE_SHARED, flow_color_map=None):
     """
     Overlays results from several experiments to create a single srtt plot for comparison.
     - Expects a single experiment's dataframe as input
@@ -365,16 +417,16 @@ def plot_srtt_timeseries(csv_df, ax=None, show_competition=True, startup_time=0,
         data = data[data["time"] > startup_time]
         if end_time:
             data = data[data["time"] < end_time]
-        is_primary_flow = "0" in row["module"]
-        if(show_competition or is_primary_flow):
+        style = get_timeseries_style(row, flow_color_mode, flow_color_map)
+        if(show_competition or style["is_primary"]):
             ax.plot(
                 data["time"],
                 data["srtt"],
-                label=row["protocol"], 
-                color=protocol_colors[row["protocol"]],
-                linestyle='-' if is_primary_flow else (0, (1, .5)),
-                lw= 1 if is_primary_flow else 1,
-                alpha= 1.0 if is_primary_flow else 0.7,
+                label=style["label"],
+                color=style["color"],
+                linestyle=style["linestyle"],
+                lw= 1,
+                alpha= style["alpha"],
                 path_effects=[
                     pe.Stroke(linewidth=2, foreground='white', alpha=0.8),
                     pe.Normal()
@@ -420,7 +472,7 @@ def plot_srtt_timeseries(csv_df, ax=None, show_competition=True, startup_time=0,
         ax.set_xlim(right=end_time)
     return ax
 
-def plot_throughput_timeseries(csv_df, ax=None, show_competition=True, startup_time=0, end_time=None):
+def plot_throughput_timeseries(csv_df, ax=None, show_competition=True, startup_time=0, end_time=None, flow_color_mode=FLOW_COLOR_MODE_SHARED, flow_color_map=None):
     """
     Overlays results from several experiments to create a single throughput plot for comparison.
     - Expects a single experiment's dataframe as input
@@ -438,23 +490,22 @@ def plot_throughput_timeseries(csv_df, ax=None, show_competition=True, startup_t
     print("Plotting throughput timeseries for:")
     print(csv_df)
     
-    colors = {}
     all_y_values = []
     for _, row in csv_df.iterrows():
         data = pd.read_csv(row["csv_path"])
         data = data[data["time"] > startup_time]
         if end_time:
             data = data[data["time"] < end_time]
-        is_primary_flow = "server[0]" in row["module"]
-        if(show_competition or is_primary_flow):
+        style = get_timeseries_style(row, flow_color_mode, flow_color_map)
+        if(show_competition or style["is_primary"]):
             line = ax.plot(
                 data["time"],
                 data["throughput"],
-                label=row["protocol"] if is_primary_flow else None,
-                color=protocol_colors[row["protocol"]],
-                linestyle='-' if is_primary_flow else (0, (1, .5)),
-                lw= 1 if is_primary_flow else 1,
-                alpha= 1.0 if is_primary_flow else 0.7,
+                label=style["label"],
+                color=style["color"],
+                linestyle=style["linestyle"],
+                lw= 1,
+                alpha= style["alpha"],
                 path_effects=[
                     pe.Stroke(linewidth=2, foreground='white', alpha=0.8),
                     pe.Normal()
@@ -504,7 +555,7 @@ def plot_throughput_timeseries(csv_df, ax=None, show_competition=True, startup_t
         ax.set_xlim(right=end_time)
     return ax
 
-def plot_goodput_timeseries(csv_df, ax=None, show_competition=True, startup_time=0, end_time=None, filter_spikes=True):
+def plot_goodput_timeseries(csv_df, ax=None, show_competition=True, startup_time=0, end_time=None, filter_spikes=True, flow_color_mode=FLOW_COLOR_MODE_SHARED, flow_color_map=None):
     """
     Overlays results from several experiments to create a single goodput plot for comparison.
     - Expects a single experiment's dataframe as input
@@ -522,7 +573,6 @@ def plot_goodput_timeseries(csv_df, ax=None, show_competition=True, startup_time
     print("Plotting goodput timeseries for:")
     print(csv_df)
     
-    colors = {}
     all_y_values = []
     for _, row in csv_df.iterrows():
         data = pd.read_csv(row["csv_path"])
@@ -532,16 +582,16 @@ def plot_goodput_timeseries(csv_df, ax=None, show_competition=True, startup_time
         if filter_spikes:
             data["goodput"] = hampel_filter(data["goodput"], window_size=10, n_sigmas=3) # remove spikes for clarity
         
-        is_primary_flow = "server[0]" in row["module"]
-        if(show_competition or is_primary_flow):
+        style = get_timeseries_style(row, flow_color_mode, flow_color_map)
+        if(show_competition or style["is_primary"]):
             line = ax.plot(
                 data["time"],
                 data["goodput"],
-                label=row["protocol"] if is_primary_flow else None,
-                color=protocol_colors[row["protocol"]],
-                linestyle='-' if is_primary_flow else (0, (1, .5)),
-                lw= 1 if is_primary_flow else 1,
-                alpha= 1.0 if is_primary_flow else 0.7,
+                label=style["label"],
+                color=style["color"],
+                linestyle=style["linestyle"],
+                lw= 1,
+                alpha= style["alpha"],
                 path_effects=[
                     pe.Stroke(linewidth=2, foreground='white', alpha=0.65),
                     pe.Normal()
@@ -590,19 +640,20 @@ def plot_goodput_timeseries(csv_df, ax=None, show_competition=True, startup_time
         ax.set_xlim(right=end_time)
     return ax
 
-def plot_timeseries(exp_df, startup_time=0, end_time=60, all=True, show_competing=False, size=.5):
+def plot_timeseries(exp_df, startup_time=0, end_time=60, all=True, show_competing=False, size=.5, flow_color_mode=FLOW_COLOR_MODE_SHARED):
     if all:
         count = 6
     else:
         count = 4
     fig, axs = plt.subplots(count, 1, figsize=(15 * size, count * 5 * size))
-    plot_goodput_timeseries(run_df, axs[0], startup_time=startup_time,  end_time=end_time)
-    plot_throughput_timeseries(run_df, axs[1], startup_time=startup_time,  end_time=end_time)
-    plot_srtt_timeseries(run_df, axs[2], startup_time=startup_time, end_time=end_time)
-    plot_cwnd_timeseries(run_df, axs[3], startup_time=startup_time,  end_time=end_time)
+    flow_color_map = build_flow_color_map(exp_df) if flow_color_mode == FLOW_COLOR_MODE_UNIQUE else None
+    plot_goodput_timeseries(exp_df, axs[0], startup_time=startup_time,  end_time=end_time, show_competition=show_competing, flow_color_mode=flow_color_mode, flow_color_map=flow_color_map)
+    plot_throughput_timeseries(exp_df, axs[1], startup_time=startup_time,  end_time=end_time, show_competition=show_competing, flow_color_mode=flow_color_mode, flow_color_map=flow_color_map)
+    plot_srtt_timeseries(exp_df, axs[2], startup_time=startup_time, end_time=end_time, show_competition=show_competing, flow_color_mode=flow_color_mode, flow_color_map=flow_color_map)
+    plot_cwnd_timeseries(exp_df, axs[3], startup_time=startup_time,  end_time=end_time, show_competition=show_competing, flow_color_mode=flow_color_mode, flow_color_map=flow_color_map)
     if all: 
-        plot_pacerate_timeseries(run_df, axs[4], startup_time=startup_time,  end_time=end_time)
-        plot_qsize_timeseries(run_df, axs[5], startup_time=startup_time,  end_time=end_time)
+        plot_pacerate_timeseries(exp_df, axs[4], startup_time=startup_time,  end_time=end_time, show_competition=show_competing, flow_color_mode=flow_color_mode, flow_color_map=flow_color_map)
+        plot_qsize_timeseries(exp_df, axs[5], startup_time=startup_time,  end_time=end_time)
     fig.subplots_adjust(top=0.95, bottom=.07, left=.1, right=.97)
     axs[count-1].set_xlabel("Time (seconds)")
     # for ax_i in axs[0]:
@@ -611,11 +662,11 @@ def plot_timeseries(exp_df, startup_time=0, end_time=60, all=True, show_competin
     #     ax_i.set_title("") 
 
     legend_handles, legend_labels = axs[0].get_legend_handles_labels()
-    if show_competing:
+    if show_competing and flow_color_mode == FLOW_COLOR_MODE_SHARED:
         print("CREATING CUSTOM HANDLE FOR COMPETING FLOW")
         custom_handle = Line2D(
             [0], [0],
-            linestyle="--",
+            linestyle=(0, (1, .5)),
             color="grey",
             linewidth=2,
             label="competing cubic flow"
@@ -1273,16 +1324,18 @@ if __name__ == "__main__":
                     end_time = 60
                 else:
                     end_time = 120
-                if exp == "competing-flow":
-                    start_time = 30
+                if exp == "competing-flows":
+                    start_time = 0
+                    end_time = 200
                 else:
                     start_time = 0
                 show_competing = exp == "competing-flows"
-                (fig, axs) = plot_timeseries(run_df, startup_time=start_time, end_time=end_time, all=True, show_competing=show_competing)
+                flow_color_mode = FLOW_COLOR_MODE_UNIQUE if exp == "competing-flows" else FLOW_COLOR_MODE_SHARED
+                (fig, axs) = plot_timeseries(run_df, startup_time=start_time, end_time=end_time, all=True, show_competing=show_competing, flow_color_mode=flow_color_mode)
                 fig.savefig(f"{os.getenv('RAYNET_PATH')}/_results/{exp}/{params}/run{int(run)}/summary.pdf")
                 print(f"Plotted timeseries: {os.getenv('RAYNET_PATH')}/_results/{exp}/{params}/run{int(run)}/summary.pdf")
                 plt.close(fig)
-                
+
                 
                 
                 

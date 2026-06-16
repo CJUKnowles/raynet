@@ -1,0 +1,2 @@
+model_checkpoint_path: "/home/james/raynet/_models/Astraea-original-tf/checkpoints/model-1104"
+all_model_checkpoint_paths: "/home/james/raynet/_models/Astraea-original-tf/checkpoints/model-1104"
