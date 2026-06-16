@@ -55,7 +55,7 @@ def parse_args():
     """Parse the evaluation configuration."""
     parser = argparse.ArgumentParser(description="Evaluate an original Astraea TensorFlow checkpoint")
     parser.add_argument("ini_path", help="Path to the OMNeT++ ini file to run")
-    parser.add_argument("config_section", nargs="?", default="General", help="OMNeT++ config section to run")
+    parser.add_argument("config_section", nargs="?", default="Astraea", help="OMNeT++ config section to run")
     parser.add_argument("--checkpoint", default=str(CHECKPOINT_DIR), help="TensorFlow checkpoint directory or prefix")
     parser.add_argument("--max-episode-steps", type=int, default=0, help="Maximum environment steps before ending early; zero runs until natural completion")
     parser.add_argument("--num-flows", type=lambda x: parse_range(x, int), default=(2, 2))

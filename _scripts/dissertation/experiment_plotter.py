@@ -284,7 +284,7 @@ def plot_qsize_timeseries(csv_df, ax=None, startup_time=0, end_time=None):
 
     csv_df = csv_df[csv_df["module"].str.contains("router1")]
     csv_df = csv_df[csv_df["module"].str.contains("0")]
-    csv_df = csv_df[csv_df["metric"].str.contains("queueBitLength")]
+    csv_df = csv_df[csv_df["metric"].str.contains("queueLength")]
 
     if csv_df.empty:
         print("plot_qsize_timeseries(): CSV dataframe is empty. Returning.")
@@ -301,7 +301,7 @@ def plot_qsize_timeseries(csv_df, ax=None, startup_time=0, end_time=None):
         if end_time:
             data = data[data["time"] < end_time]
         x = data["time"]    
-        y = data["queueBitLength"] * 0.125 / 1024 # Bits to pkts
+        y = data["queueLength"]
         
         # Rolling stats
         rolling_mean = y.rolling(window, center=True).mean()
@@ -1326,7 +1326,7 @@ if __name__ == "__main__":
                     end_time = 120
                 if exp == "competing-flows":
                     start_time = 0
-                    end_time = 200
+                    end_time = 100
                 else:
                     start_time = 0
                 show_competing = exp == "competing-flows"

@@ -215,6 +215,7 @@ def main():
         "max_steps_range": (args.max_episode_steps, args.max_episode_steps),
         "num_flows_range": args.num_flows,
         "stacking": args.stacking,
+        "randomize_ini": True,
     }
 
     # Create output directories and persistent environment wrappers.

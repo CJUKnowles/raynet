@@ -19,6 +19,7 @@
 #include "inet/transportlayer/tcp/flavours/TcpNewReno.h"
 #include <inet/transportlayer/tcp/Tcp.h>
 #include <inet/transportlayer/tcp/TcpConnection.h>
+#include <transportlayer/tcp/TcpPacedConnection.h>
 #include <transportlayer/tcp/flavours/TcpPacedNoCC.h>
 
 using namespace omnetpp;
@@ -45,23 +46,11 @@ public: // General use
 
     // 
     using RLInterface::receiveSignal;
-    virtual void receiveSignal(cComponent *source, simsignal_t signalID, double value, cObject *details) override 
-    {
-      std::string agentId = ((cString*) details)->str;
-      if (agentId != this->stringId) {
-        //if (debug) cout << "\t\t" << stringId << " recieved signal meant for " << agentId << ", ignoring" << endl;
-        return;
-      }
-
-      const char *signalName = inet::tcp::Tcp::getSignalName(signalID);
-      if (strcmp(signalName, "globalStateResponse") == 0) {
-        this->reward = value;
-      } else {
-        cout << "Received invalid signal" << endl;
-      }
-    }
 
     // TcpCubic Overrides (These are mostly unchanged, and just used to gather statistic or disable automatic pacing)
+    virtual void rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) override;
+    virtual void receivedDataAck(uint32_t firstSeqAcked) override;
+    virtual void receivedDuplicateAck() override;
     virtual void established(bool active) override; // Called when the TCP CONNECTION is established (some time AFTER startup!)
 
     // RLInterface Overrides (Required by the RL agent)
@@ -78,50 +67,32 @@ public: // General use
     // RL-related and utility variables
     double initialStepLength = 1.0; // How many simseconds to wait before scheduling the initial step. SRTT will be used for future step lengths.
     int RLStepsTaken = 0; // How many RLSteps have been completed so far.
-    int maxRLSteps = 10000; // How many training steps should be taken before this agent reports itself as done.
     bool debug = false; // Prints debug messages if true
     bool takeActions = true; // Skips Astraea actions if false
 
     // Astraea parameters (Default values here, overridden in Astraea.ini)
-    double rewardDelayForgiveness = 1; // 
-    double rewardLossMultiplier = 1;   // 
-    double actionControlCoeff = .6; // Alpha term from Astraea paper. Larger values allow larger changes to cwnd.
+    double actionControlCoeff = 0.025; // Alpha term used by the original Astraea action helper.
     double fixedIntervalDuration=0.03;  // Seconds between steps
 
-    // Astraea observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
-    double AstraeaThroughput=0.0;    // The average delivery rate (throughput) over the last interval
-    double AstraeaLossRate=0.0;      // The average loss rate of packets over the last interval
-    double AstraeaACKTotal=0.0;      // The number of valid acknowledgements over the last interval
-    double AstraeaSRTT=0.0;          // The smoothed RTT of (all?) packets so far
-    double AstraeaCwnd=0.0;          // The current congestion window (don't really need a new variable here, this is just useful for reference. Just use conn->snd_cwnd)
-    double AstraeaMaxThroughput=0; // The maximum delivery rate so far
-    double AstraeaMinDelay=9999;      // The minimum packet delay so far. Initialize to large value so the minimum is guaranteed to update.
-    double AstraeaPaceRate=1;        // Bytes sent per second. Usually smaller than cwnd.
-    double AstraeaDelayMetric=1;     // A measure of how close the currenty delay is to optimal. Will be 1 as long as the delay is within the forgiveness window.
+    // Raw interval metrics returned to Python for learner-specific processing.
+    double astraeaThroughput = 0.0;
+    double astraeaMaxThroughput = 0.0;
+    double astraeaDelaySum = 0.0;
+    double astraeaMinDelay = 0.0;
+    double astraeaLossRate = 0.0;
+    double deliveryRateSampleSum = 0.0;
+    uint32_t deliveryRateSampleCount = 0;
 
-    // Astraea helper variables (mostly used to facilitate computing the observations)
+    // Astraea helper variables.
     simtime_t lastIntervalTime = 0.0;
-    double last_snd_max = 0.0; // Whatever value state->snd_max returned last interval. The TOTAL so far; NOT what was sent DURING the last interval.
-    uint32_t last_snd_una = 0;  // Whatever the oldest reported unACK'd byte was at the last monitor interval
-    uint32_t last_rexmit_count = 0; // How many bytes were retransmitted in TOTAL, as reported last interval
-    uint32_t bytesSentTotal = 0;
-    uint32_t rttReportCount = 0;    // How many rtt reports we received this interval
-    // Old - to be removed
-    double lastStepCwnd=0.0; // What the CWND was at the end of the last step 
-    double lastStepDelay=0.0;  // What the delay was at the end of the last stp
-    double lastStepSent=0.0;    // How many packets were sent during the last step
-    double lastStepSSThresh=0.0; // What was SSthresh last step
-    double slowstartMultiplier=1; // The RL action: changes how quickly slow start increases CWND
-    double maxCwnd=1.0; // The max cwnd observed in an interval
-    double maxACKTotal=1.0; // The max ACK total observed in an interval
-    double retransmissionRate; // The most recent measurement of bytes retransmitted.
-    bool first_slowstart_complete = false; // Do not take Astraea actions until the first slow start phase has completed. This allows the initial state (max througphut and min delay) to form naturally and prevents deadlocks.
-    
-    // Observer signals
-    simsignal_t registerAstraeaAgentSig = owner->registerSignal("registerAstraeaAgent");
-    simsignal_t AstraeaStateReportSig = owner->registerSignal("AstraeaStateReport");
-    simsignal_t globalStateRequestSig = owner->registerSignal("globalStateRequest");
+    uint32_t rttReportCount = 0;
+    double bytesDelivered = 0.0;
+    double bytesLost = 0.0;
+    double last_bytes_delivered = 0.0;
+    double last_bytes_lost = 0.0;
+    bool pendingIntervalReset = false;
 
-    double reward = 0; // Will automatically be set when globalStateResponse signal is received
+private:
+    void recordDeliveryRateSample();
   };
 #endif

@@ -6,17 +6,18 @@ simple AstraeaTcp extends TcpPaced
     parameters:
         @class(AstraeaTcp);
 
-        int maxWindow; 					                    // maximum window size
-        int stateSize; 					                    // dimension of the state space
-        int maxObsCount; 				                    // max number of observations for a single state
-        double ewmaWeight; 				                    // weight for the moving average of state variables (as in Tcp-Ex Machina)
-        double rewardDelayForgiveness; 		                    // Reward only suffers if (delay > minDelay * rewardDelayForgiveness). (higher values = more forgiveness, less impact of delay increases on reward)
-        double rewardLossMultiplier;                        // How strongly loss impacts reward (higher = stronger impact)
-
-        bool printDebugMessages;                            // used to print debug messages
-        bool takeActions;                                   // Skips actions if set to false. Useful for comparing against the base case without altering code.
-        int maxRLSteps;                                     // how many training steps should take place before the agent reports as done
-        double monitorIntervalDuration = default(1.0);      // How many seconds a monitor interval should last
+        int maxWindow = default(0); 					        // Deprecated compatibility parameter.
+        int stateSize = default(0); 					        // Deprecated compatibility parameter.
+        int maxObsCount = default(0); 				        // Deprecated compatibility parameter.
+        double ewmaWeight = default(0); 				    // Deprecated compatibility parameter.
+        double delayCoefficient = default(1.25);            // Deprecated compatibility parameter; Python owns rewards.
+        double lossCoefficient = default(5);                // Deprecated compatibility parameter; Python owns rewards.
+        bool printDebugMessages = default(false);           // used to print debug messages
+        bool takeActions = default(true);                   // Skips actions if set to false. Useful for comparing against the base case without altering code.
+        int maxRLSteps = default(0);                        // Deprecated compatibility parameter; Python owns episode step limits.
+        double actionControlCoeff = default(0.025);         // Original Astraea action alpha; raw action 1.0 increases cwnd by 2.5%.
+        double monitorIntervalDuration = default(1.0);      // Deprecated compatibility parameter; use fixedIntervalDuration.
+        double fixedIntervalDuration = default(.03);        // Duration of every monitor interval in seconds.
         @signal[stepData];				                    // step data signal
         @signal[actionQuery];			                    // action query signal
 

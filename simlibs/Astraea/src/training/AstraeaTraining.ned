@@ -9,7 +9,6 @@ import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import inet.node.inet.Router;
 import inet.node.inet.StandardHost;
 import RLComponents.Broker;
-import Astraea.training.Observer;
 
 network AstraeaTraining
 {
@@ -40,7 +39,6 @@ network AstraeaTraining
         router1: Router;
         router2: Router;
         broker: Broker;
-        observer: Observer;
     connections:
         // Bottleneck
         router1.pppg++ <--> bottleneck: bottleneckLine <--> router2.pppg++;

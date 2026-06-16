@@ -11,6 +11,9 @@ import numpy as np
 from training.AstraeaEpisodeWorker import run_episode
 
 
+IGNORED_AGENT_IDS = {"__all__", "SIMULATION_END"}
+
+
 def action_scalar(action):
     """Normalize a learner action to the scalar expected by the simulator."""
     return float(np.asarray(action, dtype=np.float32).reshape(-1)[0])
@@ -29,9 +32,27 @@ class AstraeaStep:
 class AstraeaEnv:
     """Complete Astraea environment interface used by training and evaluation."""
 
-    raw_obs_dim = 8
+    raw_obs_dim = 10
+    learner_obs_dim = 10
     global_state_dim = 12
     action_dim = 1
+    avg_thr_index = 0
+    max_tput_index = 1
+    avg_urtt_index = 2
+    min_rtt_index = 3
+    srtt_us_index = 4
+    cwnd_index = 5
+    loss_ratio_index = 6
+    packets_out_index = 7
+    pacing_rate_index = 8
+    retrans_out_index = 9
+    paper_mss_bytes = 1460.0
+    reward_delay_coefficient = 0.5
+    throughput_weight = 0.1
+    latency_weight = 0.02
+    loss_weight = 1.0
+    fairness_weight = 0.02
+    stability_weight = 0.01
 
     def __init__(self, env_config, bootstrap_on_truncation=True, verbose=True):
         """Initialize a persistent Astraea environment wrapper."""
@@ -41,6 +62,7 @@ class AstraeaEnv:
         self.stacking = int(env_config["stacking"])
         self.bootstrap_on_truncation = bootstrap_on_truncation
         self.verbose = verbose
+        self.randomize_ini = bool(env_config.get("randomize_ini", False))
 
         # Initialize the transient simulation process and IPC state.
         self.mp_context = multiprocessing.get_context("spawn")
@@ -51,25 +73,32 @@ class AstraeaEnv:
 
         # Initialize persistent observation histories and scenario metadata.
         self.histories = defaultdict(self._new_history)
+        self.throughput_histories = defaultdict(lambda: deque(maxlen=self.stacking))
         self.raw_observations = {}
-        self.bw_mbps = 0.0
-        self.base_rtt_ms = 0.0
-        self.buffer_bits = 0
+        self.episode_steps = 0
+        self.max_episode_steps = int(env_config.get("max_episode_steps", 0))
+        self.bw_mbps = float(env_config.get("bottleneck_bw_range", (0.0, 0.0))[0])
+        self.base_rtt_ms = float(env_config.get("minimum_rtt_range", (0.0, 0.0))[0])
+        self.buffer_bits = float(env_config.get("bottleneck_buffer_range", (0.0, 0.0))[0])
+        if self.max_episode_steps == 0 and "max_steps_range" in env_config:
+            self.max_episode_steps = int(env_config["max_steps_range"][0])
 
     @property
     def state_dim(self):
         """Return the flattened recurrent-state dimension."""
-        return self.stacking * self.raw_obs_dim
+        return self.stacking * self.learner_obs_dim
 
     def reset(self):
         """Start a fresh simulation episode and return its initial states."""
         # Clean up the previous episode and reset all agent histories.
         self._cleanup_after_previous_episode()
         self.histories.clear()
+        self.throughput_histories.clear()
         self.raw_observations = {}
+        self.episode_steps = 0
 
         # Spawn a new simulation and receive its initial observations.
-        worker_ini = self._write_worker_ini()
+        worker_ini = self._write_worker_ini() if self.randomize_ini else self.env_config["iniPath"]
         self._spawn_episode_process(worker_ini)
         message_type, observations = self._receive_worker_message()
 
@@ -79,6 +108,10 @@ class AstraeaEnv:
         if not observations:
             raise RuntimeError("runner.reset() returned no Astraea observations")
         self._record_observations(observations, fill_history=True)
+        if not self.raw_observations:
+            self.closed = True
+            self._join_episode_process()
+            raise RuntimeError("Simulation ended before any Astraea observation was returned")
         self._log(f"reset agents={sorted(self.raw_observations)}")
         return self.states(), self.global_state()
 
@@ -100,21 +133,27 @@ class AstraeaEnv:
             self._record_observations(observations)
 
         truncated = bool(info.get("simDone", False))
-        episode_done = bool(terminateds.get("__all__", False) or truncated)
+        self.episode_steps += 1
+        reached_step_limit = self.max_episode_steps > 0 and self.episode_steps >= self.max_episode_steps
+        episode_done = bool(terminateds.get("__all__", False) or truncated or reached_step_limit)
         terminals = {}
         for agent_id in self.raw_observations:
             terminated = bool(terminateds.get(agent_id, terminateds.get("__all__", False)))
-            terminals[agent_id] = terminated or (truncated and not self.bootstrap_on_truncation)
+            terminals[agent_id] = terminated or ((truncated or reached_step_limit) and not self.bootstrap_on_truncation)
 
         # Discard simulation processes that ended through termination or truncation.
         if episode_done:
-            self.closed = True
-            self._join_episode_process()
+            if terminateds.get("__all__", False) or truncated:
+                self.closed = True
+                self._join_episode_process()
+            else:
+                self._cleanup_after_previous_episode()
 
         # Return the complete processed result to the learner or evaluator.
+        shaped_rewards = self.rewards()
         return AstraeaStep(
             states=self.states(),
-            rewards=rewards,
+            rewards=shaped_rewards,
             terminals=terminals,
             episode_done=episode_done,
             global_state=self.global_state(),
@@ -133,16 +172,11 @@ class AstraeaEnv:
             return np.zeros(self.global_state_dim, dtype=np.float32)
 
         obs = np.asarray(list(self.raw_observations.values()), dtype=np.float64)
-        throughput_bytes = obs[:, 0] * obs[:, 1]
-        latency_seconds = obs[:, 2] * obs[:, 3]
-        cwnd_bytes = obs[:, 4] * obs[:, 1] * obs[:, 3]
-        loss_rate = obs[:, 5] * obs[:, 1]
-
-        # Original Astraea normalized throughput as bits/s, latency as us, and cwnd as packets.
-        throughput = throughput_bytes * 8.0 / 5e7
-        latency = latency_seconds * 1e6 / 5e5
-        cwnd_packets = cwnd_bytes / 1024.0
-        bdp_packets = self.bw_mbps * self.base_rtt_ms / (1024.0 * 8.0)
+        throughput = obs[:, self.avg_thr_index] / 5e7
+        latency = obs[:, self.avg_urtt_index] / 5e5
+        cwnd_packets = obs[:, self.cwnd_index]
+        loss = obs[:, self.loss_ratio_index] / 1e6
+        bdp_packets = self.bw_mbps * self.base_rtt_ms * 1000.0 / (self.paper_mss_bytes * 8.0)
         return np.asarray(
             [
                 np.sum(throughput),
@@ -152,7 +186,7 @@ class AstraeaEnv:
                 np.min(cwnd_packets) / 1000.0,
                 np.max(cwnd_packets) / 1000.0,
                 np.mean(cwnd_packets) / 1000.0,
-                np.mean(loss_rate) / 1e6,
+                np.mean(loss),
                 len(obs) / 10.0,
                 (self.base_rtt_ms / 2.0) / 500.0,
                 bdp_packets / 10.0,
@@ -161,6 +195,55 @@ class AstraeaEnv:
             dtype=np.float32,
         )
 
+    def rewards(self):
+        """Compute the original global reward from the latest raw metrics."""
+        if not self.raw_observations:
+            return {}
+
+        # Convert raw per-flow metrics to the units used by the original reward formula.
+        obs = np.asarray(list(self.raw_observations.values()), dtype=np.float64)
+        throughput_bytes = obs[:, self.avg_thr_index]
+        latency_seconds = obs[:, self.avg_urtt_index] / 1e6
+        loss_bytes = obs[:, self.loss_ratio_index]
+        pacing_packets = obs[:, self.pacing_rate_index] / self.paper_mss_bytes
+
+        num_flows = len(obs)
+        bandwidth_bytes = max(self.bw_mbps * 125000.0, 1e-9)
+        link_delay_seconds = (self.base_rtt_ms / 2.0) / 1000.0
+        throughput_metric = float(np.sum(throughput_bytes) / bandwidth_bytes)
+        latency_threshold = (1.0 + self.reward_delay_coefficient) * link_delay_seconds
+        latency_metric = max(float(np.mean(latency_seconds)) - latency_threshold, 0.0) * float(np.mean(pacing_packets))
+        loss_terms = [loss / throughput for loss, throughput in zip(loss_bytes, throughput_bytes) if throughput > 0.0]
+        loss_metric = float(np.mean(loss_terms)) if loss_terms else 0.0
+
+        average_throughputs = []
+        stabilities = []
+        for agent_id in self.raw_observations:
+            history = list(self.throughput_histories[agent_id])
+            average_throughput = float(np.mean(history)) if history else 0.0
+            average_throughputs.append(average_throughput)
+            denominator = len(history) * average_throughput ** 2
+            if denominator > 0.0:
+                stabilities.append(float(np.sqrt(np.sum((np.asarray(history) - average_throughput) ** 2) / denominator)))
+            else:
+                stabilities.append(0.0)
+
+        global_average_throughput = float(np.mean(average_throughputs)) if average_throughputs else 0.0
+        fairness_denominator = num_flows * float(np.sum(average_throughputs)) ** 2
+        if fairness_denominator > 0.0:
+            fairness_metric = float(np.sqrt(np.sum((np.asarray(average_throughputs) - global_average_throughput) ** 2) / fairness_denominator))
+        else:
+            fairness_metric = 0.0
+        stability_metric = float(np.mean(stabilities)) if stabilities else 0.0
+
+        reward = self.throughput_weight * throughput_metric
+        reward -= self.latency_weight * latency_metric
+        reward -= self.loss_weight * loss_metric
+        reward -= self.fairness_weight * fairness_metric
+        reward -= self.stability_weight * stability_metric
+        reward = float(np.clip(reward, -self.throughput_weight, self.throughput_weight))
+        return {agent_id: reward for agent_id in self.raw_observations}
+
     def close(self):
         """Close the active simulation episode process."""
         self._cleanup_after_previous_episode()
@@ -168,7 +251,7 @@ class AstraeaEnv:
     def _new_history(self):
         """Create one zero-filled observation history."""
         return deque(
-            [np.zeros(self.raw_obs_dim, dtype=np.float32) for _ in range(self.stacking)],
+            [np.zeros(self.learner_obs_dim, dtype=np.float32) for _ in range(self.stacking)],
             maxlen=self.stacking,
         )
 
@@ -176,7 +259,7 @@ class AstraeaEnv:
         """Validate raw simulator observations and update agent histories."""
         # Process each returned agent observation independently.
         for agent_id, observation in observations.items():
-            if agent_id == "__all__":
+            if agent_id in IGNORED_AGENT_IDS:
                 continue
             raw = np.asarray(observation, dtype=np.float32)
             if raw.shape != (self.raw_obs_dim,):
@@ -184,9 +267,42 @@ class AstraeaEnv:
 
             # Original Astraea begins recurrent state with zero history and shifts the first real observation into the newest slot.
             self.raw_observations[agent_id] = raw
+            learner_observation = self._derive_learner_observation(raw)
             if fill_history:
                 self.histories[agent_id] = self._new_history()
-            self.histories[agent_id].append(raw)
+            self.histories[agent_id].append(learner_observation)
+            self.throughput_histories[agent_id].append(float(raw[self.avg_thr_index]))
+
+    def _derive_learner_observation(self, raw):
+        """Reproduce the original Astraea 10-feature local state transform."""
+        avg_thr = float(raw[self.avg_thr_index])
+        max_tput = float(raw[self.max_tput_index])
+        avg_urtt = float(raw[self.avg_urtt_index])
+        min_rtt = float(raw[self.min_rtt_index])
+        srtt_us = float(raw[self.srtt_us_index])
+        cwnd = float(raw[self.cwnd_index])
+        loss_ratio = float(raw[self.loss_ratio_index])
+        packets_out = float(raw[self.packets_out_index])
+        pacing_rate = float(raw[self.pacing_rate_index])
+        retrans_out = float(raw[self.retrans_out_index])
+
+        state = np.asarray(
+            [
+                0.5 if avg_thr == 0.0 else avg_thr / max_tput if max_tput > 0.0 else 0.0,
+                2.0 if avg_urtt == 0.0 else avg_urtt / min_rtt if min_rtt > 0.0 else 0.0,
+                2.0 if srtt_us == 0.0 else srtt_us / 8.0 / min_rtt if min_rtt > 0.0 else 0.0,
+                cwnd * self.paper_mss_bytes * 8.0 / (min_rtt / 1e6) / max_tput / 10.0 if min_rtt > 0.0 and max_tput > 0.0 else 0.0,
+                max_tput / 1e7,
+                min_rtt / 5e5,
+                loss_ratio / max_tput if max_tput > 0.0 else 0.0,
+                packets_out / cwnd if cwnd > 0.0 else 0.0,
+                pacing_rate / max_tput if max_tput > 0.0 else 0.0,
+                retrans_out / cwnd if cwnd > 0.0 else 0.0,
+            ],
+            dtype=np.float32,
+        )
+        state[[1, 2, 3, 8]] = np.minimum(state[[1, 2, 3, 8]], 2.0)
+        return np.nan_to_num(state, nan=0.0, posinf=0.0, neginf=0.0)
 
     def _write_worker_ini(self):
         """Create one randomized INI variant for a training episode."""
@@ -195,11 +311,12 @@ class AstraeaEnv:
         self.base_rtt_ms = round(self.rng.uniform(*self.env_config["minimum_rtt_range"]), 2)
         self.buffer_bits = round(self.rng.uniform(*self.env_config["bottleneck_buffer_range"]))
         max_steps = round(self.rng.uniform(*self.env_config["max_steps_range"]))
+        self.max_episode_steps = max_steps
         num_flows = round(self.rng.uniform(*self.env_config["num_flows_range"]))
 
         # Replace the training placeholders and write the generated INI.
         source = Path(self.env_config["iniPath"])
-        variants = source.parent / "ini_variants"
+        variants = source.parent if source.parent.name == "ini_variants" else source.parent / "ini_variants"
         variants.mkdir(parents=True, exist_ok=True)
         destination = variants / f"{source.name}.tf-worker{os.getpid()}-{self.worker_id}"
         contents = source.read_text(encoding="utf-8")
