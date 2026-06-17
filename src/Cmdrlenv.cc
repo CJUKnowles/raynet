@@ -128,7 +128,7 @@ void Cmdrlenv::initialiseEnvironment(int argc, char *argv[],cConfiguration *conf
 
 // Passes an action to agents then progresses the simulation until an EOS event is consumed, at which point new observations are collected and returned
 std::string Cmdrlenv::step(ActionType action, bool isReset){
-    cout << ("singleagent step");
+    // cout << ("singleagent step");
     sigintReceived = false;
     Speedometer speedometer;
 

@@ -17,32 +17,6 @@ using namespace learning;
 
 Register_Class(Orca); // Lets omnet see and use this class
 
-namespace {
-    std::string sanitizeAgentId(std::string id)
-    {
-        for (char& c : id) {
-            if (!std::isalnum(static_cast<unsigned char>(c))) {
-                c = '_';
-            }
-        }
-        return id;
-    }
-
-    std::string makeOrcaAgentId(cComponent *owner)
-    {
-        cModule *tcpModule = dynamic_cast<cModule *>(owner);
-        cModule *hostModule = tcpModule ? tcpModule->getParentModule() : nullptr;
-        int hostIndex = hostModule ? hostModule->getIndex() : -1;
-
-        if (hostIndex == 0) {
-            return "Orca";
-        }
-        if (hostIndex > 0) {
-            return "Orca" + std::to_string(hostIndex);
-        }
-        return "Orca_" + sanitizeAgentId(owner ? owner->getFullPath() : "unknown");
-    }
-}
 Orca::Orca():
     TcpCubic(), RLInterface() {
     if (debug) cout << "\tOrca: Constructor called!";
@@ -85,17 +59,13 @@ void Orca::established(bool active) {
     // Only register this as an RL agent if this is a client
     if (active) {
         this->isActive = active;
+        this->lastIntervalTime = simTime();
 
-        // Set the RayNet ID of this agent and register with the Broker
-        RLInterface::setStringId(makeOrcaAgentId(owner));
-        cObject* simtime = new cSimTime(0); // Used to contain initial step length, now deprecated.
-        owner->emit(this->registerSig, stringId.c_str(), simtime); 
+        // Set the RayNet ID of this agent and register with the Broker.
+        RLInterface::registerRLAgent("Orca");
 
         // Finally, schedule this agent's first fixed-length RL step.
         RLInterface::scheduleNextStep(this->fixedIntervalDuration);
-
-        // this->takeActions = false;
-        this->debug = true;
     }
 }
 
@@ -124,13 +94,19 @@ std::optional<ObsType> Orca::computeObservation(){
     double packetsOut = state->snd_mss > 0 ? pacedConnection->getBytesInFlight() / (double)state->snd_mss : 0.0;
     double retransOut = state->snd_mss > 0 ? this->retransmissionRate * lastIntervalDuration / state->snd_mss : 0.0;
     double srttMs = state->srtt.dbl() * 1000.0;
-    double minRttMs = this->rttReportCount > 0 ? this->orcaMinDelay * 1000.0 : 0.0;
+    double minRttMs = this->orcaMinDelay * 1000.0;
 
     // Permanently hand congestion-window control to Orca after Cubic exits initial slow start.
     this->slowStartPassed = this->slowStartPassed || state->snd_cwnd > state->ssthresh;
 
     // Schedule the next raw metric collection interval.
     scheduleNextStep(this->fixedIntervalDuration);
+
+    // Match the original Orca server: do not expose a learner state until the
+    // transport reports an RTT-bearing interval.
+    if (this->rttReportCount == 0) {
+        return std::nullopt;
+    }
 
     // Print the collected raw metrics when debug output is enabled.
     if(debug) {
@@ -167,8 +143,8 @@ std::optional<ObsType> Orca::computeObservation(){
         minRttMs
     });
 
-    // Original Orca clears throughput and loss accounting on every poll, even
-    // when the poll has no RTT sample and is withheld from the learner.
+    // Original Orca clears throughput and loss accounting when a valid
+    // RTT-bearing state is handed to the learner.
     this->deliveryRateSampleSum = 0.0;
     this->deliveryRateSampleCount = 0;
     this->last_bytes_lost = this->bytesLost;
@@ -185,7 +161,7 @@ RewardType Orca::computeReward(){
 void Orca::decisionMade(ActionType action) {
     if (debug) cout << "\t" << stringId << " decisionMade()" << endl;
 
-    // Compute new cwnd from the given action (cwnd *= 2^action)
+    // Compute new cwnd from the given action (cwnd *= 4^action).
     double multiplier = std::pow(4.0, (double) action);
     uint32_t newCwnd = ceil(((double) state->snd_cwnd) * multiplier);
     newCwnd = max(newCwnd, 4 * state->snd_mss);
@@ -195,7 +171,7 @@ void Orca::decisionMade(ActionType action) {
         if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         state->snd_cwnd = newCwnd;
 
-        // Update pacing rate
+        // Update pacing rate with the Cubic-compatible pacing behavior used by this INET model.
         if(state->snd_cwnd > 0) {
             double paceFactor;
             if (state->snd_cwnd < state->ssthresh/2) {
@@ -204,9 +180,10 @@ void Orca::decisionMade(ActionType action) {
             else{
                 paceFactor = 1.2;
             }
-        uint32_t maxWindow = std::max(state->snd_cwnd, dynamic_cast<TcpPacedConnection*>(conn)->getBytesInFlight());
-        double pace = state->srtt.dbl()/(((double) (maxWindow) / (double)state->snd_mss) * paceFactor);
-        dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(pace);
+            TcpPacedConnection* pacedConnection = dynamic_cast<TcpPacedConnection*>(conn);
+            uint32_t maxWindow = std::max(state->snd_cwnd, pacedConnection->getBytesInFlight());
+            double pace = state->srtt.dbl()/(((double) (maxWindow) / (double)state->snd_mss) * paceFactor);
+            pacedConnection->changeIntersendingTime(pace);
         }
         owner->emit(actionSignal, multiplier); // Emit action for plotting
     } else {

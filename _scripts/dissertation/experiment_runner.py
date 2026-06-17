@@ -16,6 +16,7 @@ experiment_paths = {
     "single-flow": f"{experiments_dir}/single-flow/single-flow.ini",
     "competing-flows": f"{experiments_dir}/competing-flows/competing-flows.ini",
     "responsiveness": f"{experiments_dir}/responsiveness/responsiveness.ini",
+    "intra-rtt-test": f"{experiments_dir}/intra-rtt-test/intra-rtt-test.ini",
 }
 
 runner_paths = {
@@ -99,7 +100,7 @@ def generate_exp_csvs(filepath:str, protocol, protocol_nickname=None, exp_nickna
     if not exp_nickname:
         exp_nickname = filepath.rsplit("/", 4)[-4]
     argNum = 0
-    vectorsToExtract = ["throughput", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "queueLength", "queueBitLength", "incomingDataRate", "outgoingDataRate", "goodput"]
+    vectorsToExtract = ["throughput", "simsecPerSec", "srtt", "pacerate", "paceRate", "intervalDuration", "cwnd", "action", "queueLength", "queueBitLength", "incomingDataRate", "outgoingDataRate", "goodput"]
     extracted = False
     
     vec_file = filepath + f"/{protocol}-#0.vec"
@@ -352,17 +353,17 @@ if __name__ == "__main__":
         #         }
         #     },
         
-        "competing-flows": {
-            "protocols": ["Astraea"],
-            "params": {
-                "BANDWIDTH" : ["100Mbps"],
-                "DELAY"     : ["1ms", "5ms", "10ms", "20ms", "50ms", "100ms", "200ms"],    
-                "QSIZE": ["1bdp"],
-                },
-           "meta": {
-               "runs" : 1,
-               }
-            },
+        # "competing-flows": {
+        #     "protocols": ["Astraea"],
+        #     "params": {
+        #         "BANDWIDTH" : ["100Mbps"],
+        #         "DELAY"     : ["180ms"],    
+        #         "QSIZE": ["1bdp"],
+        #         },
+        #    "meta": {
+        #        "runs" : 1,
+        #        }
+        #     },
         
         # "single-flow": {
         #     "protocols": ["Orca"],
@@ -375,6 +376,18 @@ if __name__ == "__main__":
         #        "runs" : 1,
         #        }
         #     },
+        
+        "intra-rtt-test": {
+            "protocols": ["Orca"],
+            "params": {
+                "BANDWIDTH" : ["100Mbps"],
+                "DELAY"     : ["180ms"],    
+                "QSIZE": ["1bdp"],
+                },
+           "meta": {
+               "runs" : 1,
+               }
+            },
     }
     run_experiments(experiments_to_run)
     

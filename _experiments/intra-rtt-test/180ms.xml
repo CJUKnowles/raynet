@@ -1,0 +1,568 @@
+<scenario>
+    <at t="0">
+        <set-channel-param src-module="client[0]" src-gate="pppg$o[0]" par="delay" value="44.75ms"/>
+        <set-channel-param src-module="router1" src-gate="pppg$o[0]" par="delay" value="44.75ms"/>
+
+        <set-channel-param src-module="server[0]" src-gate="pppg$o[0]" par="delay" value="44.75ms"/>
+        <set-channel-param src-module="router2" src-gate="pppg$o[0]" par="delay" value="44.75ms"/>
+
+        <set-channel-param src-module="client[1]" src-gate="pppg$o[0]" par="delay" value="44.75ms"/>
+        <set-channel-param src-module="router1" src-gate="pppg$o[1]" par="delay" value="44.75ms"/>
+
+        <set-channel-param src-module="server[1]" src-gate="pppg$o[0]" par="delay" value="44.75ms"/>
+        <set-channel-param src-module="router2" src-gate="pppg$o[1]" par="delay" value="44.75ms"/>
+
+    </at>
+    <at t="15">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="15.115">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="30">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="30.074">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="45">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="45.096">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="60">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="60.11">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="75">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="75.089">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="90">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="90.118">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="105">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="105.09">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="120">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="120.103">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="135">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="135.079">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="150">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="150.115">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="165">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="165.045">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="180">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="180.094">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="195">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="195.11">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="210">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="210.061">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="225">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="225.111">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="240">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="240.116">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="255">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="255.071">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="270">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="270.099">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="285">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="285.052">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="300">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="300.106">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="315">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="315.091">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="330">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="330.117">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="345">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="345.115">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+    <at t="360">
+        <disconnect src-module="router1" src-gate="pppg$o[2]"/>
+        <disconnect src-module="router2" src-gate="pppg$o[2]"/>
+        <crash module="router1.ppp[2]"/>
+        <crash module="router2.ppp[2]"/>
+    </at>
+    <at t="360.07">
+        <connect src-module="router1" src-gate="pppg$o[2]"
+                 dest-module="router2" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <connect src-module="router2" src-gate="pppg$o[2]"
+                 dest-module="router1" dest-gate="pppg$i[2]"
+                 channel-type="ned.DatarateChannel">
+                 <param name="datarate" value="100Mbps" />
+                 <param name="delay" value="0.5ms" />
+        </connect>
+        <start module="router1.ppp[2]"/>
+        <start module="router2.ppp[2]"/>
+        <update module="configurator" />
+    </at>
+</scenario>

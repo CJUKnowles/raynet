@@ -41,6 +41,10 @@ set(ORBTCPEXPERIMENTS_PATH $ENV{OMNET_PATH}/samples/orbtcpExperiments/src) # orb
 list(APPEND LIB_PATHS ${ORBTCPEXPERIMENTS_PATH})
 list(APPEND LIB_NAMES orbtcpExperiments)
 
+set(TCPPACED_PATH $ENV{OMNET_PATH}/samples/tcpPaced/src) # tcpPaced, has pacing mechanisms for CC schemes, also has an auto network configurator that needs to be linked early
+list(APPEND LIB_PATHS ${TCPPACED_PATH})
+list(APPEND LIB_NAMES tcpPaced)
+
 
 # Declare Release libraries
 set(MY_LIB_LINK_LIBRARIES_RELEASE optimized oppsim optimized oppcommon optimized oppcmdenv optimized Cmdrlenv optimized oppnedxml optimized oppenvir optimized -Wl,--no-as-needed INET) # Simlibs are automated now! But for reference: optimized -Wl,--no-as-needed TcpPaced optimized -Wl,--no-as-needed RLComponents optimized -Wl,--no-as-needed cartpole optimized -Wl,--no-as-needed JamesLib

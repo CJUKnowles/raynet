@@ -25,7 +25,7 @@ BUILD_PATHS = RAYNET_PATH / "build_paths.sh"
 runner_paths = {
     "orca": str(RAYNET_PATH / "simlibs/Orca/src/OrcaEval_TD3.py"),
     "cubic": str(RAYNET_PATH / "simlibs/Orca/src/CubicEval.py"),
-    "astraea": str(RAYNET_PATH / "simlibs/Astraea/src/AstraeaEval.py"),
+    "astraea": str(RAYNET_PATH / "simlibs/Astraea/src/AstraeaEval_TF.py"),
     "cleanslate": str(RAYNET_PATH / "simlibs/CleanSlate/src/CleanSlateEval.py"),
 }
 

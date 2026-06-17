@@ -2,35 +2,37 @@ package topologies;
 
 @namespace(inet);
 
-import inet.common.scenario.ScenarioManager;
-import inet.common.misc.ThruputMeteringChannel;
-import ned.DatarateChannel;
-import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
-import inet.node.inet.Router;
 import inet.node.inet.StandardHost;
+import inet.node.inet.Router;
+import ned.DatarateChannel;
+import ned.IBidirectionalChannel;
+import inet.common.scenario.ScenarioManager;
+import tcppaced.networklayer.configurator.ipv4.AutoNetworkConfigurator;
+import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import RLComponents.Broker;
 
 network Dumbbell
 {
     parameters:
         int numberOfFlows = default(1);
-        double bottleneckDatarate @unit("Mbps") = default(3Mbps);
-        double bottleneckDelay @unit("ms") = default(10ms);
+        double bottleneckDatarate @unit("Mbps") = default(100Mbps);
+        double bottleneckDelay @unit("ms") = default(.5ms);
         
     types:
-        channel bottleneckLine extends ThruputMeteringChannel
+        channel standardLine extends DatarateChannel
+        {
+            delay = 0ms;
+            datarate = 10Gbps;
+        }
+        channel bottleneckLine extends DatarateChannel
         {
             delay = parent.bottleneckDelay; 
             datarate = parent.bottleneckDatarate;
         }
         
-        channel standardLine extends ThruputMeteringChannel
-        {
-            delay = 0ms;
-            datarate = 10Gbps;
-        }
+        
     submodules:
-    
+        // configurator: AutoNetworkConfigurator;
         configurator: Ipv4NetworkConfigurator;
         scenarioManager: ScenarioManager;
         
@@ -50,7 +52,7 @@ network Dumbbell
 
         // Right
         for n=0..sizeof(server)-1 {
-            router2.pppg++ <--> standardLine <--> server[n].pppg++;
+            server[n].pppg++ <--> standardLine <--> router2.pppg++ ;
         }
         
 

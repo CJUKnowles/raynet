@@ -17,6 +17,9 @@
 #include "RLInterface.h"
 
 namespace learning {
+
+std::unordered_map<std::string, uint64_t> RLInterface::rlAgentCounters;
+
 // --------------------------- LEGACY CODE -------------------------------
 void RLInterface::setMaxObservationCount(int size)
 {
@@ -58,6 +61,14 @@ RLInterface::~RLInterface()
 void RLInterface::setStringId(std::string _id)
 {
     stringId = _id;
+}
+
+void RLInterface::registerRLAgent(std::string baseId)
+{
+    uint64_t nextId = ++rlAgentCounters[baseId];
+    setStringId(baseId + std::to_string(nextId));
+    cObject* simtime = new cSimTime(0);
+    owner->emit(this->registerSig, stringId.c_str(), simtime);
 }
 
 void RLInterface::initialize(int stateSize, int maxObsSize)

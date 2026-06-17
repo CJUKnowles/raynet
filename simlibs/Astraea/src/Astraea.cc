@@ -4,7 +4,6 @@
 #include "omnetpp/simtime_t.h"
 #include "transportlayer/tcp/TcpPacedConnection.h"
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <optional>
 #include "Astraea.h"
@@ -16,33 +15,6 @@ using namespace inet;
 using namespace learning;
 
 Register_Class(Astraea); // Lets OMNeT++ see and use this class.
-
-namespace {
-    std::string sanitizeAgentId(std::string id)
-    {
-        for (char& c : id) {
-            if (!std::isalnum(static_cast<unsigned char>(c))) {
-                c = '_';
-            }
-        }
-        return id;
-    }
-
-    std::string makeAstraeaAgentId(cComponent *owner)
-    {
-        cModule *tcpModule = dynamic_cast<cModule *>(owner);
-        cModule *hostModule = tcpModule ? tcpModule->getParentModule() : nullptr;
-        int hostIndex = hostModule ? hostModule->getIndex() : -1;
-
-        if (hostIndex == 0) {
-            return "Astraea";
-        }
-        if (hostIndex > 0) {
-            return "Astraea" + std::to_string(hostIndex);
-        }
-        return "Astraea_" + sanitizeAgentId(owner ? owner->getFullPath() : "unknown");
-    }
-}
 
 Astraea::Astraea():
     TcpPacedNoCC(), RLInterface() {
@@ -89,9 +61,7 @@ void Astraea::established(bool active) {
         this->lastIntervalTime = simTime();
 
         // Set the RayNet ID of this agent and register with the Broker.
-        RLInterface::setStringId(makeAstraeaAgentId(owner));
-        cObject* simtime = new cSimTime(0);
-        owner->emit(this->registerSig, stringId.c_str(), simtime);
+        RLInterface::registerRLAgent("Astraea");
 
         // Finally, schedule this agent's first fixed-length RL step.
         scheduleNextStep(this->fixedIntervalDuration);
@@ -114,12 +84,12 @@ std::optional<ObsType> Astraea::computeObservation(){
     double deltaBytesLost = this->bytesLost - this->last_bytes_lost;
 
     // Convert current TCP values to the units used by the original Astraea helper.
-    double throughputBytesPerSecond = deltaBytesDelivered / lastIntervalDuration;
+    double throughputBytesPerSecond = this->deliveryRateSampleCount > 0 ? this->deliveryRateSampleSum / this->deliveryRateSampleCount : 0.0;
     this->astraeaThroughput = throughputBytesPerSecond;
     this->astraeaMaxThroughput = std::max(this->astraeaMaxThroughput, throughputBytesPerSecond);
     this->astraeaLossRate = lastIntervalDuration > 0.0 ? deltaBytesLost / lastIntervalDuration : 0.0;
     double averageRttUs = this->rttReportCount > 0 ? (this->astraeaDelaySum / this->rttReportCount) * 1e6 : 0.0;
-    double minRttUs = this->rttReportCount > 0 ? this->astraeaMinDelay * 1e6 : 0.0;
+    double minRttUs = this->astraeaMinDelay * 1e6;
     double srttUs = state->srtt.dbl() * 1e6 * 8.0;
     double cwndPackets = state->snd_mss > 0 ? state->snd_cwnd / (double)state->snd_mss : 0.0;
     double packetsOut = state->snd_mss > 0 ? pacedConnection->getBytesInFlight() / (double)state->snd_mss : 0.0;
@@ -178,23 +148,23 @@ void Astraea::decisionMade(ActionType action) {
     // Calculate the new cwnd using the original Astraea action transform.
     double scaledCwnd;
     if (action >= 0) {
-        scaledCwnd = (double) state->snd_cwnd * (1.0 + this->actionControlCoeff * action);
+        scaledCwnd = (double) state->snd_cwnd * (1.0 + this->actionControlCoeff * (double) action);
         scaledCwnd = std::ceil(scaledCwnd);
     } else {
-        scaledCwnd = (double) state->snd_cwnd / (1.0 - this->actionControlCoeff * action);
+        scaledCwnd = (double) state->snd_cwnd / (1.0 - this->actionControlCoeff * (double) action);
         scaledCwnd = std::floor(scaledCwnd);
     }
     uint32_t newCwnd = (uint32_t) scaledCwnd;
     newCwnd = max(newCwnd, state->snd_mss);
-    double multiplier = (double) newCwnd / state->snd_cwnd;
+    double multiplier = (double) newCwnd / (double) state->snd_cwnd;
 
     // Attempt to change cwnd and pacing rate.
-    if (this->takeActions && this->rttReportCount > 0) {
+    if (this->takeActions) {
         if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         state->snd_cwnd = newCwnd;
 
         // Pace one max(cwnd, bytes-in-flight) window per RTT, matching original Astraea.
-        if(state->snd_cwnd > 0) {
+        if(state->snd_cwnd > 0 && state->srtt > SIMTIME_ZERO) {
             uint32_t maxWindow = std::max(state->snd_cwnd, dynamic_cast<TcpPacedConnection*>(conn)->getBytesInFlight());
             double pace = state->srtt.dbl() / ((double) maxWindow / (double) state->snd_mss);
             dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(pace);

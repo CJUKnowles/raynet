@@ -21,6 +21,14 @@ void Broker::initialize()
     else if (obsModeStr == "INTERVALED") obsCollectionMode = INTERVALED;
     else throw cRuntimeError("Invalid mode: %s", obsModeStr.c_str());
     cout << "Broker ObsCollectionMode: " << obsModeStr << endl;
+
+    simThroughputProbeInterval = par("simThroughputProbeInterval");
+    if (simThroughputProbeInterval < SIMTIME_ZERO) {
+        throw cRuntimeError("simThroughputProbeInterval must be >= 0s");
+    }
+    lastSimThroughputProbeTime = simTime();
+    lastSimThroughputProbeWallTime = std::chrono::steady_clock::now();
+    scheduleSimThroughputProbe();
     
     getSimulation()->getSystemModule()->subscribe("registerAgent", this); // used to register stepping agents
     getSimulation()->getSystemModule()->subscribe("unregisterAgent", this);// used to unregister stepping agents
@@ -45,6 +53,11 @@ void Broker::finish(){
     }
     delete EOSmsg;
 
+    if (simThroughputProbeMsg->isScheduled()) {
+        cancelEvent(simThroughputProbeMsg);
+    }
+    delete simThroughputProbeMsg;
+
     getSimulation()->getSystemModule()->unsubscribe("registerAgent", this); // used to register stepping agents
     getSimulation()->getSystemModule()->unsubscribe("unregisterAgent", this);// used to unregister stepping agents
     getSimulation()->getSystemModule()->unsubscribe("obsResponse", this); //suscribe to the broker's signal
@@ -59,11 +72,14 @@ void Broker::handleMessage(cMessage *msg)
 {
     std::string messageName(msg->getName());
     // Upper layer has requested a step to take place
-    if (messageName.find("STEP-") != std::string::npos) {
+    if (messageName.find("STEP-") == 0) {
         std::string agentID = messageName.substr(messageName.find("-")+1);
         emit(this->obsRequestSig, agentID.c_str()); 
-    } else if (messageName.find("EOS") != std::string::npos) {
+    } else if (messageName == "EOS") {
         EV_TRACE << "EOS event detected, doing nothing. " << std::endl;
+    } else if (messageName == "SIMTHROUGHPUT-PROBE") {
+        recordSimThroughputProbe();
+        scheduleSimThroughputProbe();
     }
 }
 
@@ -72,6 +88,27 @@ void Broker::scheduleEndOfStep()
     if (!this->EOSmsg->isScheduled()) {
         scheduleAt(simTime(), this->EOSmsg);
     }
+}
+
+void Broker::scheduleSimThroughputProbe()
+{
+    if (simThroughputProbeInterval > SIMTIME_ZERO && !simThroughputProbeMsg->isScheduled()) {
+        scheduleAt(simTime() + simThroughputProbeInterval, simThroughputProbeMsg);
+    }
+}
+
+void Broker::recordSimThroughputProbe()
+{
+    auto wallTime = std::chrono::steady_clock::now();
+    double wallSeconds = std::chrono::duration<double>(wallTime - lastSimThroughputProbeWallTime).count();
+    simtime_t simDelta = simTime() - lastSimThroughputProbeTime;
+
+    if (wallSeconds > 0.0) {
+        emit(simsecPerSecSig, simDelta.dbl() / wallSeconds);
+    }
+
+    lastSimThroughputProbeTime = simTime();
+    lastSimThroughputProbeWallTime = wallTime;
 }
 
 /*

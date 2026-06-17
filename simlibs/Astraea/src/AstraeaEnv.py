@@ -75,6 +75,7 @@ class AstraeaEnv:
         self.histories = defaultdict(self._new_history)
         self.throughput_histories = defaultdict(lambda: deque(maxlen=self.stacking))
         self.raw_observations = {}
+        self.current_agent_ids = set()
         self.episode_steps = 0
         self.max_episode_steps = int(env_config.get("max_episode_steps", 0))
         self.bw_mbps = float(env_config.get("bottleneck_bw_range", (0.0, 0.0))[0])
@@ -95,6 +96,7 @@ class AstraeaEnv:
         self.histories.clear()
         self.throughput_histories.clear()
         self.raw_observations = {}
+        self.current_agent_ids = set()
         self.episode_steps = 0
 
         # Spawn a new simulation and receive its initial observations.
@@ -117,6 +119,11 @@ class AstraeaEnv:
 
     def step(self, learner_actions):
         """Apply learner actions and return the processed simulation step."""
+        # Astraea makes one decision for each fresh observation; never replay stale actions for quiet agents.
+        unexpected_agent_ids = set(learner_actions) - self.current_agent_ids
+        if unexpected_agent_ids:
+            raise ValueError(f"Received actions for agents without fresh Astraea observations: {sorted(unexpected_agent_ids)}")
+
         # Normalize learner actions before forwarding them to OMNeT++.
         actions = {}
         for agent_id, action in learner_actions.items():
@@ -131,6 +138,8 @@ class AstraeaEnv:
         observations, rewards, terminateds, info = result
         if observations:
             self._record_observations(observations)
+        else:
+            self.current_agent_ids = set()
 
         truncated = bool(info.get("simDone", False))
         self.episode_steps += 1
@@ -160,10 +169,10 @@ class AstraeaEnv:
         )
 
     def states(self):
-        """Return the stacked local state for every currently observed agent."""
+        """Return stacked local states for agents with fresh observations."""
         return {
             agent_id: np.concatenate(self.histories[agent_id]).astype(np.float32)
-            for agent_id in self.raw_observations
+            for agent_id in sorted(self.current_agent_ids)
         }
 
     def global_state(self):
@@ -258,6 +267,7 @@ class AstraeaEnv:
     def _record_observations(self, observations, fill_history=False):
         """Validate raw simulator observations and update agent histories."""
         # Process each returned agent observation independently.
+        current_agent_ids = set()
         for agent_id, observation in observations.items():
             if agent_id in IGNORED_AGENT_IDS:
                 continue
@@ -272,6 +282,8 @@ class AstraeaEnv:
                 self.histories[agent_id] = self._new_history()
             self.histories[agent_id].append(learner_observation)
             self.throughput_histories[agent_id].append(float(raw[self.avg_thr_index]))
+            current_agent_ids.add(agent_id)
+        self.current_agent_ids = current_agent_ids
 
     def _derive_learner_observation(self, raw):
         """Reproduce the original Astraea 10-feature local state transform."""

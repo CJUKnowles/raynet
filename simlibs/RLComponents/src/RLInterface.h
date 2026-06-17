@@ -20,8 +20,11 @@
 
 #include <omnetpp.h>
 #include "BrokerData.h"
+#include <cstdint>
 #include <iostream>
 #include <optional>
+#include <string>
+#include <unordered_map>
 
 #include "rlUtil.h"
 #include "cobjects.h"
@@ -55,6 +58,8 @@ protected:
     // the closest parent cSimpleModule used to emit signals (and have access to cSimpleModule methods)
     cComponent *owner;
 
+    static std::unordered_map<std::string, uint64_t> rlAgentCounters;
+
     simsignal_t obsResponse; // communication signal from sender to stepper.
     simsignal_t registerSig;
     simsignal_t unregisterSig;
@@ -78,6 +83,7 @@ public:
     ~RLInterface();
     void setOwner(cComponent *_owner); // sets the owner pointer. must be called in the initialize method
     void setStringId(std::string _id);
+    void registerRLAgent(std::string baseId);
     void scheduleNextStep(double stepSize); // Macro for easily emitting a modifyStepSize signal, which alters the time between RL steps
 
     void initialise();

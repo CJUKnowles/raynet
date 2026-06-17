@@ -171,7 +171,6 @@ class OrcaEnv:
         self.obs_histories = {}
         self.max_throughputs = {}
         self.learner_ready_agent_ids = set()
-        self.last_actions = {}
         self.pending_agent_ids = set()
         self.closed = True
 
@@ -188,7 +187,6 @@ class OrcaEnv:
         self.obs_histories = {}
         self.max_throughputs = {}
         self.learner_ready_agent_ids = set()
-        self.last_actions = {}
         self.pending_agent_ids = set()
 
         # Spawn a new simulation and receive its initial observations.
@@ -205,7 +203,6 @@ class OrcaEnv:
         # Keep Cubic in control until the first agent has completed initial slow start.
         while not states:
             actions = {agent_id: 0.0 for agent_id in self.pending_agent_ids}
-            self.last_actions.update(actions)
             self.worker_connection.send(("step", actions))
             message_type, result = self._receive_worker_message()
             if message_type != "step":
@@ -226,14 +223,10 @@ class OrcaEnv:
         if unexpected_agent_ids:
             raise ValueError(f"Received actions for agents without pending observations: {sorted(unexpected_agent_ids)}")
 
-        # Normalize new actions and repeat cached actions for invalid observations.
+        # Normalize only the new actions requested by the learner.
         actions = {}
-        for agent_id in self.pending_agent_ids:
-            if agent_id in learner_actions:
-                self.last_actions[agent_id] = float(np.clip(action_scalar(learner_actions[agent_id]), -1.0, 1.0))
-            if agent_id not in self.last_actions:
-                self.last_actions[agent_id] = 0.0
-            actions[agent_id] = self.last_actions[agent_id]
+        for agent_id, action in learner_actions.items():
+            actions[agent_id] = float(np.clip(action_scalar(action), -1.0, 1.0))
 
         self._log(f"step: actions={actions}")
         self.worker_connection.send(("step", actions)) # Perform the step

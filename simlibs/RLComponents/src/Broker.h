@@ -11,6 +11,7 @@
 #include <string.h>
 #include <iostream>
 #include <array>
+#include <chrono>
 #include <omnetpp.h>
 #include "BrokerData.h"
 #include <algorithm>
@@ -61,11 +62,18 @@ protected:
 
   // Omnet signalling/scheduling stuff
   cMessage* EOSmsg = new cMessage((std::string("EOS")).c_str());            // Event message signal an end-of-step, in which RayNet collects uncollected observations from the Broker.
+  cMessage* simThroughputProbeMsg = new cMessage((std::string("SIMTHROUGHPUT-PROBE")).c_str());
+  simtime_t simThroughputProbeInterval = SIMTIME_ZERO;
+  simtime_t lastSimThroughputProbeTime = SIMTIME_ZERO;
+  std::chrono::steady_clock::time_point lastSimThroughputProbeWallTime;
   void scheduleEndOfStep();
+  void scheduleSimThroughputProbe();
+  void recordSimThroughputProbe();
   virtual void handleMessage(cMessage *msg) override;                               // Intercepts STEP events to request agent observations
   simsignal_t obsRequestSig = registerSignal("obsRequest");                   // Signal used to request observations from agents
   simsignal_t performActionSig = registerSignal("performAction");             // Signal used to forward actions to agents
   simsignal_t numAgentsSig = registerSignal("numAgents");     // Helper signal used to communicate number of agents. Used for naming in multi-agent.
+  simsignal_t simsecPerSecSig = registerSignal("simsecPerSec");               // Wall-clock simulation throughput, sampled by simThroughputProbeInterval.
   void receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *obj) override;
   void receiveSignal(cComponent *source, simsignal_t signalID, const char *value, cObject *obj) override;
 public:

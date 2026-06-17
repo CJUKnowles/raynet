@@ -640,9 +640,63 @@ def plot_goodput_timeseries(csv_df, ax=None, show_competition=True, startup_time
         ax.set_xlim(right=end_time)
     return ax
 
+def plot_simsec_timeseries(csv_df, ax=None, startup_time=0, end_time=None):
+    """
+    Plots OMNeT++ simulation throughput reported by Broker as simsec/sec.
+    """
+    csv_df = csv_df[csv_df["module"].str.contains("broker")]
+    csv_df = csv_df[csv_df["metric"] == "simsecPerSec"]
+
+    if csv_df.empty:
+        print("plot_simsec_timeseries(): CSV dataframe is empty. Returning.")
+        return None
+
+    print("Plotting simsecPerSec timeseries for:")
+    print(csv_df)
+
+    all_y_values = []
+    for _, row in csv_df.iterrows():
+        data = pd.read_csv(row["csv_path"])
+        data = data[data["time"] > startup_time]
+        if end_time:
+            data = data[data["time"] < end_time]
+        if data.empty:
+            continue
+
+        y = data["simsecPerSec"]
+        rolling_window = min(10, max(1, len(y)))
+        rolling_mean = y.rolling(rolling_window, center=True, min_periods=1).mean()
+
+        ax.plot(
+            data["time"],
+            y,
+            alpha=0.2,
+            linewidth=0.8,
+            color=protocol_colors[row["protocol"]],
+        )
+        ax.plot(
+            data["time"],
+            rolling_mean,
+            label=row["protocol"],
+            color=protocol_colors[row["protocol"]],
+            linewidth=1.5,
+        )
+        all_y_values.extend(y.values)
+
+    ax.set_ylabel("Sim Throughput\n(simsec/sec)")
+    ax.set_xlim(left=0)
+    ax.set_ylim(bottom=0)
+    if all_y_values:
+        ax.set_ylim(top=np.percentile(all_y_values, 99) * 1.1)
+    ax.set_yscale("linear")
+    ax.ticklabel_format(style='plain', axis='y')
+    if end_time:
+        ax.set_xlim(right=end_time)
+    return ax
+
 def plot_timeseries(exp_df, startup_time=0, end_time=60, all=True, show_competing=False, size=.5, flow_color_mode=FLOW_COLOR_MODE_SHARED):
     if all:
-        count = 6
+        count = 7
     else:
         count = 4
     fig, axs = plt.subplots(count, 1, figsize=(15 * size, count * 5 * size))
@@ -654,6 +708,7 @@ def plot_timeseries(exp_df, startup_time=0, end_time=60, all=True, show_competin
     if all: 
         plot_pacerate_timeseries(exp_df, axs[4], startup_time=startup_time,  end_time=end_time, show_competition=show_competing, flow_color_mode=flow_color_mode, flow_color_map=flow_color_map)
         plot_qsize_timeseries(exp_df, axs[5], startup_time=startup_time,  end_time=end_time)
+        plot_simsec_timeseries(exp_df, axs[6], startup_time=startup_time, end_time=end_time)
     fig.subplots_adjust(top=0.95, bottom=.07, left=.1, right=.97)
     axs[count-1].set_xlabel("Time (seconds)")
     # for ax_i in axs[0]:
@@ -1298,7 +1353,7 @@ but can serve as a template for other experiment/plot automation by future maint
 """
 if __name__ == "__main__":    
     metric_csvs = create_csv_dict()        # dataframe containing [experiment, params, protocol, module, metric, csv_path] for easy access
-    experiments = ["competing-flows", "responsiveness"] # List of experiments to generate plots for. Order matters for plot layering (e.g. competing flows should be last so it appears in the foreground of timeseries plots)
+    experiments = ["competing-flows", "responsiveness",] # List of experiments to generate plots for. Order matters for plot layering (e.g. competing flows should be last so it appears in the foreground of timeseries plots)
     for exp in experiments:
         exp_df = metric_csvs[metric_csvs["experiment"] == exp]
         
