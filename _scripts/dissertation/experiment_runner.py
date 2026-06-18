@@ -22,7 +22,7 @@ experiment_paths = {
 runner_paths = {
     "Orca": f"{os.getenv('RAYNET_PATH')}/simlibs/Orca/src/OrcaEval_TD3.py",
     "OrcaPaper": f"{os.getenv('RAYNET_PATH')}/simlibs/Orca/src/OrcaEval_paper.py",
-    "Cubic": f"{os.getenv('RAYNET_PATH')}/simlibs/Orca/src/CubicEval.py",
+    "Cubic": f"{os.getenv('RAYNET_PATH')}/simlibs/Orca/src/OrcaEval_TD3.py",
     "Astraea": f"{os.getenv('RAYNET_PATH')}/simlibs/Astraea/src/AstraeaEval_TF.py",
     "CleanSlate": f"{os.getenv('RAYNET_PATH')}/simlibs/CleanSlate/src/CleanSlateEval.py",
 }
@@ -310,7 +310,7 @@ def run_experiments(experiments_dict, create_output_csv=True):
         
         # Perform all generated experiment files for each protocol
         for protocol_name in experiments_dict[experiment_name]["protocols"]:
-            build_str = "ORCA" if protocol_name == "Cubic" else protocol_name.upper()
+            # build_str = "ORCA" if protocol_name == "Cubic" else protocol_name.upper()
             #subprocess.Popen(f"source ~/omnetpp/setenv && cd ~/raynet && ./build.sh", shell=True, executable="/bin/bash").communicate(timeout=40)
             for params in unique_param_combinations: # Looping through a second time separately so I don't have to generate all the files multiple times
                 for run in range(1, experiments_dict[experiment_name]["meta"]["runs"] + 1):
@@ -324,7 +324,7 @@ def run_experiments(experiments_dict, create_output_csv=True):
                     modified_ini_file = ini_variants_base + params_suffix
                     protocol_runner_path = runner_paths[protocol_name]
                     print(f"\t ---------- {protocol_name} running experiment: {experiment_name + params_suffix} ----------")
-                    os.system(f"{python} {protocol_runner_path} {modified_ini_file}") # Finally runs the exp
+                    os.system(f"{python} {protocol_runner_path} {modified_ini_file} {protocol_name}") # Finally runs the exp
                     
                     # Generate output.csv and individual vector csvs for all tracked vectors for this exp/protocol/params combo
                     exp_results_dir = os.getenv('RAYNET_PATH') + f"/_experiments/{experiment_name}/ini_variants/results/"
@@ -337,24 +337,24 @@ Automation script for running many experiments with different parameter combinat
 - The "meta" section contains other useful information that will not be used for replacement or naming or the itertools product, but can be used for other experiment-specific stuff
 """
 if __name__ == "__main__":
-    random.seed(4793601741)
+    random.seed(4793260741)
     
     # Testing params, do what u want with these
     experiments_to_run = {
-        # "responsiveness": {
-        #     "protocols": ["Astraea"],
-        #     "params": {
-        #         "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
-        #         },
-        #     "meta": {
-        #         "runs" : 1,
-        #         "bw_range" : (5, 100),
-        #         "rtt_range" : (20, 100),
-        #         }
-        #     },
+        "responsiveness": {
+            "protocols": ["Orca"],
+            "params": {
+                "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
+                },
+            "meta": {
+                "runs" : 1,
+                "bw_range" : (90, 110),
+                "rtt_range" : (100, 190),
+                }
+            },
         
         # "competing-flows": {
-        #     "protocols": ["Astraea"],
+        #     "protocols": ["Orca"],
         #     "params": {
         #         "BANDWIDTH" : ["100Mbps"],
         #         "DELAY"     : ["180ms"],    
@@ -377,17 +377,17 @@ if __name__ == "__main__":
         #        }
         #     },
         
-        "intra-rtt-test": {
-            "protocols": ["Orca"],
-            "params": {
-                "BANDWIDTH" : ["100Mbps"],
-                "DELAY"     : ["180ms"],    
-                "QSIZE": ["1bdp"],
-                },
-           "meta": {
-               "runs" : 1,
-               }
-            },
+        # "intra-rtt-test": {
+        #     "protocols": ["Orca"],
+        #     "params": {
+        #         "BANDWIDTH" : ["100Mbps"],
+        #         "DELAY"     : ["180ms"],    
+        #         "QSIZE": ["1bdp"],
+        #         },
+        #    "meta": {
+        #        "runs" : 1,
+        #        }
+        #     },
     }
     run_experiments(experiments_to_run)
     

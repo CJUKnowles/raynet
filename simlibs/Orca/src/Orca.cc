@@ -248,8 +248,6 @@ void Orca::rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) {
     double packetRTT = (tAcked-tSent).dbl();
     this->orcaDelaySum += packetRTT;
     this->rttReportCount += 1;
-
-    
     this->orcaMinDelay = std::min(this->orcaMinDelay, packetRTT);
 }
 
@@ -261,13 +259,12 @@ void Orca::receivedDataAck(uint32_t firstSeqAcked) {
 
 void Orca::receivedDuplicateAck() {
     TcpCubic::receivedDuplicateAck();
-    recordDeliveryRateSample();
 }
 
 void Orca::recordDeliveryRateSample() {
     TcpPacedConnection *pacedConnection = dynamic_cast<TcpPacedConnection *>(conn);
     TcpPacedConnection::RateSample sample = pacedConnection->getRateSample();
-    if (sample.m_interval > SIMTIME_ZERO) {
+    if (sample.m_delivered > 0 && sample.m_deliveryRate > 0 && sample.m_interval > SIMTIME_ZERO) {
         this->deliveryRateSampleSum += sample.m_deliveryRate;
         this->deliveryRateSampleCount += 1;
     }
