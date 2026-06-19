@@ -135,8 +135,8 @@ public: // General use
     }
 
     // TcpCubic Overrides (These are mostly unchanged, and just used to gather statistic or disable automatic pacing)
+    virtual void processRexmitTimer(TcpEventCode &event) override;
     virtual void rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) override;  // Used to track rtt-related stats for observations
-    virtual void receivedDataAck(uint32_t firstSeqAcked) override;
     virtual void receivedDuplicateAck() override;
     virtual void established(bool active) override; // Called when the TCP CONNECTION is established (some time AFTER startup!)
 
@@ -157,8 +157,6 @@ public: // General use
     bool slowStartPassed = false; // Tracks whether Cubic has completed the initial slow-start phase.
 
     // Orca configurable params
-    double delayCoefficient; // Beta term from Orca paper. Delay only degrades reward if RTT > baseRTT*delayCoefficient. Larger values emphasize aggressive throughputs by forgiving delay increases.
-    double lossCoefficient;   // Zeta term from Orca paper. Throughput is substracted by lossRate*lossCoefficient in reward computation.  Larger values emphasize conservative throughputs by punishing loss. 
     double fixedIntervalDuration;  // The fixed duration of each monitor interval
 
     // Orca observation values (These will be updated over time by TCP functions, returned as observations, then reset. Rinse and repeat.)
@@ -172,9 +170,6 @@ public: // General use
 
     // Orca helper variables (mostly used to facilitate computing the observations)
     simtime_t lastIntervalTime = 0.0;
-    double deliveryRateSampleSum = 0.0;
-    uint32_t deliveryRateSampleCount = 0;
-
     // State variables
     double delta_snd_max;
     double delta_snd_una;
@@ -192,8 +187,9 @@ public: // General use
     double bytesDelivered=0.0; // Sum of all bytes delivered this interval
     double bytesLost=0.0;      // Sum of all bytes lost this interval
     double lossRate=0.0;       // The rate at which bytes were lost this interval (bytes/s)
+    uint64_t rtoLostBytes=0;   // Cumulative bytes treated as lost by retransmission timeout.
 
 private:
-    void recordDeliveryRateSample();
+    void applyCwnd(uint32_t newCwnd);
   };
 #endif

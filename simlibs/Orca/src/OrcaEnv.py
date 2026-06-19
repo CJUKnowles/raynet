@@ -151,8 +151,8 @@ class OrcaEnv:
     srtt_index = 8
     ssthresh_index = 9
     min_rtt_index = 14
-    delay_margin_coefficient = 1.25
-    loss_coefficient = 5.0
+    default_delay_margin_coefficient = 1.25
+    default_loss_coefficient = 5.0
 
     def __init__(self, env_config, verbose=True):
         """Initialize a persistent Orca environment wrapper."""
@@ -161,6 +161,8 @@ class OrcaEnv:
         self.verbose = verbose
         self.stacking = int(env_config.get("stacking", 10))
         self.primary_agent_id = env_config.get("agent_id", "Orca")
+        self.delay_margin_coefficient = float(env_config.get("delay_margin_coefficient", self.default_delay_margin_coefficient))
+        self.loss_coefficient = float(env_config.get("loss_coefficient", self.default_loss_coefficient))
 
         # Initialize the transient simulation process and IPC state.
         self.mp_context = multiprocessing.get_context("spawn")

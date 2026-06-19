@@ -337,12 +337,12 @@ Automation script for running many experiments with different parameter combinat
 - The "meta" section contains other useful information that will not be used for replacement or naming or the itertools product, but can be used for other experiment-specific stuff
 """
 if __name__ == "__main__":
-    random.seed(4793260741)
+    random.seed(479320741)
     
     # Testing params, do what u want with these
     experiments_to_run = {
         "responsiveness": {
-            "protocols": ["Orca"],
+            "protocols": ["Orca", "Astraea"],
             "params": {
                 "QSIZE": ["1bdp"], # Based on the average BDP of the ranges given
                 },

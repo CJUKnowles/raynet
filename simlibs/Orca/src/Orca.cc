@@ -31,8 +31,6 @@ Orca::~Orca() {
 // Called during sim initialization
 void Orca::initialize() {
     if (debug) cout << "\tOrca initialize()" << endl;
-    this->delayCoefficient = this->conn->getTcpMain()->par("delayCoefficient");
-    this->lossCoefficient = this->conn->getTcpMain()->par("lossCoefficient");
     this->fixedIntervalDuration = this->conn->getTcpMain()->par("fixedIntervalDuration");
     this->takeActions = this->conn->getTcpMain()->par("takeActions");
     this->debug = this->conn->getTcpMain()->par("printDebugMessages");
@@ -77,10 +75,10 @@ std::optional<ObsType> Orca::computeObservation(){
     double lastIntervalDuration = (simTime() - this->lastIntervalTime).dbl();
     TcpPacedConnection* pacedConnection = dynamic_cast<TcpPacedConnection*>(conn);
     this->bytesDelivered = pacedConnection->getDelivered();
-    this->bytesLost = pacedConnection->getTotalDetectedLostBytes();
+    this->bytesLost = pacedConnection->getTotalDetectedLostBytes() + this->rtoLostBytes;
     this->delta_bytes_delivered = this->bytesDelivered - this->last_bytes_delivered;
     this->delta_bytes_lost = this->bytesLost - this->last_bytes_lost;
-    this->orcaThroughput = this->deliveryRateSampleCount > 0 ? this->deliveryRateSampleSum / this->deliveryRateSampleCount : 0.0;
+    this->orcaThroughput = lastIntervalDuration > 0.0 ? this->delta_bytes_delivered / lastIntervalDuration : 0.0;
     this->lossRate = lastIntervalDuration > 0.0 ? this->delta_bytes_lost / lastIntervalDuration : 0.0;
     this->delta_snd_max = state->snd_max - this->last_snd_max;
     this->delta_snd_una = state->snd_una - this->last_snd_una;
@@ -105,6 +103,27 @@ std::optional<ObsType> Orca::computeObservation(){
     // Match the original Orca server: do not expose a learner state until the
     // transport reports an RTT-bearing interval.
     if (this->rttReportCount == 0) {
+        this->last_bytes_delivered = this->bytesDelivered;
+        this->last_snd_max = state->snd_max;
+        this->last_snd_una = state->snd_una;
+        this->last_ack_cnt = state->ack_cnt;
+        return std::nullopt;
+    }
+
+    if (this->takeActions && !this->slowStartPassed) {
+        uint32_t boostedCwnd = ceil(((double)state->snd_cwnd) * 1.1);
+        if (debug) cout << "\t\tSlow-start boost cwnd from " << state->snd_cwnd << " to " << boostedCwnd << "(1.1x)" << endl;
+        applyCwnd(boostedCwnd);
+        this->last_bytes_lost = this->bytesLost;
+        this->last_bytes_delivered = this->bytesDelivered;
+        this->last_snd_max = state->snd_max;
+        this->last_snd_una = state->snd_una;
+        this->last_ack_cnt = state->ack_cnt;
+        this->orcaThroughput=0.0;
+        this->orcaDelaySum=0.0;
+        this->orcaACKTotal=0.0;
+        this->rttReportCount=0;
+        this->lastIntervalTime = simTime();
         return std::nullopt;
     }
 
@@ -145,8 +164,6 @@ std::optional<ObsType> Orca::computeObservation(){
 
     // Original Orca clears throughput and loss accounting when a valid
     // RTT-bearing state is handed to the learner.
-    this->deliveryRateSampleSum = 0.0;
-    this->deliveryRateSampleCount = 0;
     this->last_bytes_lost = this->bytesLost;
     this->last_bytes_delivered = this->bytesDelivered;
 
@@ -169,22 +186,7 @@ void Orca::decisionMade(ActionType action) {
     // Apply actions only after Cubic exits slow start and the interval contains valid RTT data.
     if (this->takeActions && this->slowStartPassed && this->rttReportCount > 0) {
         if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
-        state->snd_cwnd = newCwnd;
-
-        // Update pacing rate with the Cubic-compatible pacing behavior used by this INET model.
-        if(state->snd_cwnd > 0) {
-            double paceFactor;
-            if (state->snd_cwnd < state->ssthresh/2) {
-                paceFactor = 2;
-            }
-            else{
-                paceFactor = 1.2;
-            }
-            TcpPacedConnection* pacedConnection = dynamic_cast<TcpPacedConnection*>(conn);
-            uint32_t maxWindow = std::max(state->snd_cwnd, pacedConnection->getBytesInFlight());
-            double pace = state->srtt.dbl()/(((double) (maxWindow) / (double)state->snd_mss) * paceFactor);
-            pacedConnection->changeIntersendingTime(pace);
-        }
+        applyCwnd(newCwnd);
         owner->emit(actionSignal, multiplier); // Emit action for plotting
     } else {
         // Invalid. Skip this action entirely.
@@ -194,6 +196,24 @@ void Orca::decisionMade(ActionType action) {
     }
 }
 
+void Orca::applyCwnd(uint32_t newCwnd) {
+    state->snd_cwnd = newCwnd;
+
+    // Update pacing rate with the Cubic-compatible pacing behavior used by this INET model.
+    if(state->snd_cwnd > 0) {
+        double paceFactor;
+        if (state->snd_cwnd < state->ssthresh/2) {
+            paceFactor = 2;
+        }
+        else{
+            paceFactor = 1.2;
+        }
+        TcpPacedConnection* pacedConnection = dynamic_cast<TcpPacedConnection*>(conn);
+        uint32_t maxWindow = std::max(state->snd_cwnd, pacedConnection->getBytesInFlight());
+        double pace = state->srtt.dbl()/(((double) (maxWindow) / (double)state->snd_mss) * paceFactor);
+        pacedConnection->changeIntersendingTime(pace);
+    }
+}
 
 void Orca::resetStepVariables()
 {
@@ -213,6 +233,17 @@ void Orca::resetStepVariables()
     this->last_snd_una = state->snd_una;
     this->last_ack_cnt = state->ack_cnt;
     this->lastIntervalTime = simTime();
+}
+
+void Orca::processRexmitTimer(TcpEventCode &event) {
+    TcpPacedConnection* pacedConnection = dynamic_cast<TcpPacedConnection*>(conn);
+    uint64_t bytesInFlight = pacedConnection->getBytesInFlight();
+
+    TcpCubic::processRexmitTimer(event);
+
+    if (event != TCP_E_ABORT) {
+        this->rtoLostBytes += bytesInFlight;
+    }
 }
 
 // RayNet method: Called after simulation completion? Unsure how this differs from reset()
@@ -251,21 +282,6 @@ void Orca::rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) {
     this->orcaMinDelay = std::min(this->orcaMinDelay, packetRTT);
 }
 
-// Override to track bytes delivered
-void Orca::receivedDataAck(uint32_t firstSeqAcked) {
-    TcpCubic::receivedDataAck(firstSeqAcked);
-    recordDeliveryRateSample();
-}
-
 void Orca::receivedDuplicateAck() {
     TcpCubic::receivedDuplicateAck();
-}
-
-void Orca::recordDeliveryRateSample() {
-    TcpPacedConnection *pacedConnection = dynamic_cast<TcpPacedConnection *>(conn);
-    TcpPacedConnection::RateSample sample = pacedConnection->getRateSample();
-    if (sample.m_delivered > 0 && sample.m_deliveryRate > 0 && sample.m_interval > SIMTIME_ZERO) {
-        this->deliveryRateSampleSum += sample.m_deliveryRate;
-        this->deliveryRateSampleCount += 1;
-    }
 }
