@@ -218,3 +218,4 @@ rl_logging/
 _models_training/*/*
 
 *__pycache__
+NOTES.md

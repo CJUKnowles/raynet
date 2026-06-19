@@ -23,7 +23,7 @@ Orca::Orca():
 }
 
 Orca::~Orca() {
-    if (debug) cout << "\tOrca: Destructor method called. Goodbye.";
+    if (debug) cout << "\tOrca: Destructor method called. Goodbye." << endl;
     getSimulation()->getSystemModule()->unsubscribe(stringId.c_str(), (cListener*) this);
     getSimulation()->getSystemModule()->unsubscribe("performAction", (cListener*) this);
 }
