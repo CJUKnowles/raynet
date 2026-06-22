@@ -58,8 +58,9 @@ def _create_ini_wrapper(episode):
     if duration_s is not None:
         wrapper.add_override("sim-time-limit", unitTools.format_seconds(duration_s))
     if iniTools.as_bool(episode.get("quiet"), True):
-        wrapper.add_override("debug-on-errors", str(episode.get("quiet")).lower())
-        wrapper.add_override("**.printDebugMessages", str(episode.get("quiet")).lower())
+        wrapper.add_override("debug-on-errors", "false")
+        wrapper.add_override("**.printDebugMessages", "false")
+        wrapper.add_override("cmdenv-silent", "true")
     return wrapper
 
 

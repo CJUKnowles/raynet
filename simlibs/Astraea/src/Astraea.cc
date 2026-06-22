@@ -22,7 +22,7 @@ Astraea::Astraea():
 }
 
 Astraea::~Astraea() {
-    if (debug) cout << "\t" << stringId << ": Destructor method called. Goodbye.";
+    if (debug) cout << "\t" << stringId << ": Destructor method called. Goodbye." << endl;
     getSimulation()->getSystemModule()->unsubscribe(stringId.c_str(), (cListener*) this);
     getSimulation()->getSystemModule()->unsubscribe("performAction", (cListener*) this);
 }
