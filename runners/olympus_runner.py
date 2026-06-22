@@ -26,6 +26,13 @@ def _serialize_observations(observations, observation_fields):
     )
 
 
+def _serialize_info(info):
+    """Format simulator metadata without changing timing semantics."""
+    serialized = obsTools.info_dict(info)
+    serialized["simDone"] = bool(serialized.get("simDone", False))
+    return serialized
+
+
 def _step_message(runner, actions, observation_fields):
     """Advance the simulator and format one step response."""
     observations, rewards, terminateds, info = runner.step(actions or {})
@@ -34,7 +41,7 @@ def _step_message(runner, actions, observation_fields):
         "observations": _serialize_observations(observations, observation_fields),
         "rewards": obsTools.float_dict(rewards),
         "terminateds": obsTools.bool_dict(terminateds),
-        "info": obsTools.bool_dict(info),
+        "info": _serialize_info(info),
     }
 
 
@@ -107,6 +114,10 @@ def run(control_fd):
         _send(writer, {
             "type": "reset",
             "observations": _serialize_observations(observations, observation_fields),
+            "info": _serialize_info({
+                "simDone": False,
+                "time_s": runner.sim_time(),
+            }),
             "ini_path": ini_variant,
             "section": section,
         })
@@ -125,6 +136,7 @@ def run(control_fd):
                 _send(writer, result)
                 terminateds = result["terminateds"]
                 info = result["info"]
+                print(result['info'])
                 # Manual shutdown (internal step limit). Shutdown + Cleanup.
                 if terminateds.get("__all__", False):
                     runner.shutdown()

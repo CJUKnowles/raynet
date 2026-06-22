@@ -72,6 +72,14 @@ void GymApi::initialise(std::string _iniPath, std::string sectionName){
     env->initialiseEnvironment(cstrings.size(), &cstrings[0],bootconfigptr, sectionName);
 }
 
+// Returns the current OMNeT++ simulation time in seconds.
+double GymApi::simTime(){
+    cSimulation *simulation = getSimulation();
+    if (!simulation)
+        return 0.0;
+    return simulation->getSimTime().dbl();
+}
+
 // Performs a single step without an action, and returns the resulting observations from the environment
  std::unordered_map<std::string, ObsType > GymApi::reset(){
     // Reset the environment
@@ -100,14 +108,14 @@ void GymApi::initialise(std::string _iniPath, std::string sectionName){
 std::tuple< std::unordered_map<std::string, ObsType>,
             std::unordered_map<std::string, RewardType>,
             std::unordered_map<std::string,bool>,
-            std::unordered_map<std::string,bool>
+            std::unordered_map<std::string,double>
             > GymApi::step(std::unordered_map<std::string, ActionType> actions){
     
     //Create container for return tuple of step method. 
     //Contains:
     //obs, reward, dones, info
-    //where info is a dict (unordered_map) with a single key,value pair "simDone" to denote whether the simulation has been completed.
-    std::tuple<std::unordered_map<std::string, ObsType >, std::unordered_map<std::string, RewardType > , std::unordered_map<std::string,bool > , std::unordered_map<std::string,bool > > returnTuple;
+    //where info is a numeric metadata dict containing simDone and simulation time.
+    std::tuple<std::unordered_map<std::string, ObsType >, std::unordered_map<std::string, RewardType > , std::unordered_map<std::string,bool > , std::unordered_map<std::string,double > > returnTuple;
     bool isReset = false;
     std::string id = env->step(actions, isReset);
     
@@ -128,7 +136,12 @@ std::tuple< std::unordered_map<std::string, ObsType>,
         env->endSimulation();
     }
 
-    returnTuple = { obss, rewards, dones, { {"simDone", simDone} } };
+    returnTuple = {
+        obss,
+        rewards,
+        dones,
+        { {"simDone", simDone ? 1.0 : 0.0}, {"time_s", simTime()} }
+    };
     return returnTuple;
 }
 

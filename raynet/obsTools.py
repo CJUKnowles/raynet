@@ -79,3 +79,26 @@ def float_dict(values, *, key_type=str):
 def bool_dict(values, *, key_type=str):
     """Convert mapping values to bools."""
     return typed_dict(values, bool, key_type=key_type)
+
+
+def info_value(value):
+    """Convert one metadata value to a JSON-safe Python scalar."""
+    if isinstance(value, bool):
+        return bool(value)
+    if isinstance(value, int):
+        return int(value)
+    if isinstance(value, float):
+        return float(value)
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return value
+
+
+def info_dict(values, *, key_type=str):
+    """Convert step metadata while preserving numeric timing values."""
+    return {
+        key_type(key) if key_type is not None else key: info_value(value)
+        for key, value in (values or {}).items()
+    }

@@ -40,7 +40,7 @@ Olympus sends:
 RayNet replies:
 
 ```json
-{"type":"reset","observations":{"Orca":[...]}}
+{"type":"reset","observations":{"Orca":[...]},"info":{"simDone":false,"time_s":0.0}}
 ```
 
 Olympus sends one action dict per step:
@@ -52,7 +52,7 @@ Olympus sends one action dict per step:
 RayNet replies:
 
 ```json
-{"type":"step","observations":{"Orca":[...]},"rewards":{"Orca":0.0},"terminateds":{"__all__":false},"info":{"simDone":false}}
+{"type":"step","observations":{"Orca":[...]},"rewards":{"Orca":0.0},"terminateds":{"__all__":false},"info":{"simDone":false,"time_s":1.5}}
 ```
 
 For clean early shutdown, Olympus can send:
@@ -70,6 +70,7 @@ RayNet runner:
   dictionary.
 - Applies episode `duration` as an OMNeT++ `sim-time-limit` in the generated
   INI variant.
+- Attaches OMNeT++ simulation time to reset and step replies as `info.time_s`.
 - Supports `quiet: true` to disable verbose RayNet Orca debug prints in the
   generated INI variant.
 - Calls `runner.initialise(...)`, `runner.reset()`, and `runner.step(actions)`.

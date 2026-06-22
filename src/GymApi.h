@@ -33,12 +33,13 @@ class GymApi{
         GymApi();
 
         void initialise(std::string inipath, std::string sectionName);
+        double simTime();
         std::unordered_map<std::string, ObsType > reset();
         std::tuple<
                 std::unordered_map<std::string, ObsType>,
                 std::unordered_map<std::string, RewardType>,
                 std::unordered_map<std::string, bool>,
-                std::unordered_map<std::string,bool>
+                std::unordered_map<std::string, double>
             >step(std::unordered_map<std::string, ActionType > actions);
 
         void cleanupmemory();

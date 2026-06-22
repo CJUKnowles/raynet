@@ -33,6 +33,7 @@ PYBIND11_MODULE(omnetbind, m) {
     py::class_<GymApi>(m, "OmnetGymApi")
         .def(py::init<>())
         .def("initialise", &GymApi::initialise)
+        .def("sim_time", &GymApi::simTime)
         .def("reset", &GymApi::reset)
         .def("step", &GymApi::step)
         .def("shutdown", &GymApi::shutdown)
