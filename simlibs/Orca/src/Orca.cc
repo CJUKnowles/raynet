@@ -5,6 +5,7 @@
 #include "transportlayer/tcp/TcpPaced.h"
 #include "transportlayer/tcp/flavours/TcpCubic.h"
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 #include <ostream>
 #include "Orca.h"
@@ -19,7 +20,7 @@ Register_Class(Orca); // Lets omnet see and use this class
 
 Orca::Orca():
     TcpCubic(), RLInterface() {
-    if (debug) cout << "\tOrca: Constructor called!";
+    cout << "\tOrca: Constructor called!";
 }
 
 Orca::~Orca() {
@@ -85,14 +86,16 @@ std::optional<ObsType> Orca::computeObservation(){
     this->delta_ack_cnt = state->ack_cnt - this->last_ack_cnt;
 
     // Convert current TCP values to the units used by the original Orca server.
-    double averageDelayMs = this->rttReportCount > 0 ? (this->orcaDelaySum / this->rttReportCount) * 1000.0 : 0.0;
+    double averageDelayUs = this->rttReportCount > 0 ? (this->orcaDelaySum / this->rttReportCount) * 1e6 : 0.0;
+    double averageDelayMs = averageDelayUs / 1000.0;
     double pacingRate = pacedConnection->intersendingTime.dbl() > 0.0 ? state->snd_mss / pacedConnection->intersendingTime.dbl() : 0.0;
     double cwndPackets = state->snd_mss > 0 ? state->snd_cwnd / (double)state->snd_mss : 0.0;
     double ssthreshPackets = state->snd_mss > 0 ? state->ssthresh / (double)state->snd_mss : 0.0;
     double packetsOut = state->snd_mss > 0 ? pacedConnection->getBytesInFlight() / (double)state->snd_mss : 0.0;
     double retransOut = state->snd_mss > 0 ? this->retransmissionRate * lastIntervalDuration / state->snd_mss : 0.0;
-    double srttMs = state->srtt.dbl() * 1000.0;
-    double minRttMs = this->orcaMinDelay * 1000.0;
+    double srttUs = state->srtt.dbl() * 1e6 * 8.0;
+    double minRttUs = this->orcaMinDelay * 1e6;
+    double minRttMs = minRttUs / 1000.0;
 
     // Permanently hand congestion-window control to Orca after Cubic exits initial slow start.
     this->slowStartPassed = this->slowStartPassed || state->snd_cwnd > state->ssthresh;
@@ -131,14 +134,16 @@ std::optional<ObsType> Orca::computeObservation(){
     if(debug) {
         cout << "-" << endl;
         cout << "\taverageDelayMs: " << averageDelayMs << endl;
+        cout << "\taverageDelayUs: " << averageDelayUs << endl;
         cout << "\tthroughput: " << this->orcaThroughput << endl;
         cout << "\trttSamples: " << this->rttReportCount << endl;
         cout << "\tintervalDuration: " << lastIntervalDuration << endl;
         cout << "\tcwndPackets: " << cwndPackets << endl;
         cout << "\tpacingRate: " << pacingRate << endl;
         cout << "\tlossRate: " << this->lossRate << endl;
-        cout << "\tsrttMs: " << srttMs << endl;
+        cout << "\tsrttUs: " << srttUs << endl;
         cout << "\tminRttMs: " << minRttMs << endl;
+        cout << "\tminRttUs: " << minRttUs << endl;
     } 
 
     // Emit throughput for OMNeT++ result recording.
@@ -153,13 +158,15 @@ std::optional<ObsType> Orca::computeObservation(){
         cwndPackets,
         pacingRate,
         this->lossRate,
-        srttMs,
+        srttUs,
         ssthreshPackets,
         packetsOut,
         retransOut,
         packetsOut,
         state->snd_mss,
-        minRttMs
+        minRttMs,
+        averageDelayUs,
+        minRttUs
     });
 
     // Original Orca clears throughput and loss accounting when a valid
@@ -178,21 +185,20 @@ RewardType Orca::computeReward(){
 void Orca::decisionMade(ActionType action) {
     if (debug) cout << "\t" << stringId << " decisionMade()" << endl;
 
-    // Compute new cwnd from the given action (cwnd *= 4^action).
-    double multiplier = std::pow(4.0, (double) action);
-    uint32_t newCwnd = ceil(((double) state->snd_cwnd) * multiplier);
-    newCwnd = max(newCwnd, 4 * state->snd_mss);
-    
-    // Apply actions only after Cubic exits slow start and the interval contains valid RTT data.
-    if (this->takeActions && this->slowStartPassed && this->rttReportCount > 0) {
-        if (debug) cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
+    // Olympus sends the target congestion window in packets. RayNet converts
+    // the packet count to INET's byte-based cwnd and enforces one MSS.
+    double requestedPackets = std::max((double)action, 1.0);
+    double requestedBytes = std::ceil(requestedPackets * (double)state->snd_mss);
+    double requestedCwnd = std::max(requestedBytes, (double)state->snd_mss);
+    uint32_t newCwnd = (uint32_t)requestedCwnd;
+    double multiplier = (double)newCwnd / (double)state->snd_cwnd;
+
+    if (this->takeActions) {
+        cout << "\t\tChanging cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x)" << endl;
         applyCwnd(newCwnd);
         owner->emit(actionSignal, multiplier); // Emit action for plotting
     } else {
-        // Invalid. Skip this action entirely.
-        if (debug) {
-            cout << "\t\t" << "NOT CHANGING cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x) NOT CHANGING !!!!!!" << endl;
-        } 
+        cout << "\t\t" << "NOT CHANGING cwnd from " << state->snd_cwnd << " to " << newCwnd << "(" << multiplier << "x) NOT CHANGING !!!!!!" << endl;
     }
 }
 

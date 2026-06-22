@@ -106,7 +106,7 @@ std::optional<ObsType> Astraea::computeObservation(){
         cout << "\t\tmin_rtt: " << minRttUs << endl;
         cout << "\t\tsrtt_us: " << srttUs << endl;
         cout << "\t\tcwnd: " << cwndPackets << endl;
-        cout << "\t\tloss_ratio: " << this->astraeaLossRate << endl;
+        cout << "\t\tloss_rate: " << this->astraeaLossRate << endl;
         cout << "\t\tpackets_out: " << packetsOut << endl;
         cout << "\t\tpacing_rate: " << pacingRateBytesPerSecond << endl;
         cout << "\t\tretrans_out: " << retransOutPackets << endl;
@@ -145,17 +145,12 @@ RewardType Astraea::computeReward(){
 void Astraea::decisionMade(ActionType action) {
     if (debug) cout << "\t" << stringId << ": decisionMade()" << endl;
 
-    // Calculate the new cwnd using the original Astraea action transform.
-    double scaledCwnd;
-    if (action >= 0) {
-        scaledCwnd = (double) state->snd_cwnd * (1.0 + this->actionControlCoeff * (double) action);
-        scaledCwnd = std::ceil(scaledCwnd);
-    } else {
-        scaledCwnd = (double) state->snd_cwnd / (1.0 - this->actionControlCoeff * (double) action);
-        scaledCwnd = std::floor(scaledCwnd);
-    }
-    uint32_t newCwnd = (uint32_t) scaledCwnd;
-    newCwnd = max(newCwnd, state->snd_mss);
+    // Olympus sends the target congestion window in packets. RayNet converts
+    // the packet count to INET's byte-based cwnd and enforces one MSS.
+    double requestedPackets = std::max((double)action, 1.0);
+    double requestedBytes = std::ceil(requestedPackets * (double)state->snd_mss);
+    double requestedCwnd = std::max(requestedBytes, (double)state->snd_mss);
+    uint32_t newCwnd = (uint32_t)requestedCwnd;
     double multiplier = (double) newCwnd / (double) state->snd_cwnd;
 
     // Attempt to change cwnd and pacing rate.

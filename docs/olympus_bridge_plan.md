@@ -76,21 +76,16 @@ RayNet runner:
 - Calls `cleanup()` on normal `simDone`.
 - Calls `shutdown()` plus `cleanup()` on explicit close or agent termination.
 
-Olympus RayNet adapter:
+Olympus RayNet environment backend:
 
 - Spawns the RayNet runner.
-- Converts RayNet Orca's 15-value observation into the raw dict expected by
-  Olympus Orca state/reward code.
-- Runs the Olympus Orca actor locally for inference.
-- Pushes Olympus Orca `Experience` objects into the existing learner manager.
-- Pulls fresh actor params from the learner on the existing cadence.
-- Converts RayNet Astraea's 10-value observations into Olympus Tempest raw
-  fields for `ma_dreamer`.
-- Maintains per-agent Tempest/Kalman state, recurrent MA-Dreamer RSSM state,
-  reward calculators, and trajectory/group metadata inside the Olympus adapter.
-- Runs MA-Dreamer local world model + actor locally and sends scalar Astraea
-  actions back to RayNet by agent id.
-- Pushes MA-Dreamer `Experience` objects through the existing learner service.
+- Presents RayNet simulation agents to Olympus workers as virtual flow ids.
+- Converts RayNet Orca/Astraea observations into the raw dict contract normally
+  returned by `tcp_sockopt.get_tcp_deepcc_info`.
+- Collects worker `set_cwnd` requests and translates them into RayNet action
+  dictionaries keyed by RayNet agent id.
+- Lets existing Olympus workers run actor inference, state/reward transforms,
+  replay pushes, parameter pulls, trace logging, plots, and checkpoints.
 - Never imports `omnetbind`.
 
 ## V1 Scope
@@ -127,19 +122,35 @@ V3 goal: RayNet is a swappable environment backend. Olympus still owns
 learners, workers, state/reward/action plugins, state logs, plots, returns, and
 checkpoints.
 
+Current V3 status:
+
+- `olympus/environments/raynet/runner.py` has been removed.
+- `run_episode` and `run_episode_marl` are the only episode owners for RayNet
+  and Mininet.
+- RayNet-specific episode fields such as `ini_path` and `section` are carried
+  as an opaque `environment_config` object to the RayNet environment backend,
+  not unpacked by the orchestrator.
+- Orca and MA-Dreamer workers use a shared Olympus flow backend facade. The
+  default backend delegates to `tcp_sockopt`; the RayNet backend talks to a
+  per-episode virtual-flow service.
+- Standard Olympus episode returns, CSV logs, plots, checkpoint handling, and
+  learner lifecycle are used for RayNet runs.
+
 ### Desired Boundary
 
 - RayNet owns OMNeT++, INI materialization, simulation lifecycle, and raw
   simulation stepping.
-- RayNet exports observations in the same raw dictionary shape Olympus workers
-  already consume from `tcp_sockopt.get_tcp_deepcc_info`.
+- The Olympus RayNet environment currently adapts RayNet protocol observations
+  into the same raw dictionary shape Olympus workers already consume from
+  `tcp_sockopt.get_tcp_deepcc_info`. A later cleanup should move as much of
+  that protocol naming as possible into RayNet's exported observation contract.
 - Olympus workers remain the place where raw metrics become state vectors,
   rewards, actions, replay entries, state logs, and learner parameter pulls.
 - `run_episode` and `run_episode_marl` remain the episode owners. They may
   branch around Mininet-only operations, but they should not be replaced by a
   RayNet-specific copy.
 
-### Proposed V3 Pieces
+### Implemented V3 Pieces
 
 1. Add a generic Olympus flow backend module.
 
@@ -148,24 +159,24 @@ checkpoints.
    - `tcp_sockopt.get_tcp_deepcc_info(flow_fd)`
    - `tcp_sockopt.set_cwnd(flow_fd, new_cwnd)`
 
-   V3 should introduce a tiny backend facade with the same operations:
+   V3 introduced a tiny backend facade with the same operations:
 
    - Mininet backend delegates to `tcp_sockopt`.
    - RayNet backend communicates with a per-episode RayNet coordinator.
 
-   Then each worker changes once from importing `tcp_sockopt` directly to
-   importing the facade. The learner/state/reward/action code remains shared.
+   Orca and MA-Dreamer workers import the facade. The
+   learner/state/reward/action code remains shared.
 
 2. Make RayNet provide virtual flow endpoints.
 
-   A RayNet coordinator process should:
+   The RayNet environment backend provides a virtual-flow service that:
 
-   - Spawn the RayNet runner.
-   - Receive grouped RayNet observations by agent id.
-   - Expose one virtual endpoint per flow to Olympus workers.
-   - Deliver each worker its next raw metric dict.
-   - Collect each worker's requested action.
-   - Step OMNeT++ with an action dictionary keyed by RayNet agent id.
+   - Spawns the RayNet runner.
+   - Receives grouped RayNet observations by agent id.
+   - Exposes one virtual endpoint per flow to Olympus workers.
+   - Delivers each worker its next raw metric dict.
+   - Collects each worker's requested action.
+   - Steps OMNeT++ with an action dictionary keyed by RayNet agent id.
 
    This replaces Linux file descriptors for simulation only. No listener
    binary, `oc_bridge`, iperf, Mininet namespace, or kernel CC module should be
@@ -173,24 +184,24 @@ checkpoints.
 
 3. Keep `run_episode` / `run_episode_marl` as the common lifecycle.
 
-   Backend-specific branches should be limited to places that are truly
+   Backend-specific branches are limited to places that are truly
    emulation-specific:
 
    - Skip `_ensure_tcp_cc` for RayNet.
    - Skip listener binary validation for RayNet.
    - Skip `oc_bridge` startup for RayNet.
-   - Replace Mininet `env.run_iperf(...)` with a RayNet episode drive/blocking
-     call on the RayNet environment object.
+   - Let `env.run_iperf(...)` become a RayNet episode drive/blocking call on
+     the RayNet environment object.
    - Keep the existing worker env construction, worker script resolution, state
      log paths, plotting, episode return parsing, checkpoint copying, result
      CSV writing, and watchdog behavior.
 
 4. Move observation adaptation to RayNet or a protocol adapter boundary.
 
-   Olympus should not need an algorithm-specific conversion from RayNet lists
-   into raw dicts. If Orca or Astraea simulations expose lists today, V3 should
-   make the RayNet runner or RayNet protocol component emit named raw fields
-   matching the Olympus worker raw-info contract.
+   Olympus still contains the protocol list-to-raw-dict adapters in
+   `olympus/environments/raynet/env.py`. This is the next ownership cleanup:
+   RayNet protocol components should eventually emit named raw fields matching
+   the Olympus worker raw-info contract.
 
 5. Make protocol support declarative.
 
@@ -206,15 +217,16 @@ checkpoints.
 
 ### V3 Migration Steps
 
-1. Keep V2 only as a smoke-test reference while building V3.
-2. Add the flow backend facade and make Orca / MA-Dreamer workers use it.
-3. Implement RayNet virtual flow endpoints and coordinator IPC.
-4. Refactor `run_episode` and `run_episode_marl` to branch only around
+1. Add the flow backend facade and make Orca / MA-Dreamer workers use it.
+2. Implement RayNet virtual flow endpoints and coordinator IPC.
+3. Refactor `run_episode` and `run_episode_marl` to branch only around
    Mininet/listener/iperf operations.
-5. Remove the duplicated Orca and MA-Dreamer rollout loops from the RayNet
+4. Remove the duplicated Orca and MA-Dreamer rollout loops from the RayNet
    environment adapter.
-6. Verify that standard episode plots and returns work without any RayNet-only
+5. Verify that standard episode plots and returns work without any RayNet-only
    plotting code.
+
+All migration steps above are complete for Orca and Astraea smoke runs.
 
 ## Test Plan
 

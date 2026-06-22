@@ -16,12 +16,22 @@ from pathlib import Path
 from raynet import iniTools, obsTools, unitTools
 
 # MARK: Simulator Step Handling ---------------------------------------------------------------------------------
-def _step_message(runner, actions):
+def _serialize_observations(observations, observation_fields):
+    """Format raw simulator observations for Olympus worker flow backends."""
+    return obsTools.serialize_observations(
+        observations,
+        value_type=float,
+        key_type=str,
+        fields=observation_fields,
+    )
+
+
+def _step_message(runner, actions, observation_fields):
     """Advance the simulator and format one step response."""
     observations, rewards, terminateds, info = runner.step(actions or {})
     return {
         "type": "step",
-        "observations": obsTools.serialize_observations(observations, value_type=float, key_type=str),
+        "observations": _serialize_observations(observations, observation_fields),
         "rewards": obsTools.float_dict(rewards),
         "terminateds": obsTools.bool_dict(terminateds),
         "info": obsTools.bool_dict(info),
@@ -57,10 +67,10 @@ def _create_ini_wrapper(episode):
     duration_s = None if episode.get("duration") is None else unitTools.to_seconds(episode.get("duration"))
     if duration_s is not None:
         wrapper.add_override("sim-time-limit", unitTools.format_seconds(duration_s))
-    if iniTools.as_bool(episode.get("quiet"), True):
-        wrapper.add_override("debug-on-errors", "false")
-        wrapper.add_override("**.printDebugMessages", "false")
-        wrapper.add_override("cmdenv-silent", "true")
+    # if iniTools.as_bool(episode.get("quiet"), True):
+    #     wrapper.add_override("debug-on-errors", "false")
+    #     wrapper.add_override("**.printDebugMessages", "false")
+    #     wrapper.add_override("cmdenv-silent", "true")
     return wrapper
 
 
@@ -86,6 +96,7 @@ def run(control_fd):
             raise ValueError(f"expected start message, got {message.get('type')!r}")
         episode = message.get("episode") or {}
         section = str(episode.get("section") or episode.get("config_section") or "General")
+        observation_fields = episode.get("observation_fields") or episode.get("raw_observation_fields")
         ini_wrapper = _create_ini_wrapper(episode)
         ini_variant = str(ini_wrapper.materialize_ini())
 
@@ -95,7 +106,7 @@ def run(control_fd):
         observations = runner.reset()
         _send(writer, {
             "type": "reset",
-            "observations": obsTools.serialize_observations(observations, value_type=float, key_type=str),
+            "observations": _serialize_observations(observations, observation_fields),
             "ini_path": ini_variant,
             "section": section,
         })
@@ -106,7 +117,11 @@ def run(control_fd):
             command = message.get("type")
 
             if command == "step":
-                result = _step_message(runner, message.get("actions") or {})
+                result = _step_message(
+                    runner,
+                    message.get("actions") or {},
+                    observation_fields,
+                )
                 _send(writer, result)
                 terminateds = result["terminateds"]
                 info = result["info"]
