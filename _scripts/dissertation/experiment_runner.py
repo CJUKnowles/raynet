@@ -226,7 +226,7 @@ def run_experiments(experiments_dict, create_output_csv=True):
             for run in range(1, experiments_dict[experiment_name]["meta"]["runs"] + 1):
                 with open(original_ini_file, 'r') as fin:
                     ini_string = fin.read()
-                ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
+                ini_string = ini_string.replace("!HOME!",  os.getenv('HOME'))
                 ini_string = ini_string.replace("START_TIME_PLACEHOLDER",  str(random.uniform(0, 0.2)))
                 
                 params_suffix = ""

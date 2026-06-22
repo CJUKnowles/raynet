@@ -28,7 +28,7 @@ omnetbind Python API. External projects should not import omnetbind directly.
 Olympus sends:
 
 ```json
-{"type":"start","episode":{"protocol":"orca","ini_path":"/path/OrcaTraining.ini","section":"General","bw":100,"delay":20,"duration":120}}
+{"type":"start","episode":{"protocol":"orca","ini_path":"/path/OrcaTraining.ini","section":"General","duration":120,"replacements":{"!BW!":"100Mbps","!DELAY!":"10ms","!QSIZE!":"2000000b","!MAX_RL_STEPS!":"6000"}}}
 ```
 
 RayNet replies:
@@ -60,9 +60,8 @@ For clean early shutdown, Olympus can send:
 RayNet runner:
 
 - Imports `omnetbind` from RayNet's build tree.
-- Materializes INI templates, including current Orca placeholders:
-  `HOME`, `RAYNET_PATH`, `ORCA_BOTTLENECK_BW`, `ORCA_BASE_RTT`,
-  `ORCA_BOTTLENECK_BUFFER_SIZE`, and `MAX_RL_STEPS`.
+- Materializes INI templates by blindly applying the episode `replacements`
+  dictionary.
 - Applies episode `duration` as an OMNeT++ `sim-time-limit` in the generated
   INI variant.
 - Supports `quiet: true` to disable verbose RayNet Orca debug prints in the

@@ -2,12 +2,12 @@
 
 import math
 import multiprocessing
-import os
 import traceback
 from dataclasses import dataclass
-from pathlib import Path
 
 import numpy as np
+
+from raynet import obsTools
 
 IGNORED_AGENT_IDS = {"__all__", "SIMULATION_END"}
 
@@ -19,26 +19,13 @@ def action_scalar(action):
 
 def _serialize_observations(observations):
     """Convert OmnetBind objects to lists for sending over the Pipe."""
-    serialized = {}
-
-    # Convert each OmnetBind observation into a serializable Python list.
-    for agent_id, observation in observations.items():
-        if hasattr(observation, "to_list"):
-            serialized[agent_id] = observation.to_list()
-        else:
-            serialized[agent_id] = list(observation)
-
-    return serialized
+    return obsTools.serialize_observations(observations)
 
 
 def run_episode(connection, ini_path, section_name, primary_agent_id):
     """Create and run a single OMNeT++ episode."""
     # Import OmnetBind inside the worker process that will own the simulation.
-    raynet_path = Path(os.environ["RAYNET_PATH"])
-    import sys
-
-    sys.path.insert(0, str(raynet_path / "build"))
-    from omnetbind import OmnetGymApi
+    from raynet.omnetBind import OmnetGymApi
 
     # Create the simulator and track its finalization state.
     runner = OmnetGymApi()

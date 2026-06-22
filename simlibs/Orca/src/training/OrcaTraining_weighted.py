@@ -69,8 +69,7 @@ class OmnetGymApiEnv(gym.Env):
         - This mostly involves setting spcaes (bounds, shapes, types) for actions and observations.
         - These bounds are needed for RL algorithms provided by RLlib- They limit the problem space and are also used for normalization.
         """
-        sys.path.insert(0, os.path.join(os.getenv('RAYNET_PATH'), "build"))
-        from omnetbind import OmnetGymApi
+        from raynet.omnetBind import OmnetGymApi
         self.runner = OmnetGymApi()
         
         self.env_config = env_config
@@ -148,11 +147,11 @@ class OmnetGymApiEnv(gym.Env):
         ini_variants_base = f"{self.env_config["iniPath"].rsplit("/", 1)[0]}/ini_variants/{self.env_config["iniPath"].rsplit("/", 1)[1]}"
         with open(original_ini_file, 'r') as fin:
             ini_string = fin.read()
-        ini_string = ini_string.replace("HOME",  os.getenv('HOME'))
-        ini_string = ini_string.replace("ORCA_BOTTLENECK_BW", f"{self.bw}Mbps")
-        ini_string = ini_string.replace("ORCA_BASE_RTT", f"{self.base_rtt/2.0}ms")  # Delay goes both ways, divide by two
-        ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{self.buffer_size}b")
-        ini_string = ini_string.replace("MAX_RL_STEPS", f"{self.max_steps}")
+        ini_string = ini_string.replace("!HOME!",  os.getenv('HOME'))
+        ini_string = ini_string.replace("!BW!", f"{self.bw}Mbps")
+        ini_string = ini_string.replace("!DELAY!", f"{self.base_rtt/2.0}ms")  # Delay goes both ways, divide by two
+        ini_string = ini_string.replace("!QSIZE!", f"{self.buffer_size}b")
+        ini_string = ini_string.replace("!MAX_RL_STEPS!", f"{self.max_steps}")
         # TODO: Include these strings in the .ini somewhere that actually makes them alter the experiment
         print(f"SAVING TO {ini_variants_base + f".worker{os.getpid()}"}")
         with open(ini_variants_base + f".worker{os.getpid()}", 'w') as fout:

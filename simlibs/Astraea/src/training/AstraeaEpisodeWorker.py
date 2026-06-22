@@ -1,28 +1,17 @@
 """One-process-per-episode OMNeT++ worker for Astraea training."""
 
-import os
-import sys
 import traceback
-from pathlib import Path
 
-
-RAYNET_PATH = Path(os.getenv("RAYNET_PATH", "/home/james/raynet"))
-sys.path.insert(0, str(RAYNET_PATH / "build"))
+from raynet import obsTools
 
 
 def _serialize_observations(observations):
-    serialized = {}
-    for agent_id, observation in observations.items():
-        if hasattr(observation, "to_list"):
-            serialized[agent_id] = observation.to_list()
-        else:
-            serialized[agent_id] = list(observation)
-    return serialized
+    return obsTools.serialize_observations(observations)
 
 
 def run_episode(connection, ini_path, section_name):
     """Run one multi-agent OMNeT++ episode over a multiprocessing pipe."""
-    from omnetbind import OmnetGymApi
+    from raynet.omnetBind import OmnetGymApi
 
     runner = OmnetGymApi()
     cleaned = False

@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "raynet"
+version = "0.1.0"
+description = "RayNet Python helpers and OMNeT++ binding accessors"
+requires-python = ">=3.8"
+
+[tool.setuptools]
+packages = ["raynet"]

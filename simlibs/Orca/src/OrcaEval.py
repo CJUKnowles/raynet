@@ -14,8 +14,7 @@ from ray.rllib.core.columns import Columns
 class OmnetGymApiEnv(MultiAgentEnv):
     def __init__(self, env_config):
         super().__init__()
-        sys.path.insert(0, os.path.join(os.getenv("RAYNET_PATH"), "build"))
-        from omnetbind import OmnetGymApi
+        from raynet.omnetBind import OmnetGymApi
         
         self.runner = OmnetGymApi()
         self.env_config = env_config

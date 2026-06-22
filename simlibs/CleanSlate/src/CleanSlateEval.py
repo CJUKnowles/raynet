@@ -31,8 +31,7 @@ class OmnetGymApiEnv(gym.Env):
         - This mostly involves setting spcaes (bounds, shapes, types) for actions and observations.
         - These bounds are needed for RL algorithms provided by RLlib- They limit the problem space and are also used for normalization.
         """
-        sys.path.insert(0, os.path.join(os.getenv('RAYNET_PATH'), "build"))
-        from omnetbind import OmnetGymApi
+        from raynet.omnetBind import OmnetGymApi
         self.runner = OmnetGymApi()
         
         self.env_config = env_config

@@ -121,10 +121,10 @@ def prepare_training_ini(args, rng, worker_id):
 
     # Replace the training placeholders and write the generated INI.
     ini_string = original_ini_file.read_text(encoding="utf-8")
-    ini_string = ini_string.replace("HOME", os.getenv("HOME", str(Path.home())))
-    ini_string = ini_string.replace("ORCA_BOTTLENECK_BW", f"{bw}Mbps")
-    ini_string = ini_string.replace("ORCA_BASE_RTT", f"{base_rtt / 2.0}ms")
-    ini_string = ini_string.replace("ORCA_BOTTLENECK_BUFFER_SIZE", f"{buffer_size_bits}b")
+    ini_string = ini_string.replace("!HOME!", os.getenv("HOME", str(Path.home())))
+    ini_string = ini_string.replace("!BW!", f"{bw}Mbps")
+    ini_string = ini_string.replace("!DELAY!", f"{base_rtt / 2.0}ms")
+    ini_string = ini_string.replace("!QSIZE!", f"{buffer_size_bits}b")
     worker_ini_file.write_text(ini_string, encoding="utf-8")
     return worker_ini_file
 

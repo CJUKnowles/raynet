@@ -174,6 +174,10 @@ if [ "$python_version" != "3.12" ]; then
 fi
 echo ""
 
+echo "Installing RayNet Python package into the virtual environment..."
+python -m pip install --no-build-isolation -e "$RAYNET_PATH" || exit 1
+echo "----------------------------------------------------------------------------------------------------------------"
+
 # Command/flags have been validated. Begin building here.
 # ----------------------------------------------------------------------------------------------------------------------------------
 
@@ -253,7 +257,7 @@ fi
 
 # Build raynet (release or debug)
 cd $RAYNET_PATH
-mkdir build 
+mkdir -p build
 cd build
 echo "Building RayNet..."
 echo "---------------------------------"

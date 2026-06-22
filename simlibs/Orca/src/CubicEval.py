@@ -26,8 +26,7 @@ import torch
 
 class OmnetGymApiEnv(gym.Env):
     def __init__(self,env_config):
-        sys.path.insert(0, os.path.join(os.getenv('RAYNET_PATH'), "build"))
-        from omnetbind import OmnetGymApi
+        from raynet.omnetBind import OmnetGymApi
         self.runner = OmnetGymApi()
         
         self.env_config = env_config
