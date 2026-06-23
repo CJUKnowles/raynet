@@ -9,6 +9,7 @@ episode over a JSON-lines control socket.
 
 import argparse
 import json
+import os
 import socket
 import traceback
 from pathlib import Path
@@ -60,6 +61,17 @@ def _recv(reader):
     return json.loads(line)
 
 
+# MARK: Logging Control -------------------------------------------------------------------------------------------
+def _silence_process_output():
+    """Redirect stdout/stderr away from external orchestrator logs."""
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull, 1)
+        os.dup2(devnull, 2)
+    finally:
+        os.close(devnull)
+
+
 # MARK: INI Materialization -------------------------------------------------------------------------------------
 def _create_ini_wrapper(episode):
     """Create an INI materializer for one Olympus-requested episode."""
@@ -74,19 +86,16 @@ def _create_ini_wrapper(episode):
     duration_s = None if episode.get("duration") is None else unitTools.to_seconds(episode.get("duration"))
     if duration_s is not None:
         wrapper.add_override("sim-time-limit", unitTools.format_seconds(duration_s))
-    # if iniTools.as_bool(episode.get("quiet"), True):
-    #     wrapper.add_override("debug-on-errors", "false")
-    #     wrapper.add_override("**.printDebugMessages", "false")
-    #     wrapper.add_override("cmdenv-silent", "true")
+    if iniTools.as_bool(episode.get("quiet"), True):
+        wrapper.add_override("debug-on-errors", "false")
+        wrapper.add_override("**.printDebugMessages", "false")
+        wrapper.add_override("cmdenv-silent", "true")
     return wrapper
 
 
 # MARK: Critical Runner Control ---------------------------------------------------------------------------------
 def run(control_fd):
     """Own one OMNeT++ simulation and serve commands until it finishes."""
-    # Import OmnetBind inside the process that owns the simulator.
-    from raynet.omnetBind import OmnetGymApi
-
     # Create JSON-lines streams on the inherited control socket.
     sock = socket.socket(fileno=control_fd)
     reader = sock.makefile("r", encoding="utf-8", newline="\n")
@@ -104,6 +113,14 @@ def run(control_fd):
         episode = message.get("episode") or {}
         section = str(episode.get("section") or episode.get("config_section") or "General")
         observation_fields = episode.get("observation_fields") or episode.get("raw_observation_fields")
+
+        # Quiet runs must not leak simulator stdout/stderr into Olympus logs.
+        if iniTools.as_bool(episode.get("quiet"), True):
+            _silence_process_output()
+
+        # Import OmnetBind inside the process that owns the simulator.
+        from raynet.omnetBind import OmnetGymApi
+
         ini_wrapper = _create_ini_wrapper(episode)
         ini_variant = str(ini_wrapper.materialize_ini())
 
@@ -136,7 +153,6 @@ def run(control_fd):
                 _send(writer, result)
                 terminateds = result["terminateds"]
                 info = result["info"]
-                print(result['info'])
                 # Manual shutdown (internal step limit). Shutdown + Cleanup.
                 if terminateds.get("__all__", False):
                     runner.shutdown()
