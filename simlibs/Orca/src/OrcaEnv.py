@@ -129,15 +129,28 @@ class OrcaEnv:
     This is synonymous with a Ray worker. In the future, Ray may be reintegrated without RLlib.
     """
 
-    simulator_obs_dim = 15
+    simulator_obs_dim = 17
     raw_obs_dim = 7
     action_dim = 1
-    delay_index = 0
-    samples_index = 2
-    cwnd_index = 5
-    srtt_index = 8
-    ssthresh_index = 9
-    min_rtt_index = 14
+    raw_observation_fields = (
+        "delay_ms",
+        "avg_thr",
+        "count",
+        "interval_s",
+        "target",
+        "cwnd",
+        "pacing_rate",
+        "loss_rate",
+        "srtt_us",
+        "snd_ssthresh",
+        "packets_out",
+        "retrans_out",
+        "max_packets_out",
+        "mss",
+        "min_rtt_ms",
+        "avg_urtt",
+        "min_rtt",
+    )
     default_delay_margin_coefficient = 1.25
     default_loss_coefficient = 5.0
 
@@ -257,16 +270,17 @@ class OrcaEnv:
             if agent_id in IGNORED_AGENT_IDS:
                 continue
             self.pending_agent_ids.add(agent_id)
-            observation = np.asarray(observation, dtype=np.float32)
+            observation = self._raw_observation_dict(observation)
 
             # Validate the raw shape and create a zero-padded history for new agents.
-            if observation.size != self.simulator_obs_dim:
-                raise ValueError(f"Expected {self.simulator_obs_dim} raw Orca metrics for {agent_id}, got {observation.size}")
+            missing_fields = set(self.raw_observation_fields) - set(observation)
+            if missing_fields:
+                raise ValueError(f"Missing raw Orca metrics for {agent_id}: {sorted(missing_fields)}")
             if agent_id not in self.obs_histories:
                 self.obs_histories[agent_id] = np.zeros((self.stacking, self.raw_obs_dim), dtype=np.float32,)
 
             # Permanently enable learner interaction after this agent first exits Cubic slow start.
-            if self.observation_has_valid_rtt(observation) and observation[self.cwnd_index] > observation[self.ssthresh_index]:
+            if self.observation_has_valid_rtt(observation) and observation["cwnd"] > observation["snd_ssthresh"]:
                 self.learner_ready_agent_ids.add(agent_id)
 
             # Omit pre-handoff and invalid observations so Cubic remains responsible for startup.
@@ -292,14 +306,14 @@ class OrcaEnv:
             return np.zeros(self.raw_obs_dim, dtype=np.float32), 0.0
 
         # Read the raw metrics used by the original Orca state calculation.
-        throughput = float(raw_observation[1])
-        samples = float(raw_observation[2])
-        interval_duration = float(raw_observation[3])
-        cwnd = float(raw_observation[5])
-        pacing_rate = float(raw_observation[6])
-        loss_rate = float(raw_observation[7])
-        srtt = float(raw_observation[8])
-        min_rtt = float(raw_observation[14])
+        throughput = float(raw_observation["avg_thr"])
+        samples = float(raw_observation["count"])
+        interval_duration = float(raw_observation["interval_s"])
+        cwnd = float(raw_observation["cwnd"])
+        pacing_rate = float(raw_observation["pacing_rate"])
+        loss_rate = float(raw_observation["loss_rate"])
+        srtt = float(raw_observation["srtt_us"])
+        min_rtt = float(raw_observation["min_rtt"])
 
         # Track the maximum throughput independently for each Orca flow.
         max_throughput = max(self.max_throughputs.get(agent_id, 0.0), throughput)
@@ -339,7 +353,19 @@ class OrcaEnv:
 
     def observation_has_valid_rtt(self, observation):
         """Return whether a raw Orca observation contains valid RTT data."""
-        return bool(observation[self.delay_index] > 0.0 and observation[self.samples_index] > 0.0 and observation[self.srtt_index] > 0.0 and observation[self.min_rtt_index] > 0.0)
+        return bool(observation["delay_ms"] > 0.0 and observation["count"] > 0.0 and observation["srtt_us"] > 0.0 and observation["min_rtt"] > 0.0)
+
+    def _raw_observation_dict(self, observation):
+        """Return Orca raw metrics as an Olympus-compatible named mapping."""
+        if isinstance(observation, dict):
+            return {str(key): float(value) for key, value in observation.items()}
+        values = np.asarray(observation, dtype=np.float32)
+        if values.size != self.simulator_obs_dim:
+            raise ValueError(f"Expected {self.simulator_obs_dim} raw Orca metrics, got {values.size}")
+        return {
+            name: float(values[index])
+            for index, name in enumerate(self.raw_observation_fields)
+        }
 
     def _spawn_episode_process(self, ini_path, section_name):
         """Spawn a simulation process for one episode."""

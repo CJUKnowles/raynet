@@ -46,6 +46,18 @@ class AstraeaEnv:
     packets_out_index = 7
     pacing_rate_index = 8
     retrans_out_index = 9
+    raw_observation_fields = (
+        "avg_thr",
+        "max_tput",
+        "avg_urtt",
+        "min_rtt",
+        "srtt_us",
+        "cwnd",
+        "loss_rate",
+        "packets_out",
+        "pacing_rate",
+        "retrans_out",
+    )
     paper_mss_bytes = 1460.0
     reward_delay_coefficient = 0.5
     throughput_weight = 0.1
@@ -271,7 +283,7 @@ class AstraeaEnv:
         for agent_id, observation in observations.items():
             if agent_id in IGNORED_AGENT_IDS:
                 continue
-            raw = np.asarray(observation, dtype=np.float32)
+            raw = self._raw_observation_array(observation)
             if raw.shape != (self.raw_obs_dim,):
                 raise ValueError(f"{agent_id} returned observation shape {raw.shape}; expected ({self.raw_obs_dim},)")
 
@@ -315,6 +327,15 @@ class AstraeaEnv:
         )
         state[[1, 2, 3, 8]] = np.minimum(state[[1, 2, 3, 8]], 2.0)
         return np.nan_to_num(state, nan=0.0, posinf=0.0, neginf=0.0)
+
+    def _raw_observation_array(self, observation):
+        """Return Astraea raw metrics in the learner's canonical order."""
+        if isinstance(observation, dict):
+            return np.asarray(
+                [float(observation[name]) for name in self.raw_observation_fields],
+                dtype=np.float32,
+            )
+        return np.asarray(observation, dtype=np.float32)
 
     def _write_worker_ini(self):
         """Create one randomized INI variant for a training episode."""

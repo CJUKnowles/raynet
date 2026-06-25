@@ -9,6 +9,8 @@
 #include <cstddef>
 #include <variant>
 #include <cstdint>
+#include <initializer_list>
+#include <string>
 
 
 
@@ -31,6 +33,8 @@ public:
     using Field = std::variant<int64_t, double, bool>;
 
     explicit Observation(std::vector<Field> v) : data_(std::move(v)) {}
+    explicit Observation(std::vector<std::pair<std::string, Field>> v) { setNamedData(v); }
+    Observation(std::initializer_list<std::pair<std::string, Field>> v) { setNamedData(v); }
 
     // Construct from single numeric value
     template <typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value>::type>
@@ -51,9 +55,12 @@ public:
     std::size_t size() const noexcept { return data_.size(); }
     const std::vector<Field>& data() const noexcept { return data_; }
     std::vector<Field>& data() noexcept { return data_; }
+    const std::vector<std::string>& names() const noexcept { return names_; }
+    bool hasNames() const noexcept { return names_.size() == data_.size(); }
 
     const Field& at(std::size_t i) const { return data_.at(i); }
     Field& at(std::size_t i) { return data_.at(i); }
+    const std::string& nameAt(std::size_t i) const { return names_.at(i); }
 
     // Convenience: get numeric value as double (integrals promoted)
     double asDouble(std::size_t i) const {
@@ -72,6 +79,16 @@ public:
     auto end() const noexcept { return data_.end(); }
 
 private:
+    template <typename Fields>
+    void setNamedData(const Fields &fields) {
+        data_.reserve(fields.size());
+        names_.reserve(fields.size());
+        for (const auto &field : fields) {
+            names_.push_back(field.first);
+            data_.push_back(field.second);
+        }
+    }
+
     template <typename T>
     void pushValue(T v) {
         if constexpr (std::is_integral<T>::value && !std::is_same<T, bool>::value) {
@@ -92,6 +109,7 @@ private:
     }
 
     std::vector<Field> data_;
+    std::vector<std::string> names_;
 };
 
 } // namespace rl

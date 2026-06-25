@@ -124,16 +124,19 @@ std::optional<ObsType> Astraea::computeObservation(){
     scheduleNextStep(this->fixedIntervalDuration);
 
     return ObsType({
-        throughputBytesPerSecond,
-        this->astraeaMaxThroughput,
-        averageRttUs,
-        minRttUs,
-        srttUs,
-        cwndPackets,
-        this->astraeaLossRate,
-        packetsOut,
-        pacingRateBytesPerSecond,
-        retransOutPackets,
+        {"avg_thr", throughputBytesPerSecond},
+        {"throughput", throughputBytesPerSecond},
+        {"max_tput", this->astraeaMaxThroughput},
+        {"avg_urtt", averageRttUs},
+        {"delay_us", averageRttUs},
+        {"min_rtt", minRttUs},
+        {"min_rtt_us", minRttUs},
+        {"srtt_us", srttUs},
+        {"cwnd", cwndPackets},
+        {"loss_rate", this->astraeaLossRate},
+        {"packets_out", packetsOut},
+        {"pacing_rate", pacingRateBytesPerSecond},
+        {"retrans_out", retransOutPackets},
     });
 }
 

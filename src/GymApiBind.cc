@@ -12,6 +12,8 @@ PYBIND11_MODULE(omnetbind, m) {
     py::class_<rl::Observation>(m, "Observation")
         .def(py::init<>())
         .def("size", &rl::Observation::size)
+        .def("has_names", &rl::Observation::hasNames)
+        .def("names", &rl::Observation::names)
         .def("__len__", &rl::Observation::size)
         .def("__getitem__", [](const rl::Observation& obs, std::size_t i) -> py::object {
             const auto& field = obs.at(i);
@@ -25,6 +27,19 @@ PYBIND11_MODULE(omnetbind, m) {
                 result.append(std::visit([](auto&& v) -> py::object {
                     return py::cast(v);
                 }, field));
+            }
+            return result;
+        })
+        .def("to_dict", [](const rl::Observation& obs) {
+            py::dict result;
+            if (!obs.hasNames()) {
+                return result;
+            }
+            for (std::size_t i = 0; i < obs.size(); ++i) {
+                const auto& field = obs.at(i);
+                result[py::str(obs.nameAt(i))] = std::visit([](auto&& v) -> py::object {
+                    return py::cast(v);
+                }, field);
             }
             return result;
         });

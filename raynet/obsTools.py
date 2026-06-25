@@ -10,6 +10,17 @@ def observation_to_list(observation):
     return list(observation)
 
 
+def observation_to_dict(observation):
+    """Convert one native observation object to a plain Python dict if labelled."""
+    if isinstance(observation, dict):
+        return dict(observation)
+    if hasattr(observation, "to_dict"):
+        raw = observation.to_dict()
+        if raw:
+            return dict(raw)
+    return None
+
+
 def _cast_value(value, value_type):
     if value_type is None:
         return value
@@ -23,23 +34,32 @@ def _field_value(values, field):
 
 def observation_to_raw_dict(observation, fields, *, value_type=None):
     """Convert one observation into the named raw-info dict requested by a caller."""
-    if isinstance(observation, dict):
+    raw_observation = observation_to_dict(observation)
+    if raw_observation is not None and not fields:
         return {
             str(key): _cast_value(value, value_type)
-            for key, value in observation.items()
+            for key, value in raw_observation.items()
         }
 
-    values = observation_to_list(observation)
+    values = None
     raw = {}
     for field in fields or []:
         if isinstance(field, str):
             name = field
-            value = values[len(raw)]
+            if raw_observation is not None and name in raw_observation:
+                value = raw_observation[name]
+            else:
+                values = observation_to_list(observation) if values is None else values
+                value = values[len(raw)]
             raw[name] = _cast_value(value, value_type)
             continue
 
         name = str(field["name"])
-        value = _field_value(values, field)
+        if raw_observation is not None and name in raw_observation:
+            value = raw_observation[name]
+        else:
+            values = observation_to_list(observation) if values is None else values
+            value = _field_value(values, field)
         raw[name] = _cast_value(value, value_type)
         for alias in field.get("aliases") or []:
             raw[str(alias)] = _cast_value(value, value_type)
@@ -52,7 +72,13 @@ def serialize_observations(observations, *, value_type=None, key_type=None,
     serialized = {}
     for agent_id, observation in (observations or {}).items():
         key = key_type(agent_id) if key_type is not None else agent_id
-        if fields:
+        raw_observation = observation_to_dict(observation)
+        if raw_observation is not None and not fields:
+            serialized[key] = {
+                str(name): _cast_value(value, value_type)
+                for name, value in raw_observation.items()
+            }
+        elif fields:
             serialized[key] = observation_to_raw_dict(
                 observation, fields, value_type=value_type)
         else:
