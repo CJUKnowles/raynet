@@ -68,6 +68,21 @@ void Astraea::established(bool active) {
     }
 }
 
+void Astraea::connectionClosed() {
+    if (debug) cout << "\t" << stringId << ": connectionClosed()" << endl;
+    TcpPacedNoCC::connectionClosed();
+
+    // Temporary flow-stop guard: prevent closed flows from keeping a usable cwnd.
+    if (state) {
+        state->snd_cwnd = 0;
+    }
+
+    done = true;
+    if (isActive) {
+        RLInterface::terminate();
+    }
+}
+
 // Return the raw transport metrics used by the original Astraea environment wrapper.
 std::optional<ObsType> Astraea::computeObservation(){
     if (debug) cout << "\t" << stringId << " computeObservation()" << endl;

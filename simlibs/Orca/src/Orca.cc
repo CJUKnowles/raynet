@@ -68,6 +68,21 @@ void Orca::established(bool active) {
     }
 }
 
+void Orca::connectionClosed() {
+    if (debug) cout << "\tOrca: connectionClosed()" << endl;
+    TcpCubic::connectionClosed();
+
+    // Temporary flow-stop guard: prevent closed flows from keeping a usable cwnd.
+    if (state) {
+        state->snd_cwnd = 0;
+    }
+
+    done = true;
+    if (isActive) {
+        RLInterface::terminate();
+    }
+}
+
 // Return the raw transport metrics used by the original Orca environment wrapper.
 std::optional<ObsType> Orca::computeObservation(){
     if (debug) cout << "\t" << stringId << " computeObservation()" << endl; 

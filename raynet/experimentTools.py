@@ -60,6 +60,10 @@ def format_rtt_as_link_delay(value):
     return unitTools.format_ms(as_ms(value) / 2.0)
 
 
+def format_ms(value):
+    return unitTools.format_ms(as_ms(value))
+
+
 def format_seconds(value):
     return unitTools.format_seconds(as_seconds(value))
 
@@ -115,7 +119,7 @@ def _set_channel(at_elem, *, module, gate, param, value):
     )
 
 
-def _add_dumbbell_link_event(root, *, event_time, bw, delay):
+def _add_dumbbell_link_event(root, *, event_time, bw, delay, per_flow_delays=None):
     at_elem = ElementTree.SubElement(root, "at", {"t": format_seconds(event_time)})
 
     # Forward data traffic is shaped on the router1 -> router2 bottleneck.
@@ -127,8 +131,9 @@ def _add_dumbbell_link_event(root, *, event_time, bw, delay):
         value=format_mbps(bw),
     )
 
-    # RTT comes from both bottleneck directions, so each direction gets RTT / 2.
-    link_delay = format_rtt_as_link_delay(delay)
+    # Standard envs split RTT across the bottleneck. Inter-RTT envs put each
+    # flow's one-way delay on its own sender access link instead.
+    link_delay = "0ms" if per_flow_delays else format_rtt_as_link_delay(delay)
     for module in ("router1", "router2"):
         _set_channel(
             at_elem,
@@ -138,13 +143,30 @@ def _add_dumbbell_link_event(root, *, event_time, bw, delay):
             value=link_delay,
         )
 
+    if per_flow_delays:
+        for flow_id, flow_delay in enumerate(per_flow_delays):
+            _set_channel(
+                at_elem,
+                module=f"client[{flow_id}]",
+                gate="pppg$o[0]",
+                param="delay",
+                value=format_ms(flow_delay),
+            )
 
-def build_dumbbell_scenario(*, bw, delay, link_schedule=None, include_initial=True):
+
+def build_dumbbell_scenario(*, bw, delay, link_schedule=None, include_initial=True,
+                            per_flow_delays=None):
     """Build a scenario tree for immediate Dumbbell bottleneck reconfiguration."""
     root = ElementTree.Element("scenario")
 
     if include_initial:
-        _add_dumbbell_link_event(root, event_time=0, bw=bw, delay=delay)
+        _add_dumbbell_link_event(
+            root,
+            event_time=0,
+            bw=bw,
+            delay=delay,
+            per_flow_delays=per_flow_delays,
+        )
 
     for event in resolve_link_schedule(link_schedule, bw=bw, delay=delay):
         _add_dumbbell_link_event(
@@ -152,13 +174,15 @@ def build_dumbbell_scenario(*, bw, delay, link_schedule=None, include_initial=Tr
             event_time=event["t"],
             bw=event["bw"],
             delay=event["delay"],
+            per_flow_delays=per_flow_delays,
         )
 
     ElementTree.indent(root, space="    ")
     return ElementTree.ElementTree(root)
 
 
-def write_dumbbell_scenario(path, *, bw, delay, link_schedule=None, include_initial=True):
+def write_dumbbell_scenario(path, *, bw, delay, link_schedule=None, include_initial=True,
+                            per_flow_delays=None):
     """Write a Dumbbell scenario XML file and return the path."""
     path = Path(path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -167,6 +191,7 @@ def write_dumbbell_scenario(path, *, bw, delay, link_schedule=None, include_init
         delay=delay,
         link_schedule=link_schedule,
         include_initial=include_initial,
+        per_flow_delays=per_flow_delays,
     )
     tree.write(path, encoding="utf-8", xml_declaration=False)
     return path
@@ -262,6 +287,7 @@ class ExperimentWrapper:
         delay = episode.get("delay")
         flows = int(episode.get("flows", episode.get("n", 1)))
         bdp_mult = episode.get("bdp_mult", 1.0)
+        per_flow_delays = episode.get("per_flow_delays")
 
         replacements = {
             "home": episode.get("home"),
@@ -272,7 +298,10 @@ class ExperimentWrapper:
         if bw is not None:
             replacements["bw"] = format_mbps(bw)
         if delay is not None:
-            replacements["delay"] = format_rtt_as_link_delay(delay)
+            if per_flow_delays:
+                replacements["delay"] = "0ms"
+            else:
+                replacements["delay"] = format_rtt_as_link_delay(delay)
         if episode.get("qsize") is not None:
             replacements["qsize"] = str(episode["qsize"])
         elif bw is not None and delay is not None:
@@ -301,14 +330,16 @@ class ExperimentWrapper:
 
     def _scenario_path(self, target_dir):
         episode = self.episode
+        per_flow_delays = episode.get("per_flow_delays")
         has_schedule = "link_schedule" in episode or "link_schedules" in episode
+        has_per_flow_delays = bool(per_flow_delays)
         schedule = episode.get("link_schedule")
         if schedule is None:
             schedule = episode.get("link_schedules")
         existing = episode.get("scenario_path") or episode.get("scenario")
-        if existing and not has_schedule:
+        if existing and not has_schedule and not has_per_flow_delays:
             return str(Path(existing).expanduser())
-        if not has_schedule:
+        if not has_schedule and not has_per_flow_delays:
             return ""
 
         if episode.get("bw") is None or episode.get("delay") is None:
@@ -328,6 +359,7 @@ class ExperimentWrapper:
             bw=episode["bw"],
             delay=episode["delay"],
             link_schedule=schedule,
+            per_flow_delays=per_flow_delays,
         )
         self.generated_paths.append(path)
         return str(path)
@@ -357,6 +389,7 @@ def add_episode_cli_args(parser):
     parser.add_argument("--protocol", help="RayNet TCP protocol name")
     parser.add_argument("--bdp-mult", type=float, help="Queue size in BDPs")
     parser.add_argument("--link-schedule-json", help="Inline JSON link schedule")
+    parser.add_argument("--per-flow-delays-json", help="Inline JSON per-flow delays")
 
 
 def episode_from_args(args):
@@ -373,6 +406,8 @@ def episode_from_args(args):
     episode.update({key: value for key, value in updates.items() if value is not None})
     if args.link_schedule_json:
         episode["link_schedule"] = json.loads(args.link_schedule_json)
+    if args.per_flow_delays_json:
+        episode["per_flow_delays"] = json.loads(args.per_flow_delays_json)
     return episode
 
 
@@ -389,6 +424,7 @@ def scenario_cli(default_output):
         bw=episode["bw"],
         delay=episode["delay"],
         link_schedule=episode.get("link_schedule"),
+        per_flow_delays=episode.get("per_flow_delays"),
     )
     print(Path(args.output).expanduser())
 

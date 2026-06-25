@@ -71,6 +71,21 @@ void CleanSlate::established(bool active) {
     }
 }
 
+void CleanSlate::connectionClosed() {
+    if (debug) cout << "\tCleanSlate: connectionClosed()" << endl;
+    TcpPacedNoCC::connectionClosed();
+
+    // Temporary flow-stop guard: prevent closed flows from keeping a usable cwnd.
+    if (state) {
+        state->snd_cwnd = 0;
+    }
+
+    done = true;
+    if (isActive) {
+        RLInterface::terminate();
+    }
+}
+
 // Return an observation to the broker, based on the current state
 std::optional<ObsType> CleanSlate::computeObservation(){
     if (debug) cout << "\tCleanSlate: computeObservation()" << endl; 

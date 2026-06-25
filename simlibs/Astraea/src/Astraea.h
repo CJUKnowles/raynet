@@ -52,6 +52,7 @@ public: // General use
     virtual void receivedDataAck(uint32_t firstSeqAcked) override;
     virtual void receivedDuplicateAck() override;
     virtual void established(bool active) override; // Called when the TCP CONNECTION is established (some time AFTER startup!)
+    virtual void connectionClosed() override;
 
     // RLInterface Overrides (Required by the RL agent)
     virtual void initialize() override; // This also overrides the TcpNewReno initialize(). Be sure to super() both of them.
