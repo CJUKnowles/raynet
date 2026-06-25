@@ -121,6 +121,7 @@ void Cmdrlenv::initialiseEnvironment(int argc, char *argv[],cConfiguration *conf
                 stoppedWithException(e);
                 notifyLifecycleListeners(LF_ON_SIMULATION_ERROR);
                 displayException(e);
+                throw;
             }
 
     }

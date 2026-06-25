@@ -11,10 +11,11 @@ import argparse
 import json
 import os
 import socket
+import tempfile
 import traceback
 from pathlib import Path
 
-from raynet import iniTools, obsTools, unitTools
+from raynet import experimentTools, iniTools, obsTools, unitTools
 
 # MARK: Simulator Step Handling ---------------------------------------------------------------------------------
 def _serialize_observations(observations, observation_fields):
@@ -77,9 +78,13 @@ def _create_ini_wrapper(episode):
     """Create an INI materializer for one Olympus-requested episode."""
     ini_path = Path(str(episode["ini_path"])).expanduser()
     ini_name = str(episode.get("protocol") or episode.get("label") or "raynet").lower()
-    wrapper = iniTools.IniWrapper(template_path=ini_path, prefix=f"{ini_name}_")
+    wrapper = experimentTools.create_experiment_wrapper(
+        ini_path,
+        episode,
+        prefix=f"{ini_name}_",
+    )
 
-    # The caller owns every template replacement. RayNet only generates the INI.
+    # The caller owns semantic values. RayNet owns how they become INI/XML files.
     wrapper.add_replacements(episode.get("replacements") or episode.get("template_replacements"))
     wrapper.add_overrides(episode.get("overrides"))
 
@@ -102,6 +107,7 @@ def run(control_fd):
     writer = sock.makefile("w", encoding="utf-8", newline="\n")
     runner = None
     ini_wrapper = None
+    ini_workdir = None
     ini_variant = None
     cleaned = False
 
@@ -122,7 +128,8 @@ def run(control_fd):
         from raynet.omnetBind import OmnetGymApi
 
         ini_wrapper = _create_ini_wrapper(episode)
-        ini_variant = str(ini_wrapper.materialize_ini())
+        ini_workdir = tempfile.TemporaryDirectory(prefix="raynet_olympus_")
+        ini_variant = str(ini_wrapper.materialize_ini(directory=ini_workdir.name))
 
         # Start the simulator and return its initial observations.
         runner = OmnetGymApi()
@@ -199,6 +206,8 @@ def run(control_fd):
                 pass
         if ini_wrapper is not None:
             ini_wrapper.cleanup()
+        if ini_workdir is not None:
+            ini_workdir.cleanup()
         try:
             reader.close()
             writer.close()
