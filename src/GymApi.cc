@@ -140,7 +140,12 @@ std::tuple< std::unordered_map<std::string, ObsType>,
         obss,
         rewards,
         dones,
-        { {"simDone", simDone ? 1.0 : 0.0}, {"time_s", simTime()} }
+        {
+            {"simDone", simDone ? 1.0 : 0.0},
+            {"time_s", simTime()},
+            {"step_id", (double)target->getStepId()},
+            {"group_step", (double)target->getStepId()},
+        }
     };
     return returnTuple;
 }

@@ -16,9 +16,9 @@ Define_Module(Broker);
 void Broker::initialize()
 {
     std::string obsModeStr = par("obsCollectionMode").stringValue();
-    if (obsModeStr == "IMMEDIATE") obsCollectionMode = IMMEDIATE;
+    if (obsModeStr == "INDEPENDENT") obsCollectionMode = INDEPENDENT;
     else if (obsModeStr == "GROUPED") obsCollectionMode = GROUPED;
-    else if (obsModeStr == "INTERVALED") obsCollectionMode = INTERVALED;
+    else if (obsModeStr == "INTERVAL") obsCollectionMode = INTERVAL;
     else throw cRuntimeError("Invalid mode: %s", obsModeStr.c_str());
     cout << "Broker ObsCollectionMode: " << obsModeStr << endl;
 
@@ -53,6 +53,11 @@ void Broker::finish(){
     }
     delete EOSmsg;
 
+    if (STEPALLmsg->isScheduled()) {
+        cancelEvent(STEPALLmsg);
+    }
+    delete STEPALLmsg;
+
     if (simThroughputProbeMsg->isScheduled()) {
         cancelEvent(simThroughputProbeMsg);
     }
@@ -73,8 +78,23 @@ void Broker::handleMessage(cMessage *msg)
     std::string messageName(msg->getName());
     // Upper layer has requested a step to take place
     if (messageName.find("STEP-") == 0) {
-        std::string agentID = messageName.substr(messageName.find("-")+1);
-        emit(this->obsRequestSig, agentID.c_str()); 
+        // INDEPENDENT MODE - STEP events are unique to each agent. Parse the agent name and emit a obsRequestSig to that agent only.
+        if (obsCollectionMode == INDEPENDENT) {   
+            std::string agentID = messageName.substr(messageName.find("-")+1);
+            emit(this->obsRequestSig, agentID.c_str()); 
+        // INTERVAL MODE - STEP events are shared among all agents. Emit obsRequestSig to all registered agents and schedule the next STEP.
+        } else if (obsCollectionMode == INTERVAL) {
+            // Emit an observation request to all registered agents
+            for (auto &it : activeAgents) {
+                const std::string &agentID = it.first;
+                emit(this->obsRequestSig, agentID.c_str());
+            }
+            // Schedule the next STEP-ALL event after the next fixedIntervalDuration seconds, then schedule an immediate EOS to trigger observation collection
+            if (this->fixedIntervalDuration > SIMTIME_ZERO && !this->STEPALLmsg->isScheduled()) {
+                scheduleAfter(this->fixedIntervalDuration, this->STEPALLmsg);
+                this->scheduleEndOfStep();
+            }
+        }
     } else if (messageName == "EOS") {
         EV_TRACE << "EOS event detected, doing nothing. " << std::endl;
     } else if (messageName == "SIMTHROUGHPUT-PROBE") {
@@ -86,6 +106,7 @@ void Broker::handleMessage(cMessage *msg)
 void Broker::scheduleEndOfStep()
 {
     if (!this->EOSmsg->isScheduled()) {
+        this->stepId++;
         scheduleAt(simTime(), this->EOSmsg);
     }
 }
@@ -116,28 +137,33 @@ void Broker::recordSimThroughputProbe()
     Adds/removes agents from the list of active agents, and schedules STEP events as requested.
     TODO: Perform registration with a signal that does not include simtime? Currently unused.
 */
-void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char *value, cObject *obj){
+void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char *value, cObject *obj) {
     Enter_Method("schedule a step event(self message)"); //need this for direct messaging. Allows us to call scheduleMessage from the sender(ownership).
     const char *signalName = getSignalName(signalID);
 
     if (strcmp(signalName, "registerAgent") == 0) {
-        // BROKER PORTION ---------------------------------------------------------------------
         EV_TRACE << "Registering new agent with Broker..." << std::endl;
-
-        
         std::string id(value);
-
         EV_TRACE << "Agent ID: " << id << std::endl;
 
-        // Creating details for new agent
+        // Create details for new agent
         BrokerDetails details;
         details.rlId = id;
         details.isReset = true;
         details.STEPmsg = new cMessage((std::string("STEP-") + id).c_str()); // Name of the message should match STEP-<ID>
 
-        //Inserting new agent details into map (but do not schedule it yet!)
+        // Insert new agent details into map
         activeAgents.insert({id,details});
         emit(this->numAgentsSig, (uintval_t) this->activeAgents.size(), obj); // Emit the new total number of agents, so the agents can keep track and name themselves
+        
+        // INTERVAL MODE - STEP events are shared among all agents. If not yet done, set the fixedIntervalDuration and schedule the first shared step.
+        if (obsCollectionMode == INTERVAL && !this->fixedIntervalDurationIsSet) {
+            this->fixedIntervalDuration = ((cSimTime*) obj)->simtime;
+            if (!this->STEPALLmsg->isScheduled()) {
+                scheduleAfter(this->fixedIntervalDuration, this->STEPALLmsg);
+            }
+            this->fixedIntervalDurationIsSet = true;
+        }
     } else if (strcmp(signalName, "unregisterAgent") == 0){
         //Get id
         std::string id(value);
@@ -152,7 +178,7 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
         }
         delete activeAgents[id].STEPmsg;
         // Schedule an EOS message for the specific agent.
-        if (this->obsCollectionMode == IMMEDIATE) {
+        if (this->obsCollectionMode == INDEPENDENT) {
             scheduleEndOfStep();
         }
         activeAgents.erase(id);
@@ -160,15 +186,18 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, const char 
         this->allAgentsDone = areAllAgentsDone();
         emit(this->numAgentsSig, (uintval_t) this->activeAgents.size(), obj); // Emit the new total number of agents, so the agents can keep track and name themselves
     } else if (strcmp(signalName, "modifyStepSize") == 0) {
-        // STEPPER: schedule a new step event
-        //Get id
         std::string id(value);
-
-        if(activeAgents[id].STEPmsg->isScheduled()){
-            cancelEvent(activeAgents[id].STEPmsg);
-            take(activeAgents[id].STEPmsg);
+        // INDEPENDENT MODE - STEP events are unique to each agent. Cancel and reschedule any existing STEP messages for the requesting agent.
+        if (obsCollectionMode == INDEPENDENT) {   
+            if(activeAgents[id].STEPmsg->isScheduled()) {
+                cancelEvent(activeAgents[id].STEPmsg);
+                take(activeAgents[id].STEPmsg);
+            }
+            scheduleAt(simTime() + ((cSimTime*) obj)->simtime, activeAgents[id].STEPmsg);
+        // INTERVAL MODE - STEP events are shared among all agents. Simply edit the fixedIntervalDuration and continue.
+        } else if (obsCollectionMode == INTERVAL) {
+            this->fixedIntervalDuration = ((cSimTime*) obj)->simtime;
         }
-        scheduleAt(simTime() + ((cSimTime*) obj)->simtime, activeAgents[id].STEPmsg);
     }
 }
 
@@ -201,13 +230,15 @@ void Broker::receiveSignal(cComponent *source, simsignal_t signalID, cObject *va
                 }
             }
 
-            // If obs collection mode is IMMEDIATE, then every STEP should immediately trigger observation collection via an EOS event
-            if (this->obsCollectionMode == IMMEDIATE) {
+            // If obs collection mode is INDEPENDENT, then every STEP should immediately trigger observation collection via an EOS event
+            if (this->obsCollectionMode == INDEPENDENT) {
                 scheduleEndOfStep();
             } else if (this->obsCollectionMode == GROUPED) {
                 if (this->areAllObsUncollected()) {
                     scheduleEndOfStep();
                 }
+            } else if (this->obsCollectionMode == INTERVAL) {
+                // Do nothing. INTERVAL mode triggers an EOS (obs collection) after each shared STEP, not after a given obsResponse.
             }
             EV_TRACE << simTime() <<" Scheduled end of step for " << id << "..." << std::endl;
         }
@@ -341,4 +372,8 @@ bool Broker::getDone(std::string id)
 
 bool Broker::getAllDone(){
     return allAgentsDone;
+}
+
+uint64_t Broker::getStepId(){
+    return stepId;
 }

@@ -59,8 +59,12 @@ protected:
   // Map of all agents. <agent_id, agent_current_info>
   std::unordered_map<std::string, BrokerDetails> activeAgents;
   bool allAgentsDone = false;
+  uint64_t stepId = 0;
 
   // Omnet signalling/scheduling stuff
+  simtime_t fixedIntervalDuration = SIMTIME_ZERO; // time, in seconds, between each shared STEP. Only used if obsCollectionMode==INTERVAL. Defined by first agent registration.
+  bool fixedIntervalDurationIsSet = false; // Set to true once the fixedIntervalDuration has been determined.
+  cMessage* STEPALLmsg = new cMessage((std::string("STEP-ALL")).c_str());
   cMessage* EOSmsg = new cMessage((std::string("EOS")).c_str());            // Event message signal an end-of-step, in which RayNet collects uncollected observations from the Broker.
   cMessage* simThroughputProbeMsg = new cMessage((std::string("SIMTHROUGHPUT-PROBE")).c_str());
   simtime_t simThroughputProbeInterval = SIMTIME_ZERO;
@@ -89,14 +93,15 @@ public:
   bool getDone(std::string id);
   std::unordered_map<std::string, bool> getDones();
   bool getAllDone();
+  uint64_t getStepId();
   bool areAllAgentsDone();
   bool areAllObsUncollected();
 
   // Parameters
   enum ObsCollectionMode {
-    IMMEDIATE,    // EOS events are scheduled immediately after every STEP event. Each step returns a single-entry observation dict like: {agent27: <1.1, 1.2, 3.1, 4>}
+    INDEPENDENT,    // EOS events are scheduled immediately after every STEP event. Each step returns a single-entry observation dict like: {agent27: <1.1, 1.2, 3.1, 4>}
     GROUPED,      // EOS events are scheduled only when all activeAgents have fresh observations. Good for agents that step simultaneously. Each observation dict contains entries for ALL active agents.
-    INTERVALED    // EOS events are scheduled at a configurable time interval. TODO: implement this lol
+    INTERVAL    // EOS events are scheduled at a configurable time interval.
   };
   enum ObsCollectionMode obsCollectionMode;
 };
