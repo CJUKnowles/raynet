@@ -33,6 +33,8 @@ def _serialize_info(info):
     """Format simulator metadata without changing timing semantics."""
     serialized = obsTools.info_dict(info)
     serialized["simDone"] = bool(serialized.get("simDone", False))
+    if "group_step" not in serialized and "step_id" in serialized:
+        serialized["group_step"] = serialized["step_id"]
     return serialized
 
 
@@ -270,6 +272,8 @@ def run(control_fd):
             "info": _serialize_info({
                 "simDone": False,
                 "time_s": runner.sim_time(),
+                "step_id": 0,
+                "group_step": 0,
             }),
             "ini_path": ini_variant,
             "section": section,
