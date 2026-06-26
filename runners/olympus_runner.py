@@ -10,6 +10,7 @@ episode over a JSON-lines control socket.
 import argparse
 import json
 import os
+import re
 import socket
 import tempfile
 import traceback
@@ -38,6 +39,8 @@ def _serialize_info(info):
 def _step_message(runner, actions, observation_fields):
     """Advance the simulator and format one step response."""
     observations, rewards, terminateds, info = runner.step(actions or {})
+    info = dict(info or {})
+    info.setdefault("time_s", runner.sim_time())
     return {
         "type": "step",
         "observations": _serialize_observations(observations, observation_fields),
@@ -45,6 +48,125 @@ def _step_message(runner, actions, observation_fields):
         "terminateds": obsTools.bool_dict(terminateds),
         "info": _serialize_info(info),
     }
+
+
+# MARK: Observation Plotting -------------------------------------------------------------------------------------
+def _safe_name(value):
+    """Return a filesystem-safe fragment for generated plot names."""
+    if value is None:
+        value = "raynet"
+    text = str(value).strip() or "raynet"
+    text = re.sub(r"[^A-Za-z0-9_.-]+", "_", text)
+    return text.strip("._") or "raynet"
+
+
+def _observation_plot_config(episode):
+    """Return normalized plot options from an episode config."""
+    raw = (
+        episode.get("observation_plots")
+        if "observation_plots" in episode
+        else episode.get("plot_observations")
+    )
+    if raw is None:
+        raw = episode.get("observation_plot")
+    if raw in (None, False):
+        return None
+
+    if isinstance(raw, dict):
+        enabled = iniTools.as_bool(raw.get("enabled", True), True)
+        options = dict(raw)
+    else:
+        enabled = iniTools.as_bool(raw, False)
+        options = {}
+    if not enabled:
+        return None
+
+    output_path = options.get("path") or options.get("output_path")
+    output_dir = options.get("dir") or options.get("output_dir")
+    if output_path:
+        path = Path(str(output_path)).expanduser()
+    else:
+        if output_dir:
+            directory = Path(str(output_dir)).expanduser()
+        else:
+            directory = Path(tempfile.gettempdir()) / "raynet_observation_plots"
+        protocol = _safe_name(episode.get("protocol") or episode.get("label"))
+        episode_id = _safe_name(episode.get("episode", "episode"))
+        slot_id = _safe_name(episode.get("slot", "slot"))
+        filename = options.get("filename")
+        if filename:
+            path = directory / str(filename)
+        else:
+            path = directory / f"{protocol}_ep{episode_id}_slot{slot_id}_observations.pdf"
+    return {"path": path}
+
+
+class ObservationTrace:
+    """Collect per-flow observations and render one metric per PDF page."""
+
+    def __init__(self, config):
+        self.path = Path(config["path"]).expanduser()
+        self.rows = []
+
+    def record(self, time_s, observations):
+        for agent_id, raw in sorted((observations or {}).items()):
+            if not isinstance(raw, dict):
+                continue
+            for name, value in sorted(raw.items()):
+                try:
+                    y = float(value)
+                except (TypeError, ValueError):
+                    continue
+                self.rows.append({
+                    "time_s": float(time_s),
+                    "agent_id": str(agent_id),
+                    "name": str(name),
+                    "value": y,
+                })
+
+    def write_pdf(self):
+        if not self.rows:
+            return None
+
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            from matplotlib.backends.backend_pdf import PdfPages
+        except BaseException:
+            return None
+
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        names = sorted({row["name"] for row in self.rows})
+        agents = sorted({row["agent_id"] for row in self.rows})
+
+        with PdfPages(self.path) as pdf:
+            for name in names:
+                fig, ax = plt.subplots(figsize=(11, 6))
+                for agent_id in agents:
+                    points = [
+                        row for row in self.rows
+                        if row["name"] == name and row["agent_id"] == agent_id
+                    ]
+                    if not points:
+                        continue
+                    points.sort(key=lambda row: row["time_s"])
+                    ax.plot(
+                        [row["time_s"] for row in points],
+                        [row["value"] for row in points],
+                        label=f"flow {agent_id}",
+                        linewidth=1.2,
+                    )
+                ax.set_title(name)
+                ax.set_xlabel("sim time (s)")
+                ax.set_ylabel(name)
+                ax.grid(True, alpha=0.25)
+                if len(agents) > 1:
+                    ax.legend(loc="best", fontsize=8)
+                fig.tight_layout()
+                pdf.savefig(fig)
+                plt.close(fig)
+        return str(self.path)
 
 
 # MARK: IPC Serialization ---------------------------------------------------------------------------------------
@@ -109,6 +231,7 @@ def run(control_fd):
     ini_wrapper = None
     ini_workdir = None
     ini_variant = None
+    observation_trace = None
     cleaned = False
 
     try:
@@ -119,6 +242,9 @@ def run(control_fd):
         episode = message.get("episode") or {}
         section = str(episode.get("section") or episode.get("config_section") or "General")
         observation_fields = episode.get("observation_fields") or episode.get("raw_observation_fields")
+        plot_config = _observation_plot_config(episode)
+        if plot_config is not None:
+            observation_trace = ObservationTrace(plot_config)
 
         # Quiet runs must not leak simulator stdout/stderr into Olympus logs.
         if iniTools.as_bool(episode.get("quiet"), True):
@@ -135,9 +261,12 @@ def run(control_fd):
         runner = OmnetGymApi()
         runner.initialise(ini_variant, section)
         observations = runner.reset()
+        serialized_observations = _serialize_observations(observations, observation_fields)
+        if observation_trace is not None:
+            observation_trace.record(runner.sim_time(), serialized_observations)
         _send(writer, {
             "type": "reset",
-            "observations": _serialize_observations(observations, observation_fields),
+            "observations": serialized_observations,
             "info": _serialize_info({
                 "simDone": False,
                 "time_s": runner.sim_time(),
@@ -157,26 +286,52 @@ def run(control_fd):
                     message.get("actions") or {},
                     observation_fields,
                 )
-                _send(writer, result)
+                if observation_trace is not None:
+                    observation_trace.record(
+                        result["info"].get("time_s", runner.sim_time()),
+                        result["observations"],
+                    )
                 terminateds = result["terminateds"]
                 info = result["info"]
                 # Manual shutdown (internal step limit). Shutdown + Cleanup.
                 if terminateds.get("__all__", False):
+                    path = (
+                        observation_trace.write_pdf()
+                        if observation_trace is not None else None
+                    )
+                    if path:
+                        info["observation_plot"] = path
+                    _send(writer, result)
                     runner.shutdown()
                     runner.cleanup()
                     cleaned = True
                     return 0
                 # Simulation automatically shut down. Just cleanup.
                 if info.get("simDone", False):
+                    path = (
+                        observation_trace.write_pdf()
+                        if observation_trace is not None else None
+                    )
+                    if path:
+                        info["observation_plot"] = path
+                    _send(writer, result)
                     runner.cleanup()
                     cleaned = True
                     return 0
+                _send(writer, result)
             # Manual shutdown (Olympus command)
             elif command == "close":
+                path = (
+                    observation_trace.write_pdf()
+                    if observation_trace is not None else None
+                )
                 runner.shutdown()
                 runner.cleanup()
                 cleaned = True
-                _send(writer, {"type": "closed"})
+                message = {"type": "closed"}
+                if path:
+                    message["observation_plot"] = path
+                _send(writer, message)
                 return 0
             else:
                 raise ValueError(f"unknown command: {command!r}")
