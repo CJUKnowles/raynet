@@ -3,6 +3,7 @@
 #include "omnetpp/simtime.h"
 #include "omnetpp/simtime_t.h"
 #include "transportlayer/tcp/TcpPacedConnection.h"
+#include "inet/transportlayer/tcp/TcpSackRexmitQueue.h"
 #include <algorithm>
 #include <cmath>
 #include <optional>
@@ -109,7 +110,10 @@ std::optional<ObsType> Astraea::computeObservation(){
     double cwndPackets = state->snd_mss > 0 ? state->snd_cwnd / (double)state->snd_mss : 0.0;
     double packetsOut = state->snd_mss > 0 ? pacedConnection->getBytesInFlight() / (double)state->snd_mss : 0.0;
     double pacingRateBytesPerSecond = pacedConnection->intersendingTime.dbl() > 0.0 ? state->snd_mss / pacedConnection->intersendingTime.dbl() : 0.0;
-    double retransOutPackets = state->snd_mss > 0 ? deltaBytesLost / state->snd_mss : 0.0;
+    double retransOutPackets = 0.0;
+    if (state->snd_mss > 0 && pacedConnection->getRexmitQueue() != nullptr) {
+        retransOutPackets = pacedConnection->getRexmitQueue()->getTotalRetransmitted() / (double)state->snd_mss;
+    }
 
     // Print the collected raw metrics when debug output is enabled.
     if(debug) {
@@ -140,15 +144,15 @@ std::optional<ObsType> Astraea::computeObservation(){
 
     return ObsType({
         {"avg_thr", throughputBytesPerSecond},
-        {"throughput", throughputBytesPerSecond},
-        {"max_tput", this->astraeaMaxThroughput},
+        // {"throughput", throughputBytesPerSecond},
+        // {"max_tput", this->astraeaMaxThroughput},
         {"avg_urtt", averageRttUs},
-        {"delay_us", averageRttUs},
+        // {"delay_us", averageRttUs},
         {"min_rtt", minRttUs},
-        {"min_rtt_us", minRttUs},
+        // {"min_rtt_us", minRttUs},
         {"srtt_us", srttUs},
         {"cwnd", cwndPackets},
-        {"loss_rate", this->astraeaLossRate},
+        // {"loss_rate", this->astraeaLossRate},
         {"packets_out", packetsOut},
         {"pacing_rate", pacingRateBytesPerSecond},
         {"retrans_out", retransOutPackets},

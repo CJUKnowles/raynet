@@ -44,9 +44,6 @@ public: // General use
     Astraea();
     virtual ~Astraea();
 
-    // 
-    using RLInterface::receiveSignal;
-
     // TcpCubic Overrides (These are mostly unchanged, and just used to gather statistic or disable automatic pacing)
     virtual void rttMeasurementComplete(simtime_t tSent, simtime_t tAcked) override;
     virtual void receivedDataAck(uint32_t firstSeqAcked) override;
