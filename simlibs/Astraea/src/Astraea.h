@@ -79,6 +79,8 @@ public: // General use
     double astraeaMinDelay = 0.0;
     double astraeaLossRate = 0.0;
     double deliveryRateSampleSum = 0.0;
+    double deliveryRateSampleWeightedSum = 0.0;
+    double deliveryRateSampleIntervalSum = 0.0;
     uint32_t deliveryRateSampleCount = 0;
 
     // Astraea helper variables.
@@ -92,5 +94,6 @@ public: // General use
 
 private:
     void recordDeliveryRateSample();
+    void applyCwnd(uint32_t newCwnd);
   };
 #endif

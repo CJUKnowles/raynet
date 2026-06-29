@@ -66,17 +66,14 @@ void Astraea::established(bool active) {
 
         // Finally, schedule this agent's first fixed-length RL step.
         scheduleNextStep(this->fixedIntervalDuration);
+
+        dynamic_cast<TcpPacedConnection*>(conn)->changeIntersendingTime(.01);
     }
 }
 
 void Astraea::connectionClosed() {
     if (debug) cout << "\t" << stringId << ": connectionClosed()" << endl;
     TcpPacedNoCC::connectionClosed();
-
-    // Temporary flow-stop guard: prevent closed flows from keeping a usable cwnd.
-    if (state) {
-        state->snd_cwnd = 0;
-    }
 
     done = true;
     if (isActive) {
@@ -100,7 +97,21 @@ std::optional<ObsType> Astraea::computeObservation(){
     double deltaBytesLost = this->bytesLost - this->last_bytes_lost;
 
     // Convert current TCP values to the units used by the original Astraea helper.
-    double throughputBytesPerSecond = this->deliveryRateSampleCount > 0 ? this->deliveryRateSampleSum / this->deliveryRateSampleCount : 0.0;
+    double intervalThroughputBytesPerSecond = 0.0;
+    if (lastIntervalDuration > 0.0) {
+        intervalThroughputBytesPerSecond = deltaBytesDelivered / lastIntervalDuration;
+    }
+    double unweightedRateSampleThroughputBytesPerSecond = 0.0;
+    if (this->deliveryRateSampleCount > 0) {
+        unweightedRateSampleThroughputBytesPerSecond =
+            this->deliveryRateSampleSum / this->deliveryRateSampleCount;
+    }
+    double weightedRateSampleThroughputBytesPerSecond = 0.0;
+    if (this->deliveryRateSampleIntervalSum > 0.0) {
+        weightedRateSampleThroughputBytesPerSecond =
+            this->deliveryRateSampleWeightedSum / this->deliveryRateSampleIntervalSum;
+    }
+    double throughputBytesPerSecond = weightedRateSampleThroughputBytesPerSecond;
     this->astraeaThroughput = throughputBytesPerSecond;
     this->astraeaMaxThroughput = std::max(this->astraeaMaxThroughput, throughputBytesPerSecond);
     this->astraeaLossRate = lastIntervalDuration > 0.0 ? deltaBytesLost / lastIntervalDuration : 0.0;
@@ -120,6 +131,10 @@ std::optional<ObsType> Astraea::computeObservation(){
         cout << "-" << endl;
         cout << "\t" << stringId << " step #" << this->RLStepsTaken << ":" << endl;
         cout << "\t\tavg_thr: " << throughputBytesPerSecond << endl;
+        cout << "\t\tavg_thr_INTERVAL_DEBUG: " << intervalThroughputBytesPerSecond << endl;
+        cout << "\t\tavg_thr_OLD_DEBUG: " << unweightedRateSampleThroughputBytesPerSecond << endl;
+        cout << "\t\tavg_thr_SAMPLE_INTERVAL_DEBUG: " << this->deliveryRateSampleIntervalSum << endl;
+        cout << "\t\tavg_thr_SAMPLE_COUNT_DEBUG: " << this->deliveryRateSampleCount << endl;
         cout << "\t\tmax_tput: " << this->astraeaMaxThroughput << endl;
         cout << "\t\tavg_urtt: " << averageRttUs << endl;
         cout << "\t\tmin_rtt: " << minRttUs << endl;
@@ -144,6 +159,10 @@ std::optional<ObsType> Astraea::computeObservation(){
 
     return ObsType({
         {"avg_thr", throughputBytesPerSecond},
+        {"avg_thr_INTERVAL_DEBUG", intervalThroughputBytesPerSecond},
+        {"avg_thr_OLD_DEBUG", unweightedRateSampleThroughputBytesPerSecond},
+        {"avg_thr_SAMPLE_INTERVAL_DEBUG", this->deliveryRateSampleIntervalSum},
+        {"avg_thr_SAMPLE_COUNT_DEBUG", (double)this->deliveryRateSampleCount},
         // {"throughput", throughputBytesPerSecond},
         // {"max_tput", this->astraeaMaxThroughput},
         {"avg_urtt", averageRttUs},
@@ -204,6 +223,8 @@ void Astraea::resetStepVariables()
 
     // Commit the interval boundary and begin collecting the next interval.
     this->deliveryRateSampleSum = 0.0;
+    this->deliveryRateSampleWeightedSum = 0.0;
+    this->deliveryRateSampleIntervalSum = 0.0;
     this->deliveryRateSampleCount = 0;
     this->astraeaDelaySum = 0.0;
     this->rttReportCount = 0;
@@ -258,7 +279,11 @@ void Astraea::recordDeliveryRateSample() {
     TcpPacedConnection *pacedConnection = dynamic_cast<TcpPacedConnection *>(conn);
     TcpPacedConnection::RateSample sample = pacedConnection->getRateSample();
     if (sample.m_interval > SIMTIME_ZERO) {
+        double sampleInterval = sample.m_interval.dbl();
         this->deliveryRateSampleSum += sample.m_deliveryRate;
+        this->deliveryRateSampleWeightedSum +=
+            (double)sample.m_deliveryRate * sampleInterval;
+        this->deliveryRateSampleIntervalSum += sampleInterval;
         this->deliveryRateSampleCount += 1;
     }
 }

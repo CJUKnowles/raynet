@@ -335,6 +335,9 @@ int Broker::invalidateOldStates() {
 
 // Checks if ALL agents are done, regardless of how new/old their current state is
 bool Broker::areAllAgentsDone(){
+    if (activeAgents.empty())
+        return false;
+
     bool allDone = true;
     for (auto& it: activeAgents) {
         if(!it.second.done)
