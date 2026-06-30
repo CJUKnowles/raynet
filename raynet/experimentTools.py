@@ -131,8 +131,10 @@ def _add_dumbbell_link_event(root, *, event_time, bw, delay, per_flow_delays=Non
         value=format_mbps(bw),
     )
 
-    # Standard envs split RTT across the bottleneck. Inter-RTT envs put each
-    # flow's one-way delay on its own sender access link instead.
+    # Standard envs split RTT across the bottleneck. Inter-RTT envs keep the
+    # bottleneck and sender access links at 0 delay, then put each flow's
+    # one-way forward-path delay on router2 -> server[i]. In Dumbbell.ned,
+    # router2.pppg[0] is the bottleneck and server links are allocated after it.
     link_delay = "0ms" if per_flow_delays else format_rtt_as_link_delay(delay)
     for module in ("router1", "router2"):
         _set_channel(
@@ -147,8 +149,8 @@ def _add_dumbbell_link_event(root, *, event_time, bw, delay, per_flow_delays=Non
         for flow_id, flow_delay in enumerate(per_flow_delays):
             _set_channel(
                 at_elem,
-                module=f"client[{flow_id}]",
-                gate="pppg$o[0]",
+                module="router2",
+                gate=f"pppg$o[{flow_id + 1}]",
                 param="delay",
                 value=format_ms(flow_delay),
             )
