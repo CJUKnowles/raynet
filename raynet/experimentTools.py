@@ -206,11 +206,15 @@ def _list_or_none(values):
     return list(values)
 
 
-def flow_timing_overrides(*, flows, start_delays=None, flow_durations=None):
+def flow_timing_overrides(*, flows, start_delays=None, flow_durations=None,
+                          default_close_time=None):
     """Create per-client start/stop overrides for staggered RayNet flows."""
     overrides = {}
     start_delays = _list_or_none(start_delays) or [0.0] * int(flows)
     flow_durations = _list_or_none(flow_durations)
+    default_close = None
+    if default_close_time is not None:
+        default_close = as_seconds(default_close_time)
 
     for flow_id in range(int(flows)):
         if flow_id < len(start_delays):
@@ -224,6 +228,8 @@ def flow_timing_overrides(*, flows, start_delays=None, flow_durations=None):
         if flow_durations and flow_id < len(flow_durations):
             close_time = start + as_seconds(flow_durations[flow_id])
             overrides[f"{prefix}.tClose"] = format_seconds(close_time)
+        elif default_close is not None:
+            overrides[f"{prefix}.tClose"] = format_seconds(default_close)
 
     return overrides
 
@@ -328,6 +334,7 @@ class ExperimentWrapper:
             flows=flows,
             start_delays=episode.get("start_delays"),
             flow_durations=episode.get("flow_durations"),
+            default_close_time=episode.get("duration"),
         ))
 
     def _scenario_path(self, target_dir):

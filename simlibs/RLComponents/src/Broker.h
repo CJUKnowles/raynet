@@ -96,6 +96,7 @@ public:
   uint64_t getStepId();
   bool areAllAgentsDone();
   bool areAllObsUncollected();
+  bool isAnyObsUncollected();
 
   // Parameters
   enum ObsCollectionMode {

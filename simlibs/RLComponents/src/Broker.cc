@@ -89,9 +89,12 @@ void Broker::handleMessage(cMessage *msg)
                 const std::string &agentID = it.first;
                 emit(this->obsRequestSig, agentID.c_str());
             }
-            // Schedule the next STEP-ALL event after the next fixedIntervalDuration seconds, then schedule an immediate EOS to trigger observation collection
+            // Schedule the next STEP-ALL event, but only return to the
+            // trainer if at least one agent produced a fresh observation.
             if (this->fixedIntervalDuration > SIMTIME_ZERO && !this->STEPALLmsg->isScheduled()) {
                 scheduleAfter(this->fixedIntervalDuration, this->STEPALLmsg);
+            }
+            if (this->isAnyObsUncollected()) {
                 this->scheduleEndOfStep();
             }
         }
@@ -356,6 +359,16 @@ bool Broker::areAllObsUncollected() {
         }
     }
     return allUncollected;
+}
+
+// Checks if any agent has a fresh observation waiting for collection.
+bool Broker::isAnyObsUncollected() {
+    for (auto& it: activeAgents) {
+        if (it.second.uncollected) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Simple getters ---
